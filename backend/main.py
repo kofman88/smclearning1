@@ -39,6 +39,10 @@ from progress import (
     PET_LEVEL_XP,
     # Evolution + DNA
     check_and_update_evolution, EVOLUTION_STAGES, update_trader_dna, get_trader_dna,
+    # Souls system
+    add_souls, spend_souls, drop_souls, retrieve_souls, burn_dropped_souls,
+    use_estus_flask, refill_estus, check_hollow, exit_hollow, update_title,
+    get_souls_state, get_streak_multiplier,
 )
 from market_feed import refresh_market_data, start_market_feed_loop, get_cached_pulse
 from oracle_engine import generate_oracle
@@ -53,6 +57,15 @@ async def lifespan(application: FastAPI):
     """Application lifespan: load data on startup."""
     load_progress()
     logger.info("Progress loaded: %d users", len(user_progress))
+
+    # ── Log critical env vars at startup for debugging ──────────────────
+    _raw_channel = os.getenv("ADMIN_CHANNEL_ID", "NOT SET")
+    _raw_admins  = os.getenv("ADMIN_ID", "NOT SET")
+    _raw_token   = os.getenv("BOT_TOKEN", "")
+    logger.info("ADMIN_CHANNEL_ID = %r  (negative = group/channel, positive = user DM)", _raw_channel)
+    logger.info("ADMIN_ID         = %r", _raw_admins)
+    logger.info("BOT_TOKEN        = %s", "SET (len=%d)" % len(_raw_token) if _raw_token else "NOT SET ⚠️")
+
     if os.getenv("WEBHOOK_URL"):
         setup_webhook()
     else:
@@ -162,19 +175,31 @@ def _get_admin_channel_id() -> int | None:
 
 def _send_hw_notification(chat_id: int, admin_text: str, photo_b64: str | None,
                           user_id: int, quest_id: str) -> None:
-    """Send homework notification to a chat/channel with inline buttons and photo fallback."""
+    """Send homework notification to a chat/channel with inline buttons and photo fallback.
+
+    chat_id must be negative for groups/channels (e.g. -1001234567890).
+    For user DMs it is a positive integer.
+    """
     kb = make_hw_keyboard(user_id, quest_id)
+    logger.info("Sending HW notification to chat_id=%s (type=%s)", chat_id,
+                "group/channel" if chat_id < 0 else "user DM")
     if photo_b64:
-        photo_bytes = base64.b64decode(photo_b64.split(",", 1)[-1])
-        buf = io.BytesIO(photo_bytes)
-        buf.name = "homework.jpg"
         try:
+            photo_bytes = base64.b64decode(photo_b64.split(",", 1)[-1])
+            buf = io.BytesIO(photo_bytes)
+            buf.name = "homework.jpg"
             telegram_bot.send_photo(chat_id, buf, caption=admin_text, parse_mode="HTML",
                                     reply_markup=kb)
+            logger.info("send_photo OK → chat_id=%s", chat_id)
             return
         except Exception as e:
-            logger.error(f"send_photo to {chat_id}: {e}")
-    telegram_bot.send_message(chat_id, admin_text, parse_mode="HTML", reply_markup=kb)
+            logger.error("send_photo FAILED → chat_id=%s error=%r (falling back to text)", chat_id, e)
+    try:
+        telegram_bot.send_message(chat_id, admin_text, parse_mode="HTML", reply_markup=kb)
+        logger.info("send_message OK → chat_id=%s", chat_id)
+    except Exception as e:
+        logger.error("send_message FAILED → chat_id=%s error=%r", chat_id, e)
+        raise  # re-raise so caller can log the failure context
 
 def check_admin(admin_id: int):
     """Raise 403 if admin_id is not in the allowed admin set."""
@@ -280,6 +305,18 @@ async def user_init(req: UserInitRequest):
     # Update evolution stage
     evo = check_and_update_evolution(req.user_id)
 
+    # Check hollow status (inactivity penalty)
+    hollow = check_hollow(req.user_id)
+
+    # Update display title
+    update_title(req.user_id)
+
+    # Award daily souls bonus (matches daily XP bonus)
+    souls_bonus = 0
+    if is_new_day:
+        souls_result = add_souls(req.user_id, 20, source="daily_login")
+        souls_bonus = souls_result.get("delta", 0)
+
     # Pulse (non-blocking: return cached if available)
     pulse = get_cached_pulse()
 
@@ -296,6 +333,9 @@ async def user_init(req: UserInitRequest):
         "daily_bonus_xp": daily_xp if got_bonus else 0,
         "evolution": evo,
         "market_pulse": pulse,
+        "hollow": hollow,
+        "souls_state": get_souls_state(req.user_id),
+        "daily_souls_bonus": souls_bonus,
     }
 
 
@@ -581,7 +621,7 @@ async def submit_task(req: QuestSubmitRequest):
         state["homework_photo"] = req.photo[:2_000_000]
     save_progress()
 
-    # ── Notify all admins (non-blocking) ────────────────────────────────────
+    # ── Notify admins (non-blocking executor so we don't block the response) ──
     quest_obj   = next((q for q in QUESTS if q["id"] == req.quest_id), None)
     quest_title = quest_obj["title"] if quest_obj else req.quest_id
     user_name   = state.get("name") or str(req.user_id)
@@ -593,40 +633,43 @@ async def submit_task(req: QuestSubmitRequest):
         f"🔄 Доработка: <code>/revision {req.user_id} {req.quest_id} комментарий</code>\n"
         f"⛔ Отклонить: <code>/reject {req.user_id} {req.quest_id} причина</code>"
     )
-    # 1. Send to admin channel (primary)
-    channel_id = _get_admin_channel_id()
-    if channel_id:
-        try:
-            _send_hw_notification(channel_id, admin_text, req.photo, req.user_id, req.quest_id)
-        except Exception as e:
-            logger.error(f"Channel notify {channel_id}: {e}")
 
-    # 2. Send to individual admins (fallback / redundancy)
-    for aid in _get_admin_ids():
-        try:
-            _send_hw_notification(aid, admin_text, req.photo, req.user_id, req.quest_id)
-        except Exception as e:
-            logger.error(f"Admin notify {aid}: {e}")
+    # Capture values before going into executor (avoid closure over mutable state)
+    _photo_snapshot   = req.photo
+    _user_id_snapshot = req.user_id
+    _quest_id_snapshot = req.quest_id
+    _channel_id        = _get_admin_channel_id()
+    _admin_ids         = list(_get_admin_ids())
 
-    def _notify_admins():
-        for aid in _get_admin_ids():
+    def _dispatch_hw_notifications():
+        """Send HW notification to admin channel (primary) + individual admins (fallback).
+
+        Runs in a thread executor so the HTTP response is returned immediately.
+        NOTE: We send to the channel OR to individual admins — not both — to avoid spam.
+        If channel is configured it is the primary target; individual DMs serve as fallback.
+        """
+        sent_to_channel = False
+
+        # 1. Primary: admin group/channel
+        if _channel_id:
             try:
-                if req.photo:
-                    photo_bytes = base64.b64decode(req.photo.split(",", 1)[-1])
-                    buf = io.BytesIO(photo_bytes)
-                    buf.name = "homework.jpg"
-                    try:
-                        telegram_bot.send_photo(aid, buf, caption=admin_text, parse_mode="HTML")
-                    except Exception as photo_err:
-                        logger.error("Admin photo %d: %s", aid, photo_err)
-                        telegram_bot.send_message(aid, admin_text, parse_mode="HTML")
-                else:
-                    telegram_bot.send_message(aid, admin_text, parse_mode="HTML")
+                _send_hw_notification(_channel_id, admin_text, _photo_snapshot,
+                                      _user_id_snapshot, _quest_id_snapshot)
+                sent_to_channel = True
             except Exception as e:
-                logger.error("Admin notify %d: %s", aid, e)
+                logger.error("HW notify FAILED → channel %s: %r — falling back to DMs", _channel_id, e)
+
+        # 2. Fallback: individual admin DMs (only if channel delivery failed or no channel set)
+        if not sent_to_channel:
+            for aid in _admin_ids:
+                try:
+                    _send_hw_notification(aid, admin_text, _photo_snapshot,
+                                          _user_id_snapshot, _quest_id_snapshot)
+                except Exception as e:
+                    logger.error("HW notify FAILED → admin DM %s: %r", aid, e)
 
     loop = asyncio.get_event_loop()
-    loop.run_in_executor(None, _notify_admins)
+    loop.run_in_executor(None, _dispatch_hw_notifications)
 
     return {
         "ok": True,
@@ -998,6 +1041,96 @@ async def pet_evolution(user_id: int):
 @app.get("/api/user/dna/{user_id}")
 async def user_dna(user_id: int):
     return {"ok": True, **get_trader_dna(user_id)}
+
+
+# ── SOULS SYSTEM ──────────────────────────────────────────────────────────────
+
+class SoulsSpendRequest(BaseModel):
+    user_id: int
+    amount: int
+    reason: Optional[str] = "purchase"
+
+class EstusUseRequest(BaseModel):
+    user_id: int
+
+class HollowExitRequest(BaseModel):
+    user_id: int
+
+@app.get("/api/souls/{user_id}")
+async def souls_get(user_id: int):
+    """Return souls summary: balance, dropped, flasks, hollow status, title."""
+    return get_souls_state(user_id)
+
+
+@app.post("/api/souls/earn")
+async def souls_earn(req: PetTapRequest):
+    """Manually award souls (for testing / admin use). Normally souls come from taps."""
+    result = add_souls(req.user_id, 10, source="admin")
+    return {"ok": True, **result}
+
+
+@app.post("/api/souls/spend")
+async def souls_spend(req: SoulsSpendRequest):
+    """Spend souls on a purchase (hint, customization, roulette, etc.)."""
+    result = spend_souls(req.user_id, req.amount, reason=req.reason)
+    return result
+
+
+@app.post("/api/souls/drop/{user_id}")
+async def souls_drop(user_id: int):
+    """Drop souls on boss failure. Returns amount dropped."""
+    result = drop_souls(user_id)
+    return {"ok": True, **result}
+
+
+@app.post("/api/souls/retrieve/{user_id}")
+async def souls_retrieve(user_id: int):
+    """Retrieve dropped souls (one shot). Call after boss retry success."""
+    result = retrieve_souls(user_id)
+    return result
+
+
+@app.post("/api/souls/burn/{user_id}")
+async def souls_burn(user_id: int):
+    """Permanently burn dropped souls (timeout expired)."""
+    burned = burn_dropped_souls(user_id)
+    return {"ok": True, "burned": burned}
+
+
+@app.post("/api/souls/hollow-exit")
+async def hollow_exit(req: HollowExitRequest):
+    """Pay 100 souls to exit hollow state."""
+    result = exit_hollow(req.user_id, souls_cost=100)
+    return result
+
+
+@app.get("/api/souls/hollow-check/{user_id}")
+async def hollow_check(user_id: int):
+    """Check & update hollow status. Call on user login."""
+    result = check_hollow(user_id)
+    return result
+
+
+@app.post("/api/souls/estus-use")
+async def estus_use(req: EstusUseRequest):
+    """Use one Estus flask (consume a hint charge)."""
+    result = use_estus_flask(req.user_id)
+    return result
+
+
+@app.post("/api/souls/bonfire/{user_id}")
+async def bonfire_rest(user_id: int):
+    """Rest at bonfire: refill Estus flasks, reset module soul tracking."""
+    state  = get_user_state(user_id)
+    flasks = refill_estus(user_id)
+    title  = update_title(user_id)
+    return {
+        "ok": True,
+        "message": "Пламя бонфайра восстановлено. Готовься к следующему испытанию.",
+        "estus_flasks": flasks,
+        "current_title": title,
+        "souls": state.get("souls", 0),
+    }
 
 
 # ── PET SYSTEM ────────────────────────────────────────────────────────────────

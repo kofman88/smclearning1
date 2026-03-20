@@ -4440,3 +4440,385 @@ body.frenzy-mode .bg-overlay {
   0%   { transform: translate(-50%, -50%) scale(0);   opacity: 1; }
   100% { transform: translate(-50%, -50%) scale(3.5); opacity: 0; }
 }
+
+/* ══════════════════════════════════════════════════════════════════════
+   SOULS-LIKE SYSTEM — Phase 1
+   "Рынок не прощает. Мы тоже."
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* ── SOULS COLOR TOKENS ─────────────────────────────────────────────── */
+:root {
+  --souls-gold:       #c8a84e;
+  --souls-gold2:      #e8c96e;
+  --souls-gold-glow:  0 0 12px rgba(200,168,78,0.6), 0 0 24px rgba(200,168,78,0.2);
+  --souls-red:        #8b1a1a;
+  --souls-red2:       #c0392b;
+  --souls-red-glow:   0 0 12px rgba(139,26,26,0.7);
+  --souls-bonfire:    #e8751a;
+  --souls-hollow-bg:  rgba(8,8,12,0.96);
+}
+
+/* ── SOULS HUD (header) ─────────────────────────────────────────────── */
+.souls-hud {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  background: rgba(200,168,78,0.08);
+  border: 1px solid rgba(200,168,78,0.25);
+  border-radius: 20px;
+  cursor: pointer;
+  transition: background 0.2s, box-shadow 0.2s;
+}
+.souls-hud:hover { box-shadow: var(--souls-gold-glow); }
+
+.souls-icon {
+  font-size: 13px;
+  filter: drop-shadow(0 0 4px rgba(200,168,78,0.8));
+}
+
+.souls-count {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--souls-gold);
+  text-shadow: 0 0 8px rgba(200,168,78,0.5);
+  transition: color 0.3s;
+}
+
+.souls-count.souls-gaining {
+  color: var(--souls-gold2);
+  text-shadow: var(--souls-gold-glow);
+  animation: soulsGainPulse 0.4s ease-out;
+}
+
+@keyframes soulsGainPulse {
+  0%   { transform: scale(1);    }
+  50%  { transform: scale(1.25); }
+  100% { transform: scale(1);    }
+}
+
+/* ── ESTUS FLASKS HUD ────────────────────────────────────────────────── */
+.estus-hud {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+  padding: 2px 6px;
+  background: rgba(45,90,39,0.12);
+  border: 1px solid rgba(45,90,39,0.3);
+  border-radius: 12px;
+}
+
+.estus-flask {
+  font-size: 12px;
+  opacity: 1;
+  transition: opacity 0.3s, filter 0.3s;
+  filter: drop-shadow(0 0 3px rgba(0,232,122,0.5));
+}
+
+.estus-flask.empty {
+  opacity: 0.2;
+  filter: none;
+}
+
+/* ── USER TITLE (Souls rank) ─────────────────────────────────────────── */
+.header-title.souls-title {
+  display: block;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--souls-gold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.85;
+  margin-top: 1px;
+}
+
+/* ── SOULS FLOAT PARTICLES ───────────────────────────────────────────── */
+.souls-float-layer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9990;
+}
+
+.soul-particle {
+  position: absolute;
+  font-size: 13px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  color: var(--souls-gold);
+  text-shadow: 0 0 6px rgba(200,168,78,0.8);
+  pointer-events: none;
+  animation: soulFloat 1.2s ease-out forwards;
+  white-space: nowrap;
+}
+
+@keyframes soulFloat {
+  0%   { transform: translateY(0)   scale(1);    opacity: 1; }
+  60%  { transform: translateY(-40px) scale(1.1); opacity: 1; }
+  100% { transform: translateY(-70px) scale(0.8); opacity: 0; }
+}
+
+.soul-particle.losing {
+  color: var(--souls-red2);
+  text-shadow: var(--souls-red-glow);
+  animation: soulSink 1s ease-in forwards;
+}
+
+@keyframes soulSink {
+  0%   { transform: translateY(0)   scale(1);   opacity: 1; }
+  100% { transform: translateY(30px) scale(0.7); opacity: 0; }
+}
+
+/* ── HOLLOW OVERLAY ──────────────────────────────────────────────────── */
+.hollow-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9995;
+  background: var(--souls-hollow-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Apply hollow visual filter when user is in hollow state */
+body.is-hollow #app {
+  filter: grayscale(80%) opacity(0.7) brightness(0.8);
+}
+body.is-hollow::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9980;
+  background: radial-gradient(ellipse at center,
+    transparent 30%, rgba(50,30,10,0.25) 100%);
+}
+
+.hollow-content {
+  text-align: center;
+  padding: 32px 24px;
+  max-width: 340px;
+  position: relative;
+}
+
+.hollow-vignette {
+  position: absolute;
+  inset: -40px;
+  background: radial-gradient(ellipse at center,
+    transparent 40%, rgba(139,26,26,0.4) 100%);
+  pointer-events: none;
+}
+
+.hollow-status-text {
+  font-size: 44px;
+  font-weight: 900;
+  letter-spacing: 0.15em;
+  color: rgba(200,168,78,0.15);
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.hollow-title {
+  font-size: 28px;
+  font-weight: 800;
+  color: #e8e6e1;
+  margin-bottom: 12px;
+  text-shadow: 0 0 20px rgba(200,168,78,0.3);
+}
+
+.hollow-desc {
+  font-size: 14px;
+  color: rgba(232,230,225,0.65);
+  line-height: 1.6;
+  margin-bottom: 20px;
+}
+
+.hollow-desc strong { color: var(--souls-red2); }
+
+.hollow-cost {
+  font-size: 15px;
+  color: #e8e6e1;
+  margin-bottom: 20px;
+}
+
+.souls-gold { color: var(--souls-gold); font-weight: 700; }
+
+.btn-hollow-exit {
+  width: 100%;
+  padding: 14px 20px;
+  background: linear-gradient(135deg, rgba(200,168,78,0.15), rgba(200,168,78,0.08));
+  border: 1.5px solid rgba(200,168,78,0.4);
+  border-radius: 14px;
+  color: var(--souls-gold);
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.25s;
+  letter-spacing: 0.02em;
+  margin-bottom: 16px;
+}
+
+.btn-hollow-exit:hover {
+  background: linear-gradient(135deg, rgba(200,168,78,0.25), rgba(200,168,78,0.12));
+  box-shadow: var(--souls-gold-glow);
+}
+
+.hollow-quote {
+  font-size: 12px;
+  color: rgba(232,230,225,0.3);
+  font-style: italic;
+  letter-spacing: 0.03em;
+}
+
+/* ── SOULS DROP OVERLAY ──────────────────────────────────────────────── */
+.souls-drop-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9994;
+  background: rgba(0,0,0,0.92);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: deathFadeIn 0.5s ease-out;
+}
+
+@keyframes deathFadeIn {
+  0%   { opacity: 0; background: rgba(139,26,26,0.6); }
+  100% { opacity: 1; background: rgba(0,0,0,0.92); }
+}
+
+.souls-drop-content {
+  text-align: center;
+  padding: 40px 24px;
+  max-width: 320px;
+}
+
+.souls-drop-title {
+  font-size: 52px;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  color: var(--souls-red2);
+  text-shadow: 0 0 30px rgba(192,57,43,0.8), 0 0 60px rgba(192,57,43,0.3);
+  margin-bottom: 8px;
+  animation: deathTextPulse 2s ease-in-out infinite;
+}
+
+@keyframes deathTextPulse {
+  0%, 100% { opacity: 1; text-shadow: 0 0 30px rgba(192,57,43,0.8); }
+  50%       { opacity: 0.8; text-shadow: 0 0 50px rgba(192,57,43,1); }
+}
+
+.souls-drop-amount {
+  font-size: 32px;
+  font-weight: 800;
+  color: var(--souls-gold);
+  text-shadow: var(--souls-gold-glow);
+  margin-bottom: 20px;
+  font-family: var(--font-mono);
+}
+
+.souls-drop-desc {
+  font-size: 14px;
+  color: rgba(232,230,225,0.7);
+  line-height: 1.7;
+  margin-bottom: 28px;
+}
+
+.souls-drop-desc em { color: var(--souls-red2); font-style: normal; font-weight: 700; }
+
+.btn-souls-retry {
+  background: linear-gradient(135deg, rgba(200,168,78,0.2), rgba(200,168,78,0.08)) !important;
+  border: 1.5px solid rgba(200,168,78,0.4) !important;
+  color: var(--souls-gold) !important;
+}
+
+/* ── DROPPED SOULS INDICATOR (on quests) ────────────────────────────── */
+.souls-dropped-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: linear-gradient(135deg,
+    rgba(139,26,26,0.15), rgba(192,57,43,0.08));
+  border: 1px solid rgba(139,26,26,0.35);
+  border-radius: 12px;
+  margin: 8px 16px;
+  animation: droppedPulse 2s ease-in-out infinite;
+}
+
+@keyframes droppedPulse {
+  0%, 100% { border-color: rgba(139,26,26,0.35); }
+  50%       { border-color: rgba(192,57,43,0.6); box-shadow: 0 0 12px rgba(139,26,26,0.3); }
+}
+
+.dropped-icon { font-size: 18px; }
+
+.dropped-info { flex: 1; }
+.dropped-label { font-size: 11px; color: var(--souls-red2); font-weight: 600; letter-spacing: 0.05em; }
+.dropped-amount { font-size: 15px; color: var(--souls-gold); font-weight: 700; font-family: var(--font-mono); }
+
+.btn-retrieve-souls {
+  padding: 6px 12px;
+  background: rgba(200,168,78,0.12);
+  border: 1px solid rgba(200,168,78,0.3);
+  border-radius: 8px;
+  color: var(--souls-gold);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-retrieve-souls:hover { background: rgba(200,168,78,0.22); }
+
+/* ── SOULS MULTIPLIER BADGE ──────────────────────────────────────────── */
+.souls-mult-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  background: rgba(200,168,78,0.1);
+  border: 1px solid rgba(200,168,78,0.25);
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--souls-gold);
+  font-family: var(--font-mono);
+}
+
+/* ── BONFIRE GLOW (between modules) ─────────────────────────────────── */
+.bonfire-ready-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: linear-gradient(135deg,
+    rgba(232,117,26,0.12), rgba(232,117,26,0.05));
+  border: 1px solid rgba(232,117,26,0.3);
+  border-radius: 12px;
+  margin: 8px 16px;
+  font-size: 13px;
+  color: var(--souls-bonfire);
+  font-weight: 600;
+  animation: bonfireGlow 2.5s ease-in-out infinite;
+}
+
+@keyframes bonfireGlow {
+  0%, 100% { box-shadow: none; }
+  50%       { box-shadow: 0 0 16px rgba(232,117,26,0.3); }
+}
+
+/* ── TAP → SOUL RIPPLE ───────────────────────────────────────────────── */
+.souls-tap-ripple {
+  position: absolute;
+  border-radius: 50%;
+  border: 1.5px solid rgba(200,168,78,0.6);
+  pointer-events: none;
+  transform: translate(-50%, -50%) scale(0);
+  animation: soulsTapRipple 0.6s ease-out forwards;
+}
+
+@keyframes soulsTapRipple {
+  0%   { transform: translate(-50%, -50%) scale(0);   opacity: 1; }
+  100% { transform: translate(-50%, -50%) scale(4);   opacity: 0; }
+}

@@ -177,12 +177,24 @@ def get_user_state(user_id: int) -> Dict[str, Any]:
             "module_deadline": None,
             "deadline_extensions": 0,
             "quiz_state": None,
-            # ── New fields ──
+            # ── Activity / streak ──
             "streak": 0,
             "last_active_date": None,
             "badges": [],
             "daily_bonus_claimed": None,
             "module_unlocked": [0],  # free module always unlocked
+            # ── SOULS SYSTEM (Phase 1: Souls-like) ──
+            "souls": 0,               # current souls balance
+            "total_souls_earned": 0,  # all-time counter
+            "dropped_souls": 0,       # souls on the ground after failure
+            "dropped_souls_module_id": None,  # which module they dropped from
+            "can_retrieve_souls": False,      # one retrieval attempt allowed
+            "hollow_since": None,     # ISO datetime when hollow started (None = not hollow)
+            "current_title": "Ликвидность",   # displayed title
+            "ng_plus_level": 0,       # 0 = normal, 1 = NG+, 2 = NG++
+            "estus_flasks": 3,        # hint charges (refill at bonfire)
+            "estus_max": 3,           # max flask count
+            "souls_module_earned": 0, # souls earned in current module (at stake)
         }
     state = user_progress[user_id]
     # Back-compat: ensure new fields on old user records
@@ -191,6 +203,18 @@ def get_user_state(user_id: int) -> Dict[str, Any]:
     state.setdefault("badges", [])
     state.setdefault("daily_bonus_claimed", None)
     state.setdefault("module_unlocked", [0])
+    # Souls system back-compat
+    state.setdefault("souls", 0)
+    state.setdefault("total_souls_earned", 0)
+    state.setdefault("dropped_souls", 0)
+    state.setdefault("dropped_souls_module_id", None)
+    state.setdefault("can_retrieve_souls", False)
+    state.setdefault("hollow_since", None)
+    state.setdefault("current_title", "Ликвидность")
+    state.setdefault("ng_plus_level", 0)
+    state.setdefault("estus_flasks", 3)
+    state.setdefault("estus_max", 3)
+    state.setdefault("souls_module_earned", 0)
     return state
 
 
@@ -399,6 +423,266 @@ load_progress()
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# ── SOULS SYSTEM (Dark Souls × SMC)  ─────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+
+# Streak → souls multiplier (like in Duolingo but darker)
+_STREAK_MULTIPLIERS: List[Tuple[int, float]] = [
+    (30, 5.0),  # 30+ days → x5
+    (14, 3.0),  # 14+ days → x3
+    (7,  2.0),  # 7+ days  → x2
+    (3,  1.5),  # 3+ days  → x1.5
+    (0,  1.0),  # default  → x1
+]
+
+# Souls per tap (base, before multiplier)
+_SOULS_PER_TAP_BASE = 2
+_SOULS_PER_TAP_COMBO5 = 5    # combo 5+
+_SOULS_PER_TAP_COMBO2 = 3    # combo 2-4
+
+
+# Title progression rules (applied in order; first matching rule wins)
+TITLE_RULES: List[Tuple[str, str]] = [
+    ("all_modules_flawless",  "Flawless"),      # all bosses no deaths
+    ("ng_plus_2",             "Композитный Оператор"),
+    ("ng_plus_1",             "Market Maker"),
+    ("all_modules_done",      "Smart Money"),
+    ("three_bosses",          "Начинающий трейдер"),
+    ("one_module",            "Ретейл"),
+    ("default",               "Ликвидность"),
+]
+
+HOLLOW_DAYS_THRESHOLD = 7
+HOLLOW_PENALTY_DAYS   = 14  # if hollow > 14 days → lose 1 module level
+
+
+def get_streak_multiplier(streak: int) -> float:
+    """Return souls-per-tap multiplier based on current streak."""
+    for threshold, mult in _STREAK_MULTIPLIERS:
+        if streak >= threshold:
+            return mult
+    return 1.0
+
+
+def add_souls(user_id: int, amount: int, *, source: str = "tap") -> Dict[str, Any]:
+    """Award souls to user. Returns souls delta info."""
+    if amount <= 0:
+        return {"souls": 0, "delta": 0, "total": 0}
+
+    state = get_user_state(user_id)
+    mult  = get_streak_multiplier(state.get("streak", 0))
+    # Hollow penalty: x0.5 if hollow
+    if state.get("hollow_since"):
+        mult *= 0.5
+
+    awarded = round(amount * mult)
+    state["souls"]               = state.get("souls", 0) + awarded
+    state["total_souls_earned"]  = state.get("total_souls_earned", 0) + awarded
+    # Track how many souls earned in current module (at stake for boss fights)
+    state["souls_module_earned"] = state.get("souls_module_earned", 0) + awarded
+    save_progress()
+    return {"delta": awarded, "total": state["souls"], "multiplier": mult, "source": source}
+
+
+def spend_souls(user_id: int, amount: int, *, reason: str = "purchase") -> Dict[str, Any]:
+    """Spend souls. Returns {ok, delta, total} — fails if insufficient."""
+    state  = get_user_state(user_id)
+    current = state.get("souls", 0)
+    if current < amount:
+        return {"ok": False, "reason": "insufficient_souls", "have": current, "need": amount}
+    state["souls"] = current - amount
+    save_progress()
+    return {"ok": True, "delta": -amount, "total": state["souls"], "reason": reason}
+
+
+def drop_souls(user_id: int) -> Dict[str, Any]:
+    """
+    Player failed a module boss: drop all souls earned in this module.
+    The souls land on the ground — one retrieval attempt is allowed.
+    Returns the amount dropped.
+    """
+    state = get_user_state(user_id)
+    earned_in_module = state.get("souls_module_earned", 0)
+    if earned_in_module <= 0:
+        return {"dropped": 0, "can_retrieve": False}
+
+    # Transfer module earnings to "dropped" pool
+    state["souls"]               = max(0, state.get("souls", 0) - earned_in_module)
+    state["dropped_souls"]       = earned_in_module
+    state["dropped_souls_module_id"] = state.get("module_index", 0)
+    state["can_retrieve_souls"]  = True
+    state["souls_module_earned"] = 0
+    save_progress()
+    return {"dropped": earned_in_module, "can_retrieve": True}
+
+
+def retrieve_souls(user_id: int) -> Dict[str, Any]:
+    """
+    One-shot attempt to recover dropped souls (must retry the boss first).
+    Returns amount recovered or 0 if not available.
+    """
+    state = get_user_state(user_id)
+    if not state.get("can_retrieve_souls", False):
+        return {"ok": False, "reason": "no_dropped_souls"}
+    if state.get("dropped_souls", 0) <= 0:
+        return {"ok": False, "reason": "nothing_to_retrieve"}
+
+    recovered = state["dropped_souls"]
+    state["souls"]              = state.get("souls", 0) + recovered
+    state["total_souls_earned"] = state.get("total_souls_earned", 0) + recovered
+    state["dropped_souls"]      = 0
+    state["dropped_souls_module_id"] = None
+    state["can_retrieve_souls"] = False
+    save_progress()
+    return {"ok": True, "recovered": recovered, "total": state["souls"]}
+
+
+def burn_dropped_souls(user_id: int) -> int:
+    """Permanently burn dropped souls (called when opportunity expires)."""
+    state = get_user_state(user_id)
+    burned = state.get("dropped_souls", 0)
+    state["dropped_souls"]      = 0
+    state["dropped_souls_module_id"] = None
+    state["can_retrieve_souls"] = False
+    save_progress()
+    return burned
+
+
+def use_estus_flask(user_id: int) -> Dict[str, Any]:
+    """Use one Estus flask (hint charge). Returns {ok, remaining}."""
+    state = get_user_state(user_id)
+    flasks = state.get("estus_flasks", 3)
+    if flasks <= 0:
+        return {"ok": False, "remaining": 0, "reason": "no_flasks"}
+    state["estus_flasks"] = flasks - 1
+    save_progress()
+    return {"ok": True, "remaining": state["estus_flasks"]}
+
+
+def refill_estus(user_id: int) -> int:
+    """Refill Estus flasks to max (called at bonfire checkpoint)."""
+    state = get_user_state(user_id)
+    max_flasks = state.get("estus_max", 3)
+    state["estus_flasks"] = max_flasks
+    # Also reset module earned souls (new module = new session)
+    state["souls_module_earned"] = 0
+    save_progress()
+    return max_flasks
+
+
+def check_hollow(user_id: int) -> Dict[str, Any]:
+    """
+    Check and update hollow status.
+    User goes hollow after HOLLOW_DAYS_THRESHOLD days of inactivity.
+    After HOLLOW_PENALTY_DAYS days of being hollow, lose 1 module level.
+    """
+    state = get_user_state(user_id)
+    last_active = state.get("last_active_date")
+    now = datetime.utcnow()
+
+    # Determine days since last activity
+    days_inactive = 0
+    if last_active:
+        try:
+            last_dt = datetime.fromisoformat(last_active)
+            days_inactive = (now - last_dt).days
+        except Exception:
+            pass
+
+    hollow_since = state.get("hollow_since")
+    was_hollow   = bool(hollow_since)
+    became_hollow = False
+    lost_level    = False
+
+    if days_inactive >= HOLLOW_DAYS_THRESHOLD and not was_hollow:
+        # User just went hollow
+        state["hollow_since"] = now.isoformat()
+        became_hollow = True
+        save_progress()
+    elif was_hollow and hollow_since:
+        # Check hollow duration
+        try:
+            hollow_dt = datetime.fromisoformat(hollow_since)
+            hollow_days = (now - hollow_dt).days
+            if hollow_days >= HOLLOW_PENALTY_DAYS:
+                # Lose 1 module level as penalty
+                idx = state.get("module_index", 0)
+                if idx > 0:
+                    state["module_index"] = idx - 1
+                    lost_level = True
+                    # Reset hollow timer so penalty only applies once per cycle
+                    state["hollow_since"] = now.isoformat()
+                    save_progress()
+        except Exception:
+            pass
+
+    return {
+        "is_hollow":    bool(state.get("hollow_since")),
+        "became_hollow": became_hollow,
+        "lost_level":   lost_level,
+        "days_inactive": days_inactive,
+        "hollow_since": state.get("hollow_since"),
+    }
+
+
+def exit_hollow(user_id: int, souls_cost: int = 100) -> Dict[str, Any]:
+    """Pay souls to exit hollow state. Returns {ok, ..}."""
+    state = get_user_state(user_id)
+    if not state.get("hollow_since"):
+        return {"ok": False, "reason": "not_hollow"}
+    result = spend_souls(user_id, souls_cost, reason="exit_hollow")
+    if not result["ok"]:
+        return result
+    state["hollow_since"] = None
+    save_progress()
+    return {"ok": True, "souls_spent": souls_cost, "total_souls": result["total"]}
+
+
+def update_title(user_id: int) -> str:
+    """Recompute and persist user's display title. Returns new title."""
+    state    = get_user_state(user_id)
+    completed = set(state.get("completed_quests", []))
+    bosses    = [q for q in completed if q.endswith("_boss")]
+    modules   = state.get("module_index", 0)
+    ng        = state.get("ng_plus_level", 0)
+
+    # Determine title
+    title = "Ликвидность"
+    if ng >= 2:
+        title = "Композитный Оператор"
+    elif ng >= 1:
+        title = "Market Maker"
+    elif modules >= 9 and len(bosses) >= 9:
+        title = "Smart Money"
+    elif len(bosses) >= 3:
+        title = "Начинающий трейдер"
+    elif modules >= 1:
+        title = "Ретейл"
+
+    state["current_title"] = title
+    save_progress()
+    return title
+
+
+def get_souls_state(user_id: int) -> Dict[str, Any]:
+    """Return a souls summary for the user."""
+    state = get_user_state(user_id)
+    return {
+        "souls":           state.get("souls", 0),
+        "total_earned":    state.get("total_souls_earned", 0),
+        "dropped_souls":   state.get("dropped_souls", 0),
+        "can_retrieve":    state.get("can_retrieve_souls", False),
+        "estus_flasks":    state.get("estus_flasks", 3),
+        "estus_max":       state.get("estus_max", 3),
+        "is_hollow":       bool(state.get("hollow_since")),
+        "hollow_since":    state.get("hollow_since"),
+        "current_title":   state.get("current_title", "Ликвидность"),
+        "streak_mult":     get_streak_multiplier(state.get("streak", 0)),
+        "ng_plus_level":   state.get("ng_plus_level", 0),
+    }
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # ── PET SYSTEM (SMC Fox companion) ───────────────────────────────────────────
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -552,7 +836,7 @@ def pet_register_tap(user_id: int) -> Dict[str, Any]:
     combo = pet["tap_combo"]
     xp_gain = max(1, round(1 + (combo - 1) * 0.5))
 
-    # DATA UNITS awarded per tap (scaled by combo)
+    # DATA UNITS awarded per tap (scaled by combo) — kept for pet system
     if combo >= 5:
         data_tap = 10
     elif combo >= 2:
@@ -560,6 +844,16 @@ def pet_register_tap(user_id: int) -> Dict[str, Any]:
     else:
         data_tap = 2
     pet["coins"] = pet.get("coins", 0) + data_tap
+
+    # ── SOULS per tap (Souls-like farm mechanic) ──────────────────────────
+    if combo >= 5:
+        souls_tap = _SOULS_PER_TAP_COMBO5
+    elif combo >= 2:
+        souls_tap = _SOULS_PER_TAP_COMBO2
+    else:
+        souls_tap = _SOULS_PER_TAP_BASE
+    # add_souls handles multiplier (streak, hollow) and module tracking
+    souls_result = add_souls(user_id, souls_tap, source="tap")
 
     pet["happiness"] = min(100, pet.get("happiness", 0) + 2)
     pet["pet_xp"]    = pet.get("pet_xp", 0) + xp_gain
@@ -597,6 +891,10 @@ def pet_register_tap(user_id: int) -> Dict[str, Any]:
         "health":           round(pet["health"]),
         "next_level_xp":    PET_LEVEL_XP[lvl] if lvl < 20 else None,
         "current_level_xp": PET_LEVEL_XP[lvl - 1],
+        # Souls system
+        "souls_earned":     souls_result.get("delta", 0),
+        "total_souls":      souls_result.get("total", 0),
+        "souls_multiplier": souls_result.get("multiplier", 1.0),
     }
 
 

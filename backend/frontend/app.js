@@ -423,6 +423,19 @@ function renderHeader(s) {
   $("#userLvl").textContent  = s.level ?? 1;
   $("#moduleName").textContent = `Модуль ${(s.module_index ?? 0) + 1}`;
 
+  // Title
+  const titleEl = $("#userTitle");
+  if (titleEl) titleEl.textContent = s.current_title || "Ликвидность";
+
+  // Souls HUD from user state
+  if (s.souls !== undefined) {
+    const soulsEl = $("#soulsCount");
+    if (soulsEl) soulsEl.textContent = s.souls;
+  }
+
+  // Estus flasks
+  updateEstusHUD(s.estus_flasks ?? 3, s.estus_max ?? 3);
+
   const rankWrap = $("#rankIconWrap");
   if (rankWrap) rankWrap.innerHTML = getRankSVG(rankName);
 
@@ -1353,6 +1366,23 @@ async function init() {
     // Evolution badge from init response
     if (initData.evolution) renderEvolution(initData.evolution);
 
+    // ── SOULS SYSTEM: update HUD from init response ─────────────────────
+    if (initData.souls_state) {
+      updateSoulsHUD(initData.souls_state);
+      // Check hollow status
+      if (initData.hollow) {
+        applyHollowState(initData.hollow);
+      }
+      // Show daily souls bonus
+      if (initData.daily_souls_bonus > 0) {
+        spawnSoulParticle(`+${initData.daily_souls_bonus} ⚡`, true);
+      }
+      // Show dropped souls banner if any
+      if (initData.souls_state.dropped_souls > 0 && initData.souls_state.can_retrieve) {
+        showDroppedSoulsBanner(initData.souls_state.dropped_souls);
+      }
+    }
+
     // Apply cached market pulse to heartbeat bar if already available
     if (initData.market_pulse?.pet_mood) _applyMarketMood(initData.market_pulse);
 
@@ -1515,6 +1545,18 @@ async function onPetTap(e) {
 
     // Combo badge
     if (data.combo > 1) _showComboBadge(data.combo);
+
+    // ── Souls system: show souls gained and update HUD ───────────────────
+    if (data.souls_earned > 0) {
+      spawnSoulParticle(`+${data.souls_earned} ⚡`, true);
+      const soulsEl = document.getElementById("soulsCount");
+      if (soulsEl) {
+        soulsEl.textContent = data.total_souls;
+        soulsEl.classList.remove("souls-gaining");
+        void soulsEl.offsetWidth;
+        soulsEl.classList.add("souls-gaining");
+      }
+    }
 
     // Update DATA counter with bump animation
     const coinsEl = document.getElementById("petCoins");
@@ -2185,6 +2227,152 @@ function _spawnEvolutionParticles() {
     setTimeout(() => el.remove(), 1500);
   }
 }
+
+// ══════════════════════════════════════════════════════════════════════════
+// ── SOULS SYSTEM (Dark Souls × SMC) — Phase 1 ────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Update the souls HUD (counter + flasks) from a souls_state object.
+ * @param {object} s - souls_state from /api/souls/{user_id} or /api/user/init
+ */
+function updateSoulsHUD(s) {
+  if (!s) return;
+  const soulsEl = document.getElementById("soulsCount");
+  if (soulsEl) soulsEl.textContent = s.souls ?? 0;
+  updateEstusHUD(s.estus_flasks ?? 3, s.estus_max ?? 3);
+  // Title
+  const titleEl = document.getElementById("userTitle");
+  if (titleEl && s.current_title) titleEl.textContent = s.current_title;
+}
+
+/**
+ * Update the Estus flask icons in the HUD.
+ * @param {number} current - flasks remaining
+ * @param {number} max - maximum flasks
+ */
+function updateEstusHUD(current, max) {
+  for (let i = 0; i < 3; i++) {
+    const flask = document.getElementById(`flask${i}`);
+    if (!flask) continue;
+    flask.classList.toggle("empty", i >= current);
+  }
+}
+
+/**
+ * Spawn a floating soul particle (+N ⚡ or -N ⚡).
+ * @param {string} text - e.g. "+5 ⚡"
+ * @param {boolean} gaining - true for gain, false for loss
+ */
+function spawnSoulParticle(text, gaining = true) {
+  const layer = document.getElementById("soulsFloatLayer");
+  if (!layer) return;
+  const p = document.createElement("div");
+  p.className = "soul-particle" + (gaining ? "" : " losing");
+  p.textContent = text;
+  // Random position in center area
+  p.style.left = (35 + Math.random() * 30) + "%";
+  p.style.top  = (30 + Math.random() * 20) + "%";
+  layer.appendChild(p);
+  setTimeout(() => p.remove(), 1300);
+}
+
+/**
+ * Apply hollow state visuals to the page body.
+ * @param {object} hollowData - from check_hollow API response
+ */
+function applyHollowState(hollowData) {
+  if (!hollowData) return;
+  if (hollowData.is_hollow || hollowData.became_hollow) {
+    document.body.classList.add("is-hollow");
+    if (hollowData.became_hollow) {
+      // Show the hollow overlay with a delay
+      setTimeout(() => {
+        const overlay = document.getElementById("hollowOverlay");
+        if (overlay) overlay.classList.remove("hidden");
+      }, 800);
+    }
+  } else {
+    document.body.classList.remove("is-hollow");
+  }
+}
+
+/**
+ * Show the dropped souls banner below the header.
+ * @param {number} amount - number of dropped souls
+ */
+function showDroppedSoulsBanner(amount) {
+  // Remove existing banner if any
+  const existing = document.querySelector(".souls-dropped-banner");
+  if (existing) existing.remove();
+
+  const banner = document.createElement("div");
+  banner.className = "souls-dropped-banner";
+  banner.innerHTML = `
+    <span class="dropped-icon">💀</span>
+    <div class="dropped-info">
+      <div class="dropped-label">ДУШИ НА ЗЕМЛЕ</div>
+      <div class="dropped-amount">${amount} ⚡</div>
+    </div>
+    <button class="btn-retrieve-souls" onclick="showSoulsDrop(${amount})">
+      Забрать →
+    </button>
+  `;
+
+  // Insert after the progress section
+  const progress = document.querySelector(".progress-section");
+  if (progress) progress.after(banner);
+}
+
+/**
+ * Show the ЛИКВИДИРОВАН (souls drop) overlay.
+ * @param {number} dropped - souls dropped
+ */
+function showSoulsDrop(dropped) {
+  const overlay = document.getElementById("soulsDropOverlay");
+  const amountEl = document.getElementById("soulsDropAmount");
+  if (!overlay) return;
+  if (amountEl) amountEl.textContent = `${dropped} ⚡`;
+  overlay.classList.remove("hidden");
+}
+
+/** Close the souls-drop overlay. */
+function closeSoulsDrop() {
+  const overlay = document.getElementById("soulsDropOverlay");
+  if (overlay) overlay.classList.add("hidden");
+}
+
+/** Exit hollow state — spend 100 souls. */
+async function exitHollow() {
+  if (!state.userId) return;
+  try {
+    const res  = await fetch(`${API}/souls/hollow-exit`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user_id: state.userId }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      document.body.classList.remove("is-hollow");
+      document.getElementById("hollowOverlay")?.classList.add("hidden");
+      updateSoulsHUD({ souls: data.total_souls });
+      showToast("Hollow отступил. Огонь бонфайра возвращён.", "success", "🔥");
+      spawnSoulParticle(`-100 ⚡`, false);
+    } else {
+      const msg = data.reason === "insufficient_souls"
+        ? `Недостаточно душ. Нужно 100, у тебя ${data.have}.`
+        : data.reason || "Ошибка";
+      showToast(msg, "error", "💀");
+    }
+  } catch (e) {
+    console.error("exitHollow:", e);
+    showToast("Ошибка выхода из Hollow", "error");
+  }
+}
+
+window.exitHollow      = exitHollow;
+window.closeSoulsDrop  = closeSoulsDrop;
+window.showSoulsDrop   = showSoulsDrop;
 
 // ── BTN START ─────────────────────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", () => {

@@ -203,6 +203,7 @@
         <div class="rank-icon-wrap" id="rankIconWrap"></div>
         <div class="header-user-info">
           <span id="userName" class="header-username">CHM Academy</span>
+          <span id="userTitle" class="header-title souls-title">Ликвидность</span>
           <div class="streak-badge hidden" id="streakBadge">
             <svg width="10" height="10" viewBox="0 0 10 10"><path d="M5 0C5 0 7 3 7 5C7 6.7 6.1 7.5 5 7.5C3.9 7.5 3 6.7 3 5C3 3 5 0 5 0Z" fill="#f97316"/></svg>
             <span id="streakCount">0</span>
@@ -210,6 +211,17 @@
         </div>
       </div>
       <div class="header-right">
+        <!-- SOULS HUD -->
+        <div class="souls-hud" id="soulsHud" title="Твои Души">
+          <span class="souls-icon">⚡</span>
+          <span id="soulsCount" class="souls-count">0</span>
+        </div>
+        <!-- ESTUS FLASKS -->
+        <div class="estus-hud" id="estusHud" title="Фласки подсказок">
+          <span class="estus-flask active" id="flask0">🔶</span>
+          <span class="estus-flask active" id="flask1">🔶</span>
+          <span class="estus-flask active" id="flask2">🔶</span>
+        </div>
         <div class="xp-badge">
           <svg width="12" height="12" viewBox="0 0 12 12"><polygon points="6,1 7.5,4.5 11,5 8.5,7.5 9,11 6,9.5 3,11 3.5,7.5 1,5 4.5,4.5" fill="#fbbf24"/></svg>
           <span id="userXP">0</span> XP
@@ -918,6 +930,46 @@
       </button>
     </div>
   </div>
+
+  <!-- ══ HOLLOW OVERLAY ═════════════════════════════════════════════════ -->
+  <div id="hollowOverlay" class="hollow-overlay hidden">
+    <div class="hollow-content">
+      <div class="hollow-vignette"></div>
+      <div class="hollow-text-wrap">
+        <div class="hollow-status-text">ПОЛЫЙ</div>
+        <div class="hollow-title">Ты стал Hollow</div>
+        <div class="hollow-desc">
+          Ты не заходил слишком долго.<br>
+          Рынок продолжал движение без тебя.<br>
+          Множитель душ: <strong>×0.5</strong>
+        </div>
+        <div class="hollow-cost">Стоимость выхода: <span class="souls-gold">100 ⚡</span></div>
+        <button class="btn-hollow-exit" id="hollowExitBtn" onclick="exitHollow()">
+          Вернуться к огню — 100 ⚡
+        </button>
+        <div class="hollow-quote">«Рынок не прощает. Мы тоже.»</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ SOULS DROP OVERLAY ══════════════════════════════════════════════ -->
+  <div id="soulsDropOverlay" class="souls-drop-overlay hidden">
+    <div class="souls-drop-content">
+      <div class="souls-drop-title">ЛИКВИДИРОВАН</div>
+      <div class="souls-drop-amount" id="soulsDropAmount">0 ⚡</div>
+      <div class="souls-drop-desc">
+        Рынок забрал твои души.<br>
+        У тебя <strong>один шанс</strong> — победи босса и верни их.<br>
+        Провалишься снова — они сгорят <em>навсегда.</em>
+      </div>
+      <button class="btn-primary btn-souls-retry" onclick="closeSoulsDrop()">
+        Попробовать снова
+      </button>
+    </div>
+  </div>
+
+  <!-- ══ SOULS FLOAT LAYER ════════════════════════════════════════════════ -->
+  <div id="soulsFloatLayer" class="souls-float-layer"></div>
 
   <script src="/static/app.js"></script>
 </body>
