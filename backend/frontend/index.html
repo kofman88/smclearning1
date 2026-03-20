@@ -203,6 +203,7 @@
         <div class="rank-icon-wrap" id="rankIconWrap"></div>
         <div class="header-user-info">
           <span id="userName" class="header-username">CHM Academy</span>
+          <span id="userTitle" class="header-title souls-title">Ликвидность</span>
           <div class="streak-badge hidden" id="streakBadge">
             <svg width="10" height="10" viewBox="0 0 10 10"><path d="M5 0C5 0 7 3 7 5C7 6.7 6.1 7.5 5 7.5C3.9 7.5 3 6.7 3 5C3 3 5 0 5 0Z" fill="#f97316"/></svg>
             <span id="streakCount">0</span>
@@ -210,6 +211,17 @@
         </div>
       </div>
       <div class="header-right">
+        <!-- SOULS HUD -->
+        <div class="souls-hud" id="soulsHud" title="Твои Души">
+          <span class="souls-icon">⚡</span>
+          <span id="soulsCount" class="souls-count">0</span>
+        </div>
+        <!-- ESTUS FLASKS -->
+        <div class="estus-hud" id="estusHud" title="Фласки подсказок">
+          <span class="estus-flask active" id="flask0">🔶</span>
+          <span class="estus-flask active" id="flask1">🔶</span>
+          <span class="estus-flask active" id="flask2">🔶</span>
+        </div>
         <div class="xp-badge">
           <svg width="12" height="12" viewBox="0 0 12 12"><polygon points="6,1 7.5,4.5 11,5 8.5,7.5 9,11 6,9.5 3,11 3.5,7.5 1,5 4.5,4.5" fill="#fbbf24"/></svg>
           <span id="userXP">0</span> XP
@@ -253,6 +265,19 @@
           <path d="M7 5.5L13 9L7 12.5V5.5Z" fill="white"/>
         </svg>
         Начать обучение
+      </button>
+    </div>
+
+    <!-- SOCIAL QUICK-ACCESS BAR -->
+    <div class="social-bar">
+      <button class="social-bar-btn" id="dailyBtn" onclick="openDaily()">
+        <span class="social-bar-icon">⚔️</span>
+        <span class="social-bar-label">Вызов</span>
+        <span class="social-bar-badge hidden" id="dailyBadge">!</span>
+      </button>
+      <button class="social-bar-btn" onclick="openClanPanel()">
+        <span class="social-bar-icon">🛡️</span>
+        <span class="social-bar-label">Клан</span>
       </button>
     </div>
 
@@ -681,6 +706,13 @@
       <h3 id="quizQuestion" class="quiz-question"></h3>
       <div id="quizOptions" class="quiz-options"></div>
       <div id="quizFeedback" class="quiz-feedback hidden"></div>
+      <!-- Estus hint row -->
+      <div class="estus-hint-row" id="estusHintRow">
+        <button class="btn-estus-hint" id="estusHintBtn" onclick="useEstusHint()" title="Использовать фласку">
+          🔶 Подсказка (<span id="estusHintCount">3</span>)
+        </button>
+        <div class="estus-hint-text hidden" id="estusHintText"></div>
+      </div>
       <button id="quizNext" class="btn-primary hidden" onclick="quizNextQuestion()">
         Следующий вопрос →
       </button>
@@ -916,6 +948,305 @@
       <button class="btn-primary" onclick="closeModal('evolutionModal')">
         Потрясающе!
       </button>
+    </div>
+  </div>
+
+  <!-- ══ BOSS INTRO ════════════════════════════════════════════════════ -->
+  <div id="bossIntroOverlay" class="boss-intro-overlay hidden">
+    <div class="boss-intro-bg"></div>
+    <div class="boss-intro-content">
+      <div class="boss-warning-text">ВНИМАНИЕ</div>
+      <div class="boss-intro-name" id="bossIntroName">Structure Breaker</div>
+      <div class="boss-intro-lore" id="bossIntroLore"></div>
+      <div class="boss-souls-stake">
+        <span class="bs-label">НА КОНУ:</span>
+        <span class="bs-amount" id="bossStakeAmount">0 ⚡</span>
+      </div>
+      <div class="boss-timer-preview">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+          <circle cx="7" cy="7" r="6" stroke="#c8a84e" stroke-width="1.5"/>
+          <path d="M7 3.5V7L9.5 9" stroke="#c8a84e" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+        <span id="bossTimerPreview">120 сек</span>
+      </div>
+      <button class="btn-boss-start" id="bossStartBtn" onclick="startBossFight()">
+        ⚔️ Принять вызов
+      </button>
+      <button class="btn-boss-cancel" onclick="closeBossIntro()">
+        Уйти (вернуться позже)
+      </button>
+      <div class="boss-intro-quote">«Prepare to trade.»</div>
+    </div>
+  </div>
+
+  <!-- ══ BOSS ARENA ══════════════════════════════════════════════════════ -->
+  <div id="bossArena" class="boss-arena hidden">
+    <div class="boss-arena-bg"></div>
+    <!-- HUD -->
+    <div class="boss-hud">
+      <div class="boss-hud-left">
+        <div class="boss-name-hud" id="bossArenaName">Structure Breaker</div>
+        <div class="boss-progress-bar-wrap">
+          <div class="boss-progress-bar" id="bossProgressBar"></div>
+        </div>
+      </div>
+      <div class="boss-hud-center">
+        <div class="boss-timer-ring" id="bossTimerRing">
+          <svg viewBox="0 0 60 60" width="60" height="60">
+            <circle cx="30" cy="30" r="26" fill="none" stroke="rgba(200,168,78,0.15)" stroke-width="4"/>
+            <circle cx="30" cy="30" r="26" fill="none" stroke="#c8a84e" stroke-width="4"
+              stroke-dasharray="163" stroke-dashoffset="0" id="bossTimerCircle"
+              stroke-linecap="round" transform="rotate(-90 30 30)"/>
+          </svg>
+          <div class="boss-timer-num" id="bossTimerNum">120</div>
+        </div>
+      </div>
+      <div class="boss-hud-right">
+        <div class="boss-souls-hud">⚡ <span id="bossArenaStake">0</span></div>
+        <div class="boss-accuracy-hud" id="bossAccuracyHud">0%</div>
+      </div>
+    </div>
+
+    <!-- Question area -->
+    <div class="boss-question-wrap" id="bossQuestionWrap">
+      <div class="boss-q-counter" id="bossQCounter">1/5</div>
+      <div class="boss-question-text" id="bossQuestionText"></div>
+      <div class="boss-options" id="bossOptions"></div>
+      <div class="boss-q-feedback hidden" id="bossQFeedback"></div>
+    </div>
+  </div>
+
+  <!-- ══ BOSS DEATH SCREEN ═══════════════════════════════════════════════ -->
+  <div id="bossDeathScreen" class="boss-death-screen hidden">
+    <div class="death-crack-overlay"></div>
+    <div class="death-vignette"></div>
+    <div class="death-content">
+      <div class="death-big-text">YOU DIED</div>
+      <div class="death-sub-text">ЛИКВИДИРОВАН</div>
+      <div class="death-souls-info">
+        <div class="death-souls-dropped" id="deathSoulsDropped">
+          <span class="ds-icon">💀</span>
+          <span class="ds-amount" id="deathDroppedAmount">0 ⚡</span>
+          <span class="ds-label">упало на землю</span>
+        </div>
+      </div>
+      <div class="death-lore-text">
+        Рынок забрал твои души.<br>
+        Вернись — и у тебя будет <strong>один шанс</strong> их забрать.
+      </div>
+      <button class="btn-death-retry" onclick="retryBoss()">
+        ⚔️ Попробовать снова
+      </button>
+      <button class="btn-death-leave" onclick="leaveBossArena()">
+        Уйти (души будут ждать)
+      </button>
+    </div>
+  </div>
+
+  <!-- ══ BOSS VICTORY SCREEN ════════════════════════════════════════════ -->
+  <div id="bossVictoryScreen" class="boss-victory-screen hidden">
+    <div class="victory-particles-layer" id="victoryParticles"></div>
+    <div class="victory-content">
+      <div class="victory-title">BOSS DEFEATED</div>
+      <div class="victory-boss-name" id="victoryBossName">Structure Breaker</div>
+      <div class="victory-stats" id="victoryStats"></div>
+      <div class="victory-souls-earned" id="victorySoulsEarned"></div>
+      <div class="victory-souls-retrieved hidden" id="victorySoulsRetrieved"></div>
+      <button class="btn-victory-continue" onclick="afterBossVictory()">
+        🔥 К бонфайру
+      </button>
+    </div>
+  </div>
+
+  <!-- ══ BONFIRE SCREEN ═════════════════════════════════════════════════ -->
+  <div id="bonfireScreen" class="bonfire-screen hidden">
+    <div class="bonfire-bg"></div>
+    <div class="bonfire-content">
+      <div class="bonfire-fire-wrap">
+        <div class="bonfire-fire" id="bonfireFire">
+          <div class="fire-layer f1"></div>
+          <div class="fire-layer f2"></div>
+          <div class="fire-layer f3"></div>
+          <div class="fire-sparks" id="fireSparks"></div>
+        </div>
+        <div class="bonfire-base">⚔</div>
+      </div>
+      <div class="bonfire-title">BONFIRE LIT</div>
+      <div class="bonfire-module-name" id="bonfireModuleName">Модуль пройден</div>
+      <div class="bonfire-stats" id="bonfireStats"></div>
+      <div class="bonfire-next-boss" id="bonfireNextBoss"></div>
+      <div class="bonfire-actions">
+        <button class="btn-bonfire-continue" onclick="closeBonfire()">
+          Идти дальше →
+        </button>
+      </div>
+      <div class="bonfire-quote">«Ты разжёг огонь. Следующий мир ждёт.»</div>
+    </div>
+  </div>
+
+  <!-- ══ HOLLOW OVERLAY ═════════════════════════════════════════════════ -->
+  <div id="hollowOverlay" class="hollow-overlay hidden">
+    <div class="hollow-content">
+      <div class="hollow-vignette"></div>
+      <div class="hollow-text-wrap">
+        <div class="hollow-status-text">ПОЛЫЙ</div>
+        <div class="hollow-title">Ты стал Hollow</div>
+        <div class="hollow-desc">
+          Ты не заходил слишком долго.<br>
+          Рынок продолжал движение без тебя.<br>
+          Множитель душ: <strong>×0.5</strong>
+        </div>
+        <div class="hollow-cost">Стоимость выхода: <span class="souls-gold">100 ⚡</span></div>
+        <button class="btn-hollow-exit" id="hollowExitBtn" onclick="exitHollow()">
+          Вернуться к огню — 100 ⚡
+        </button>
+        <div class="hollow-quote">«Рынок не прощает. Мы тоже.»</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ SOULS DROP OVERLAY ══════════════════════════════════════════════ -->
+  <div id="soulsDropOverlay" class="souls-drop-overlay hidden">
+    <div class="souls-drop-content">
+      <div class="souls-drop-title">ЛИКВИДИРОВАН</div>
+      <div class="souls-drop-amount" id="soulsDropAmount">0 ⚡</div>
+      <div class="souls-drop-desc">
+        Рынок забрал твои души.<br>
+        У тебя <strong>один шанс</strong> — победи босса и верни их.<br>
+        Провалишься снова — они сгорят <em>навсегда.</em>
+      </div>
+      <button class="btn-primary btn-souls-retry" onclick="closeSoulsDrop()">
+        Попробовать снова
+      </button>
+    </div>
+  </div>
+
+  <!-- ══ SOULS FLOAT LAYER ════════════════════════════════════════════════ -->
+  <div id="soulsFloatLayer" class="souls-float-layer"></div>
+
+  <!-- ══════════════════ PHASE 3: SOCIAL ══════════════════════════════════ -->
+
+  <!-- ══ PHANTOM MESSAGES OVERLAY ═══════════════════════════════════════════ -->
+  <div id="phantomOverlay" class="phantom-overlay hidden">
+    <div class="phantom-panel">
+      <div class="phantom-header">
+        <span class="phantom-icon">👻</span>
+        <span class="phantom-title">Послания Призраков</span>
+        <button class="phantom-close" onclick="closePhantoms()">✕</button>
+      </div>
+      <div class="phantom-subtitle">Советы павших трейдеров перед этим заданием</div>
+      <div class="phantom-list" id="phantomList">
+        <div class="phantom-loading">Призываем призраков…</div>
+      </div>
+      <div class="phantom-write-wrap">
+        <textarea id="phantomInput" class="phantom-input"
+          placeholder="Оставь совет следующему…" maxlength="200" rows="3"></textarea>
+        <div class="phantom-input-footer">
+          <span class="phantom-char-count" id="phantomCharCount">0/200</span>
+          <button class="btn-phantom-send" onclick="sendPhantom()">Оставить послание 👻</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ DAILY CHALLENGE OVERLAY ════════════════════════════════════════════ -->
+  <div id="dailyOverlay" class="daily-overlay hidden">
+    <div class="daily-panel">
+      <div class="daily-header">
+        <div class="daily-streak-badge" id="dailyStreakBadge">🔥 0 дней</div>
+        <div class="daily-title">ЕЖЕДНЕВНЫЙ ВЫЗОВ</div>
+        <div class="daily-date" id="dailyDate"></div>
+      </div>
+      <div class="daily-reward-row">
+        <span class="daily-reward-label">Награда:</span>
+        <span class="daily-reward-souls" id="dailyRewardSouls">500 ⚡</span>
+      </div>
+      <div class="daily-question" id="dailyQuestion">Загрузка…</div>
+      <div class="daily-options" id="dailyOptions"></div>
+      <!-- Result state (shown after answer) -->
+      <div class="daily-result hidden" id="dailyResult">
+        <div class="daily-result-icon" id="dailyResultIcon"></div>
+        <div class="daily-result-text" id="dailyResultText"></div>
+        <div class="daily-souls-won" id="dailySoulsWon"></div>
+        <div class="daily-streak-update" id="dailyStreakUpdate"></div>
+        <button class="btn-daily-close" onclick="closeDaily()">Закрыть</button>
+      </div>
+      <!-- Completed state -->
+      <div class="daily-completed hidden" id="dailyCompleted">
+        <div class="daily-done-icon">✅</div>
+        <div class="daily-done-text">Вызов принят! Возвращайся завтра.</div>
+        <div class="daily-streak-display" id="dailyStreakDisplay"></div>
+        <button class="btn-daily-close" onclick="closeDaily()">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ CLAN PANEL ══════════════════════════════════════════════════════════ -->
+  <div id="clanPanel" class="clan-panel hidden">
+    <div class="clan-panel-header">
+      <span class="clan-title">⚔️ Кланы</span>
+      <button class="clan-close" onclick="closeClanPanel()">✕</button>
+    </div>
+
+    <!-- No clan state -->
+    <div id="clanNone" class="clan-none">
+      <div class="clan-none-text">Ты одинокий трейдер.<br>Объединись с другими для силы.</div>
+      <div class="clan-actions-row">
+        <button class="btn-clan-action" onclick="showClanCreate()">Создать клан</button>
+        <button class="btn-clan-action" onclick="showClanJoin()">Вступить в клан</button>
+      </div>
+      <div class="clan-create-form hidden" id="clanCreateForm">
+        <input id="clanNameInput" class="clan-input" type="text" placeholder="Название клана (макс 30)" maxlength="30">
+        <input id="clanTagInput" class="clan-input" type="text" placeholder="Тег [макс 5 букв]" maxlength="5">
+        <button class="btn-clan-submit" onclick="createClan()">Создать ⚔️</button>
+      </div>
+      <div class="clan-join-form hidden" id="clanJoinForm">
+        <input id="clanTagJoinInput" class="clan-input" type="text" placeholder="Тег клана" maxlength="5">
+        <button class="btn-clan-submit" onclick="joinClan()">Вступить →</button>
+      </div>
+    </div>
+
+    <!-- My clan state -->
+    <div id="clanMine" class="clan-mine hidden">
+      <div class="clan-mine-header">
+        <span class="clan-mine-tag" id="clanMineTag">[SMC]</span>
+        <span class="clan-mine-name" id="clanMineName">Smart Money Clan</span>
+      </div>
+      <div class="clan-progress-wrap">
+        <div class="clan-progress-label">
+          Недельный пул: <span id="clanWeeklySouls">0</span> / <span id="clanWeeklyTarget">1000</span> ⚡
+        </div>
+        <div class="clan-progress-bar-outer">
+          <div class="clan-progress-bar-inner" id="clanProgressBar" style="width:0%"></div>
+        </div>
+      </div>
+      <div class="clan-members-list" id="clanMembersList"></div>
+      <div class="clan-hollow-warning hidden" id="clanHollowWarning">
+        ⚠️ <span id="clanHollowCount">0</span> члена клана в Hollow режиме — клан теряет <strong>200 ⚡</strong> за каждого
+      </div>
+      <div class="clan-mine-actions">
+        <button class="btn-clan-contribute" onclick="showContributeModal()">💎 Пожертвовать души</button>
+        <button class="btn-clan-leave" onclick="leaveClan()">Покинуть клан</button>
+      </div>
+    </div>
+
+    <!-- Leaderboard -->
+    <div class="clan-lb-title">Топ кланов</div>
+    <div class="clan-leaderboard" id="clanLeaderboard">
+      <div class="clan-lb-loading">Загрузка…</div>
+    </div>
+  </div>
+
+  <!-- ══ CLAN CONTRIBUTE MODAL ══════════════════════════════════════════════ -->
+  <div id="contributeModal" class="contribute-modal hidden">
+    <div class="contribute-content">
+      <div class="contribute-title">Пожертвовать клану</div>
+      <div class="contribute-souls-avail">У тебя: <span id="contributeSoulsAvail">0</span> ⚡</div>
+      <input id="contributeAmount" class="contribute-input" type="number" min="10" placeholder="Количество душ">
+      <div class="contribute-actions">
+        <button class="btn-contribute-confirm" onclick="confirmContribute()">Пожертвовать ⚡</button>
+        <button class="btn-contribute-cancel" onclick="closeContributeModal()">Отмена</button>
+      </div>
     </div>
   </div>
 

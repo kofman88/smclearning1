@@ -423,6 +423,19 @@ function renderHeader(s) {
   $("#userLvl").textContent  = s.level ?? 1;
   $("#moduleName").textContent = `Модуль ${(s.module_index ?? 0) + 1}`;
 
+  // Title
+  const titleEl = $("#userTitle");
+  if (titleEl) titleEl.textContent = s.current_title || "Ликвидность";
+
+  // Souls HUD from user state
+  if (s.souls !== undefined) {
+    const soulsEl = $("#soulsCount");
+    if (soulsEl) soulsEl.textContent = s.souls;
+  }
+
+  // Estus flasks
+  updateEstusHUD(s.estus_flasks ?? 3, s.estus_max ?? 3);
+
   const rankWrap = $("#rankIconWrap");
   if (rankWrap) rankWrap.innerHTML = getRankSVG(rankName);
 
@@ -653,7 +666,18 @@ function renderQuests(resp) {
       else openTask(q.id, q.title, q.xp_reward, q.description);
     });
 
-    card.append(headerRow, badges, desc, btn);
+    // Phantom hint button (not on boss cards)
+    if (!isBoss) {
+      const phantomBtn = el("button", "btn-phantom-hint", "👻 Послания призраков");
+      phantomBtn.dataset.questId = q.id;
+      phantomBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        openPhantoms(q.id);
+      });
+      card.append(headerRow, badges, desc, phantomBtn, btn);
+    } else {
+      card.append(headerRow, badges, desc, btn);
+    }
     container.appendChild(card);
   });
 }
@@ -1353,6 +1377,23 @@ async function init() {
     // Evolution badge from init response
     if (initData.evolution) renderEvolution(initData.evolution);
 
+    // ── SOULS SYSTEM: update HUD from init response ─────────────────────
+    if (initData.souls_state) {
+      updateSoulsHUD(initData.souls_state);
+      // Check hollow status
+      if (initData.hollow) {
+        applyHollowState(initData.hollow);
+      }
+      // Show daily souls bonus
+      if (initData.daily_souls_bonus > 0) {
+        spawnSoulParticle(`+${initData.daily_souls_bonus} ⚡`, true);
+      }
+      // Show dropped souls banner if any
+      if (initData.souls_state.dropped_souls > 0 && initData.souls_state.can_retrieve) {
+        showDroppedSoulsBanner(initData.souls_state.dropped_souls);
+      }
+    }
+
     // Apply cached market pulse to heartbeat bar if already available
     if (initData.market_pulse?.pet_mood) _applyMarketMood(initData.market_pulse);
 
@@ -1361,6 +1402,9 @@ async function init() {
 
     // Check for dream (after a short delay so UI is settled)
     setTimeout(checkDream, 2000);
+
+    // Phase 3: check daily challenge badge
+    setTimeout(_checkDailyBadge, 1500);
 
   } catch (e) {
     console.error("init error:", e);
@@ -1515,6 +1559,18 @@ async function onPetTap(e) {
 
     // Combo badge
     if (data.combo > 1) _showComboBadge(data.combo);
+
+    // ── Souls system: show souls gained and update HUD ───────────────────
+    if (data.souls_earned > 0) {
+      spawnSoulParticle(`+${data.souls_earned} ⚡`, true);
+      const soulsEl = document.getElementById("soulsCount");
+      if (soulsEl) {
+        soulsEl.textContent = data.total_souls;
+        soulsEl.classList.remove("souls-gaining");
+        void soulsEl.offsetWidth;
+        soulsEl.classList.add("souls-gaining");
+      }
+    }
 
     // Update DATA counter with bump animation
     const coinsEl = document.getElementById("petCoins");
@@ -2185,6 +2241,1072 @@ function _spawnEvolutionParticles() {
     setTimeout(() => el.remove(), 1500);
   }
 }
+
+// ══════════════════════════════════════════════════════════════════════════
+// ── SOULS SYSTEM (Dark Souls × SMC) — Phase 1 ────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Update the souls HUD (counter + flasks) from a souls_state object.
+ * @param {object} s - souls_state from /api/souls/{user_id} or /api/user/init
+ */
+function updateSoulsHUD(s) {
+  if (!s) return;
+  const soulsEl = document.getElementById("soulsCount");
+  if (soulsEl) soulsEl.textContent = s.souls ?? 0;
+  updateEstusHUD(s.estus_flasks ?? 3, s.estus_max ?? 3);
+  // Title
+  const titleEl = document.getElementById("userTitle");
+  if (titleEl && s.current_title) titleEl.textContent = s.current_title;
+}
+
+/**
+ * Update the Estus flask icons in the HUD.
+ * @param {number} current - flasks remaining
+ * @param {number} max - maximum flasks
+ */
+function updateEstusHUD(current, max) {
+  for (let i = 0; i < 3; i++) {
+    const flask = document.getElementById(`flask${i}`);
+    if (!flask) continue;
+    flask.classList.toggle("empty", i >= current);
+  }
+}
+
+/**
+ * Spawn a floating soul particle (+N ⚡ or -N ⚡).
+ * @param {string} text - e.g. "+5 ⚡"
+ * @param {boolean} gaining - true for gain, false for loss
+ */
+function spawnSoulParticle(text, gaining = true) {
+  const layer = document.getElementById("soulsFloatLayer");
+  if (!layer) return;
+  const p = document.createElement("div");
+  p.className = "soul-particle" + (gaining ? "" : " losing");
+  p.textContent = text;
+  // Random position in center area
+  p.style.left = (35 + Math.random() * 30) + "%";
+  p.style.top  = (30 + Math.random() * 20) + "%";
+  layer.appendChild(p);
+  setTimeout(() => p.remove(), 1300);
+}
+
+/**
+ * Apply hollow state visuals to the page body.
+ * @param {object} hollowData - from check_hollow API response
+ */
+function applyHollowState(hollowData) {
+  if (!hollowData) return;
+  if (hollowData.is_hollow || hollowData.became_hollow) {
+    document.body.classList.add("is-hollow");
+    if (hollowData.became_hollow) {
+      // Show the hollow overlay with a delay
+      setTimeout(() => {
+        const overlay = document.getElementById("hollowOverlay");
+        if (overlay) overlay.classList.remove("hidden");
+      }, 800);
+    }
+  } else {
+    document.body.classList.remove("is-hollow");
+  }
+}
+
+/**
+ * Show the dropped souls banner below the header.
+ * @param {number} amount - number of dropped souls
+ */
+function showDroppedSoulsBanner(amount) {
+  // Remove existing banner if any
+  const existing = document.querySelector(".souls-dropped-banner");
+  if (existing) existing.remove();
+
+  const banner = document.createElement("div");
+  banner.className = "souls-dropped-banner";
+  banner.innerHTML = `
+    <span class="dropped-icon">💀</span>
+    <div class="dropped-info">
+      <div class="dropped-label">ДУШИ НА ЗЕМЛЕ</div>
+      <div class="dropped-amount">${amount} ⚡</div>
+    </div>
+    <button class="btn-retrieve-souls" onclick="showSoulsDrop(${amount})">
+      Забрать →
+    </button>
+  `;
+
+  // Insert after the progress section
+  const progress = document.querySelector(".progress-section");
+  if (progress) progress.after(banner);
+}
+
+/**
+ * Show the ЛИКВИДИРОВАН (souls drop) overlay.
+ * @param {number} dropped - souls dropped
+ */
+function showSoulsDrop(dropped) {
+  const overlay = document.getElementById("soulsDropOverlay");
+  const amountEl = document.getElementById("soulsDropAmount");
+  if (!overlay) return;
+  if (amountEl) amountEl.textContent = `${dropped} ⚡`;
+  overlay.classList.remove("hidden");
+}
+
+/** Close the souls-drop overlay. */
+function closeSoulsDrop() {
+  const overlay = document.getElementById("soulsDropOverlay");
+  if (overlay) overlay.classList.add("hidden");
+}
+
+/** Exit hollow state — spend 100 souls. */
+async function exitHollow() {
+  if (!state.userId) return;
+  try {
+    const res  = await fetch(`${API}/souls/hollow-exit`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user_id: state.userId }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      document.body.classList.remove("is-hollow");
+      document.getElementById("hollowOverlay")?.classList.add("hidden");
+      updateSoulsHUD({ souls: data.total_souls });
+      showToast("Hollow отступил. Огонь бонфайра возвращён.", "success", "🔥");
+      spawnSoulParticle(`-100 ⚡`, false);
+    } else {
+      const msg = data.reason === "insufficient_souls"
+        ? `Недостаточно душ. Нужно 100, у тебя ${data.have}.`
+        : data.reason || "Ошибка";
+      showToast(msg, "error", "💀");
+    }
+  } catch (e) {
+    console.error("exitHollow:", e);
+    showToast("Ошибка выхода из Hollow", "error");
+  }
+}
+
+window.exitHollow      = exitHollow;
+window.closeSoulsDrop  = closeSoulsDrop;
+window.showSoulsDrop   = showSoulsDrop;
+
+// ══════════════════════════════════════════════════════════════════════════
+// ── PHASE 2: BOSS, BONFIRE, BLOODSTAINS, ESTUS HINTS ─────────────────────
+// ══════════════════════════════════════════════════════════════════════════
+
+// ── Boss state ──────────────────────────────────────────────────────────
+const bossState = {
+  moduleId:    null,
+  config:      null,    // boss config from API
+  questions:   [],
+  current:     0,
+  correct:     0,
+  timer:       null,
+  timerLeft:   0,
+  timerMax:    120,
+  startedAt:   null,
+  soulsAtStake: 0,
+};
+
+// ── Open boss intro (called when user clicks boss quest) ─────────────────
+async function openBossIntro(moduleId) {
+  try {
+    const res  = await fetch(`${API}/boss/${moduleId}/start`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user_id: state.userId }),
+    });
+    const data = await res.json();
+    if (!data.ok) { showToast(data.reason || "Босс недоступен", "error"); return; }
+
+    bossState.moduleId     = moduleId;
+    bossState.config       = data;
+    bossState.questions    = data.questions || [];
+    bossState.soulsAtStake = data.souls_at_stake || 0;
+
+    document.getElementById("bossIntroName").textContent  = data.name || "Босс";
+    document.getElementById("bossIntroLore").textContent  = data.lore || "";
+    document.getElementById("bossStakeAmount").textContent= `${bossState.soulsAtStake} ⚡`;
+    document.getElementById("bossTimerPreview").textContent = `${data.timer_secs} сек`;
+
+    document.getElementById("bossIntroOverlay").classList.remove("hidden");
+  } catch (e) {
+    console.error("openBossIntro:", e);
+    showToast("Ошибка загрузки босса", "error");
+  }
+}
+
+function closeBossIntro() {
+  document.getElementById("bossIntroOverlay")?.classList.add("hidden");
+}
+
+// ── Actually start the fight ─────────────────────────────────────────────
+function startBossFight() {
+  closeBossIntro();
+  const arena = document.getElementById("bossArena");
+  if (!arena) return;
+
+  bossState.current   = 0;
+  bossState.correct   = 0;
+  bossState.startedAt = Date.now();
+  bossState.timerMax  = bossState.config?.timer_secs ?? 120;
+  bossState.timerLeft = bossState.timerMax;
+
+  // Update HUD
+  document.getElementById("bossArenaName").textContent = bossState.config?.name ?? "Босс";
+  document.getElementById("bossArenaStake").textContent = bossState.soulsAtStake;
+  _updateBossProgress();
+
+  arena.classList.remove("hidden");
+  _renderBossQuestion();
+  _startBossTimer();
+
+  // Block back button
+  if (tg) { tg.BackButton.show(); tg.BackButton.onClick(() => {}); }
+}
+
+function _updateBossProgress() {
+  const total = bossState.questions.length;
+  const done  = bossState.current;
+  const pct   = total > 0 ? Math.round(done / total * 100) : 0;
+  const bar   = document.getElementById("bossProgressBar");
+  if (bar) bar.style.width = pct + "%";
+  const counter = document.getElementById("bossQCounter");
+  if (counter) counter.textContent = `${done + 1}/${total}`;
+  const acc = document.getElementById("bossAccuracyHud");
+  if (acc && done > 0) acc.textContent = `${Math.round(bossState.correct / done * 100)}%`;
+}
+
+function _renderBossQuestion() {
+  const q = bossState.questions[bossState.current];
+  if (!q) return;
+  document.getElementById("bossQuestionText").textContent = q.question;
+  const fb = document.getElementById("bossQFeedback");
+  if (fb) { fb.className = "boss-q-feedback hidden"; fb.textContent = ""; }
+
+  const opts = document.getElementById("bossOptions");
+  opts.innerHTML = "";
+  q.options.forEach((opt, i) => {
+    const btn = document.createElement("button");
+    btn.className = "boss-option";
+    btn.textContent = opt;
+    btn.addEventListener("click", () => _onBossAnswer(i, q.correct_index, q.explanation));
+    opts.appendChild(btn);
+  });
+  _updateBossProgress();
+}
+
+function _onBossAnswer(chosen, correctIdx, explanation) {
+  const isCorrect = chosen === correctIdx;
+  if (tg?.HapticFeedback) tg.HapticFeedback.notificationOccurred(isCorrect ? "success" : "error");
+
+  // Disable all options
+  document.querySelectorAll(".boss-option").forEach((b, i) => {
+    b.disabled = true;
+    if (i === correctIdx) b.classList.add("correct");
+    if (i === chosen && !isCorrect) b.classList.add("wrong");
+  });
+
+  if (isCorrect) bossState.correct++;
+
+  const fb = document.getElementById("bossQFeedback");
+  if (fb) {
+    fb.className = `boss-q-feedback ${isCorrect ? "correct-fb" : "wrong-fb"}`;
+    fb.textContent = isCorrect ? "✓ " + (explanation || "Верно!") : "✗ " + (explanation || "Неверно.");
+    fb.classList.remove("hidden");
+  }
+
+  // Auto-advance after 1.8s
+  setTimeout(() => {
+    bossState.current++;
+    if (bossState.current >= bossState.questions.length) {
+      _finishBossFight();
+    } else {
+      _renderBossQuestion();
+    }
+  }, 1800);
+}
+
+function _startBossTimer() {
+  clearInterval(bossState.timer);
+  const totalCirc = 163; // SVG circumference for r=26
+  bossState.timer = setInterval(() => {
+    bossState.timerLeft--;
+    const num    = document.getElementById("bossTimerNum");
+    const circle = document.getElementById("bossTimerCircle");
+    if (num) {
+      num.textContent = bossState.timerLeft;
+      num.classList.toggle("critical", bossState.timerLeft <= 15);
+    }
+    if (circle) {
+      const pct = bossState.timerLeft / bossState.timerMax;
+      circle.style.strokeDashoffset = totalCirc * (1 - pct);
+      circle.style.stroke = bossState.timerLeft <= 15 ? "#c0392b" : "#c8a84e";
+    }
+    if (bossState.timerLeft <= 0) {
+      _finishBossFight();
+    }
+  }, 1000);
+}
+
+async function _finishBossFight() {
+  clearInterval(bossState.timer);
+  document.getElementById("bossArena")?.classList.add("hidden");
+
+  const timeSpent = Math.round((Date.now() - bossState.startedAt) / 1000);
+  const total     = bossState.questions.length;
+
+  try {
+    const res  = await fetch(`${API}/boss/${bossState.moduleId}/submit`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        user_id:            state.userId,
+        correct:            bossState.correct,
+        total:              total,
+        time_spent_seconds: timeSpent,
+      }),
+    });
+    const data = await res.json();
+    if (!data.ok) { showToast("Ошибка боя", "error"); return; }
+
+    if (data.result === "victory") {
+      _showBossVictory(data);
+    } else {
+      _showBossDeath(data);
+    }
+  } catch (e) {
+    console.error("boss submit:", e);
+    showToast("Ошибка отправки результата", "error");
+  }
+
+  // Re-enable back button
+  if (tg) tg.BackButton.hide();
+}
+
+// ── Death screen ─────────────────────────────────────────────────────────
+function _showBossDeath(data) {
+  const screen = document.getElementById("bossDeathScreen");
+  if (!screen) return;
+  document.getElementById("deathDroppedAmount").textContent = `${data.dropped_souls ?? 0} ⚡`;
+  screen.classList.remove("hidden");
+  if (tg?.HapticFeedback) tg.HapticFeedback.notificationOccurred("error");
+  // Update souls HUD
+  spawnSoulParticle(`-${data.dropped_souls ?? 0} ⚡`, false);
+}
+
+function retryBoss() {
+  document.getElementById("bossDeathScreen")?.classList.add("hidden");
+  openBossIntro(bossState.moduleId);
+}
+
+function leaveBossArena() {
+  document.getElementById("bossDeathScreen")?.classList.add("hidden");
+  loadQuests();
+}
+
+// ── Victory screen ───────────────────────────────────────────────────────
+function _showBossVictory(data) {
+  const screen = document.getElementById("bossVictoryScreen");
+  if (!screen) return;
+  document.getElementById("victoryBossName").textContent = data.boss_name || "Босс";
+
+  // Stats
+  const statsEl = document.getElementById("victoryStats");
+  if (statsEl) {
+    statsEl.innerHTML = `
+      <div class="victory-stat">
+        <div class="vs-label">ТОЧНОСТЬ</div>
+        <div class="vs-value">${data.accuracy}%</div>
+      </div>
+      <div class="victory-stat">
+        <div class="vs-label">ВЕРНО</div>
+        <div class="vs-value">${data.correct}/${data.total}</div>
+      </div>
+    `;
+  }
+
+  const soulsEl = document.getElementById("victorySoulsEarned");
+  if (soulsEl) soulsEl.textContent = `+${data.souls_earned ?? 0} ⚡`;
+  spawnSoulParticle(`+${data.souls_earned ?? 0} ⚡`, true);
+
+  const retrievedEl = document.getElementById("victorySoulsRetrieved");
+  if (retrievedEl && data.souls_retrieved > 0) {
+    retrievedEl.textContent = `+${data.souls_retrieved} ⚡ душ подобрано с земли!`;
+    retrievedEl.classList.remove("hidden");
+  }
+
+  screen.classList.remove("hidden");
+  _spawnVictoryParticles();
+  if (tg?.HapticFeedback) tg.HapticFeedback.notificationOccurred("success");
+
+  // Refresh header souls
+  setTimeout(() => { refreshHeader(); loadQuests(); }, 500);
+}
+
+function afterBossVictory() {
+  document.getElementById("bossVictoryScreen")?.classList.add("hidden");
+  showBonfire();
+}
+
+function _spawnVictoryParticles() {
+  const layer = document.getElementById("victoryParticles");
+  if (!layer) return;
+  layer.innerHTML = "";
+  const emojis = ["⚡","✨","💛","🌟","⭐","💎","🏆"];
+  for (let i = 0; i < 30; i++) {
+    const p = document.createElement("div");
+    p.className = "vp-particle";
+    p.textContent = emojis[Math.floor(Math.random() * emojis.length)];
+    const tx  = (Math.random() - 0.5) * 300;
+    const ty  = -(80 + Math.random() * 200);
+    const rot = (Math.random() - 0.5) * 720;
+    const dur = 1.5 + Math.random() * 1.5;
+    p.style.cssText = `
+      left:${20 + Math.random() * 60}%;
+      top:${40 + Math.random() * 20}%;
+      --tx:${tx}px; --ty:${ty}px; --rot:${rot}deg; --dur:${dur}s;
+      animation-delay:${Math.random() * 0.5}s;
+    `;
+    layer.appendChild(p);
+    setTimeout(() => p.remove(), (dur + 0.5) * 1000);
+  }
+}
+
+// ── Bonfire screen ───────────────────────────────────────────────────────
+async function showBonfire() {
+  try {
+    const res  = await fetch(`${API}/souls/bonfire/${state.userId}`, { method: "POST" });
+    const data = await res.json();
+
+    const screen = document.getElementById("bonfireScreen");
+    if (!screen) return;
+
+    // Module name
+    const modName = document.getElementById("bonfireModuleName");
+    if (modName && state.userState) {
+      modName.textContent = `Модуль ${(state.userState.module_index ?? 0) + 1} пройден`;
+    }
+
+    // Stats
+    const statsEl = document.getElementById("bonfireStats");
+    if (statsEl) {
+      statsEl.innerHTML = `
+        <div class="bf-stat">
+          <div class="bf-stat-label">ФЛАСКИ</div>
+          <div class="bf-stat-value">${data.estus_flasks}/3</div>
+        </div>
+        <div class="bf-stat">
+          <div class="bf-stat-label">ДУШИ</div>
+          <div class="bf-stat-value">${data.souls} ⚡</div>
+        </div>
+      `;
+    }
+
+    // Next boss bloodstains
+    const nextBossEl = document.getElementById("bonfireNextBoss");
+    if (nextBossEl && data.next_boss_bloodstains?.total_attempts > 0) {
+      const bs = data.next_boss_bloodstains;
+      nextBossEl.textContent = `⚠️ Следующий босс: ${bs.boss_name} — ${bs.death_pct}% учеников погибли там`;
+    } else if (nextBossEl) {
+      nextBossEl.textContent = "";
+    }
+
+    // Spawn fire sparks
+    _spawnFireSparks();
+
+    // Update flasks HUD
+    updateEstusHUD(data.estus_flasks, 3);
+
+    screen.classList.remove("hidden");
+  } catch (e) {
+    console.error("showBonfire:", e);
+    // If bonfire fails, just refresh quests
+    loadQuests();
+    refreshHeader();
+  }
+}
+
+function _spawnFireSparks() {
+  const sparks = document.getElementById("fireSparks");
+  if (!sparks) return;
+  sparks.innerHTML = "";
+  for (let i = 0; i < 8; i++) {
+    const s = document.createElement("div");
+    s.className = "spark";
+    const sx  = 20 + Math.random() * 60;
+    const dx  = (Math.random() - 0.5) * 30;
+    const dur = 0.6 + Math.random() * 0.8;
+    const del = Math.random() * 1.5;
+    s.style.cssText = `--sx:${sx}%; --dx:${dx}px; --dur:${dur}s; animation-delay:${del}s`;
+    sparks.appendChild(s);
+  }
+}
+
+function closeBonfire() {
+  document.getElementById("bonfireScreen")?.classList.add("hidden");
+  loadQuests();
+  refreshHeader();
+}
+
+// ── Bloodstains on quest cards ────────────────────────────────────────────
+const _bloodstainCache = {};
+
+async function loadBloodstainForModule(moduleId) {
+  if (_bloodstainCache[moduleId] !== undefined) return _bloodstainCache[moduleId];
+  try {
+    const res  = await fetch(`${API}/boss/${moduleId}/bloodstains`);
+    const data = await res.json();
+    _bloodstainCache[moduleId] = data.ok ? data : null;
+    return _bloodstainCache[moduleId];
+  } catch { return null; }
+}
+
+async function injectBloodstains(moduleId) {
+  const data = await loadBloodstainForModule(moduleId);
+  if (!data || !data.total_attempts) return;
+
+  const bossCards = document.querySelectorAll(".quest-card.boss");
+  bossCards.forEach(card => {
+    // Avoid duplicate
+    if (card.querySelector(".bloodstain-dot")) return;
+    const dot = document.createElement("div");
+    dot.className = "bloodstain-dot";
+    dot.textContent = `${data.death_pct ?? 0}% учеников погибли здесь`;
+    // Insert before the button
+    const btn = card.querySelector(".btn-quest");
+    if (btn) btn.before(dot);
+  });
+}
+
+// ── Override quest card button for boss quests ────────────────────────────
+const _origRenderQuests = window.renderQuests;
+
+/**
+ * Patch: after renderQuests() runs, make boss quest cards open BossIntro.
+ */
+function _patchBossButtons() {
+  const cards = document.querySelectorAll(".quest-card.boss");
+  cards.forEach(card => {
+    const btn = card.querySelector(".btn-quest");
+    if (!btn || btn.dataset.bossPatched) return;
+    btn.dataset.bossPatched = "1";
+    // Re-wire click handler to boss intro
+    const newBtn = btn.cloneNode(true);
+    btn.replaceWith(newBtn);
+    // Determine moduleId from the card (added below via data attribute)
+    const moduleId = parseInt(card.dataset.moduleId ?? "0", 10);
+    if (!newBtn.disabled) {
+      newBtn.addEventListener("click", () => openBossIntro(moduleId));
+    }
+  });
+}
+
+// ── Estus hint in quiz ────────────────────────────────────────────────────
+async function useEstusHint() {
+  if (!state.userId) return;
+  const q = state.quizData?.questions?.[state.quizData?.current];
+  if (!q) return;
+
+  try {
+    const res  = await fetch(`${API}/souls/estus-use`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user_id: state.userId }),
+    });
+    const data = await res.json();
+    if (!data.ok) {
+      showToast(data.reason === "no_flasks" ? "Фласки закончились!" : "Ошибка", "error", "🔶");
+      return;
+    }
+
+    // Update flask counter
+    const cnt = document.getElementById("estusHintCount");
+    if (cnt) cnt.textContent = data.remaining;
+    updateEstusHUD(data.remaining, 3);
+
+    // Show hint: eliminate one wrong option
+    const correctIdx = q.correct_index;
+    const wrongIdxs  = q.options
+      .map((_, i) => i)
+      .filter(i => i !== correctIdx);
+    const eliminate  = wrongIdxs[Math.floor(Math.random() * wrongIdxs.length)];
+
+    const hintEl = document.getElementById("estusHintText");
+    if (hintEl) {
+      hintEl.textContent = `💡 Подсказка: вариант "${q.options[eliminate]}" — неверный.`;
+      hintEl.classList.remove("hidden");
+    }
+
+    // Dim the eliminated option
+    const optBtns = document.querySelectorAll(".quiz-option");
+    if (optBtns[eliminate]) {
+      optBtns[eliminate].style.opacity = "0.3";
+      optBtns[eliminate].disabled = true;
+    }
+
+    showToast(`Фласка использована. Осталось: ${data.remaining}`, "success", "🔶");
+  } catch (e) {
+    console.error("useEstusHint:", e);
+  }
+}
+window.useEstusHint = useEstusHint;
+
+// ── Wire up boss buttons after quests are rendered ────────────────────────
+const _origLoadQuests = window.loadQuests;
+window.loadQuests = async function() {
+  // Call original (defined elsewhere)
+  if (typeof loadQuests_original === "function") await loadQuests_original();
+};
+
+// Expose functions globally
+window.openBossIntro    = openBossIntro;
+window.closeBossIntro   = closeBossIntro;
+window.startBossFight   = startBossFight;
+window.retryBoss        = retryBoss;
+window.leaveBossArena   = leaveBossArena;
+window.afterBossVictory = afterBossVictory;
+window.showBonfire      = showBonfire;
+window.closeBonfire     = closeBonfire;
+
+// ══════════════════════════════════════════════════════════════════════════════
+// PHASE 3 — SOCIAL SYSTEMS
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ── PHANTOM MESSAGES ──────────────────────────────────────────────────────────
+
+let _currentPhantomQuestId = null;
+
+async function openPhantoms(questId) {
+  _currentPhantomQuestId = questId;
+  const overlay = $("#phantomOverlay");
+  const list    = $("#phantomList");
+  overlay.classList.remove("hidden");
+  list.innerHTML = `<div class="phantom-loading">Призываем призраков…</div>`;
+
+  try {
+    const uid = state.userId;
+    const res = await fetch(`/api/social/phantoms/${questId}?user_id=${uid}`);
+    const data = await res.json();
+    const phantoms = data.phantoms || [];
+
+    if (!phantoms.length) {
+      list.innerHTML = `<div class="phantom-empty">Никто ещё не оставил послания.<br>Будь первым призраком.</div>`;
+    } else {
+      list.innerHTML = "";
+      phantoms.forEach(ph => {
+        const item = document.createElement("div");
+        item.className = "phantom-item";
+        item.dataset.id = ph.id;
+        item.innerHTML = `
+          <div class="phantom-item-header">
+            <span class="phantom-item-user">👻 ${_esc(ph.username)}</span>
+          </div>
+          <div class="phantom-item-text">${_esc(ph.text)}</div>
+          <div class="phantom-vote-row">
+            <button class="phantom-vote-btn" onclick="votePhantom('${questId}','${ph.id}','up',this)">
+              👍 ${ph.votes_up}
+            </button>
+            <button class="phantom-vote-btn" onclick="votePhantom('${questId}','${ph.id}','down',this)">
+              👎 ${ph.votes_down}
+            </button>
+          </div>`;
+        list.appendChild(item);
+      });
+    }
+  } catch(e) {
+    list.innerHTML = `<div class="phantom-empty">Не удалось призвать призраков.</div>`;
+  }
+
+  // Char counter
+  const input = $("#phantomInput");
+  const counter = $("#phantomCharCount");
+  if (input) {
+    input.value = "";
+    input.oninput = () => { counter.textContent = `${input.value.length}/200`; };
+  }
+}
+
+function closePhantoms() {
+  $("#phantomOverlay").classList.add("hidden");
+  _currentPhantomQuestId = null;
+}
+
+async function votePhantom(questId, phantomId, vote, btn) {
+  btn.classList.add("voted");
+  try {
+    await fetch(`/api/social/phantoms/${questId}/${phantomId}/vote`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user_id: state.userId, vote }),
+    });
+  } catch(e) { /* silent */ }
+}
+
+async function sendPhantom() {
+  const input = $("#phantomInput");
+  const text  = input?.value.trim();
+  if (!text || !_currentPhantomQuestId) return;
+
+  const btn = document.querySelector(".btn-phantom-send");
+  if (btn) btn.disabled = true;
+
+  try {
+    await fetch(`/api/social/phantoms/${_currentPhantomQuestId}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        user_id:  state.userId,
+        username: state.userState?.username || "Призрак",
+        text,
+      }),
+    });
+    input.value = "";
+    $("#phantomCharCount").textContent = "0/200";
+    // Refresh list
+    await openPhantoms(_currentPhantomQuestId);
+  } catch(e) { /* silent */ } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+function _esc(str) {
+  const d = document.createElement("div");
+  d.textContent = str || "";
+  return d.innerHTML;
+}
+
+// ── DAILY CHALLENGE ───────────────────────────────────────────────────────────
+
+let _dailyData = null;
+
+async function openDaily() {
+  const overlay = $("#dailyOverlay");
+  overlay.classList.remove("hidden");
+  await _loadDailyChallenge();
+}
+
+function closeDaily() {
+  $("#dailyOverlay").classList.add("hidden");
+}
+
+async function _loadDailyChallenge() {
+  try {
+    const res  = await fetch(`/api/social/daily?user_id=${state.userId}`);
+    _dailyData = await res.json();
+
+    $("#dailyDate").textContent       = _dailyData.date || "";
+    $("#dailyStreakBadge").textContent = `🔥 ${_dailyData.streak || 0} дней`;
+    $("#dailyRewardSouls").textContent = `${_dailyData.souls_reward || 0} ⚡`;
+    $("#dailyQuestion").textContent   = _dailyData.question || "";
+
+    const optEl = $("#dailyOptions");
+    optEl.innerHTML = "";
+    const resultEl   = $("#dailyResult");
+    const completedEl = $("#dailyCompleted");
+    resultEl.classList.add("hidden");
+    completedEl.classList.add("hidden");
+
+    if (_dailyData.completed) {
+      // Already done today
+      optEl.classList.add("hidden");
+      completedEl.classList.remove("hidden");
+      const streak = _dailyData.streak || 0;
+      $("#dailyStreakDisplay").textContent = `🔥 Серия: ${streak} дней`;
+    } else {
+      optEl.classList.remove("hidden");
+      (_dailyData.options || []).forEach((opt, i) => {
+        const btn = document.createElement("button");
+        btn.className = "daily-option";
+        btn.textContent = opt;
+        btn.addEventListener("click", () => _submitDailyAnswer(i));
+        optEl.appendChild(btn);
+      });
+    }
+  } catch(e) {
+    $("#dailyQuestion").textContent = "Не удалось загрузить вызов.";
+  }
+}
+
+async function _submitDailyAnswer(answerIdx) {
+  // Disable all options immediately
+  document.querySelectorAll(".daily-option").forEach(b => b.disabled = true);
+
+  try {
+    const res    = await fetch("/api/social/daily/submit", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user_id: state.userId, answer_idx: answerIdx }),
+    });
+    const result = await res.json();
+
+    // Mark correct/wrong options visually
+    document.querySelectorAll(".daily-option").forEach((b, i) => {
+      if (i === result.correct_idx) b.classList.add("correct");
+      else if (i === answerIdx && !result.correct) b.classList.add("wrong");
+    });
+
+    // Show result after 600ms
+    setTimeout(() => {
+      $("#dailyOptions").classList.add("hidden");
+      const resultEl = $("#dailyResult");
+      resultEl.classList.remove("hidden");
+
+      if (result.correct) {
+        $("#dailyResultIcon").textContent  = "⚔️";
+        $("#dailyResultText").textContent  = "Правильно! Рынок поклоняется тебе.";
+        $("#dailySoulsWon").textContent    = `+${result.souls_won} ⚡`;
+        $("#dailyStreakUpdate").textContent = `🔥 Серия: ${result.streak} дней`;
+        // Update HUD
+        if (state.userState) {
+          state.userState.souls = (state.userState.souls || 0) + result.souls_won;
+          updateSoulsHUD();
+        }
+      } else {
+        $("#dailyResultIcon").textContent  = "💀";
+        $("#dailyResultText").textContent  = "Ликвидирован. Рынок безжалостен.";
+        $("#dailySoulsWon").textContent    = "0 ⚡";
+        $("#dailyStreakUpdate").textContent = "Серия прервана.";
+      }
+    }, 600);
+
+  } catch(e) {
+    document.querySelectorAll(".daily-option").forEach(b => b.disabled = false);
+  }
+}
+
+// Badge on daily button if not yet completed today
+async function _checkDailyBadge() {
+  try {
+    const res  = await fetch(`/api/social/daily?user_id=${state.userId}`);
+    const data = await res.json();
+    const badge = $("#dailyBadge");
+    if (badge) {
+      if (!data.completed) badge.classList.remove("hidden");
+      else badge.classList.add("hidden");
+    }
+  } catch(e) { /* silent */ }
+}
+
+// ── CLANS ─────────────────────────────────────────────────────────────────────
+
+let _clanData = null;
+
+async function openClanPanel() {
+  $("#clanPanel").classList.remove("hidden");
+  await _loadClanData();
+}
+
+function closeClanPanel() {
+  $("#clanPanel").classList.add("hidden");
+}
+
+async function _loadClanData() {
+  // Load user's clan
+  try {
+    const res   = await fetch(`/api/social/clans/me?user_id=${state.userId}`);
+    const data  = await res.json();
+    _clanData   = data.clan;
+    _renderMyClan(_clanData);
+  } catch(e) { /* silent */ }
+
+  // Load leaderboard
+  try {
+    const res  = await fetch("/api/social/clans");
+    const data = await res.json();
+    _renderClanLeaderboard(data.clans || []);
+  } catch(e) { /* silent */ }
+}
+
+function _renderMyClan(clan) {
+  const noneEl = $("#clanNone");
+  const mineEl = $("#clanMine");
+
+  if (!clan) {
+    noneEl.classList.remove("hidden");
+    mineEl.classList.add("hidden");
+    return;
+  }
+
+  noneEl.classList.add("hidden");
+  mineEl.classList.remove("hidden");
+
+  $("#clanMineTag").textContent  = `[${clan.tag}]`;
+  $("#clanMineName").textContent = clan.name;
+
+  const weeklySouls  = clan.weekly_souls || 0;
+  const weeklyTarget = clan.weekly_target || 1000;
+  $("#clanWeeklySouls").textContent  = weeklySouls;
+  $("#clanWeeklyTarget").textContent = weeklyTarget;
+  $("#clanProgressBar").style.width  = `${clan.progress_pct || 0}%`;
+
+  // Members list
+  const membersList = $("#clanMembersList");
+  membersList.innerHTML = "";
+  (clan.members || []).forEach(uid => {
+    const row = document.createElement("div");
+    row.className = "clan-member-row";
+    const isLeader = uid === clan.leader_id;
+    const isMe     = uid === state.userId;
+    row.innerHTML = `
+      <span class="clan-member-icon">${isLeader ? "👑" : "⚔️"}</span>
+      <span class="clan-member-name">${isMe ? "Ты" : `Трейдер #${uid}`}</span>
+      ${isLeader ? '<span class="clan-member-leader">Лидер</span>' : ""}
+    `;
+    membersList.appendChild(row);
+  });
+
+  // Hollow warning
+  const hollowCount = clan.hollow_count || 0;
+  const hollowWarn  = $("#clanHollowWarning");
+  if (hollowCount > 0) {
+    hollowWarn.classList.remove("hidden");
+    $("#clanHollowCount").textContent = hollowCount;
+  } else {
+    hollowWarn.classList.add("hidden");
+  }
+}
+
+function _renderClanLeaderboard(clans) {
+  const lb = $("#clanLeaderboard");
+  if (!clans.length) {
+    lb.innerHTML = `<div class="clan-lb-loading">Кланов пока нет.</div>`;
+    return;
+  }
+  lb.innerHTML = "";
+  clans.forEach((c, i) => {
+    const row = document.createElement("div");
+    row.className = "clan-lb-row";
+    row.innerHTML = `
+      <span class="clan-lb-rank">${i + 1}</span>
+      <span class="clan-lb-tag">[${c.tag}]</span>
+      <span class="clan-lb-name">${_esc(c.name)}</span>
+      <span class="clan-lb-souls">${c.souls_pool} ⚡</span>
+      <span class="clan-lb-members">${c.member_count}/5</span>
+    `;
+    lb.appendChild(row);
+  });
+}
+
+function showClanCreate() {
+  $("#clanCreateForm").classList.toggle("hidden");
+  $("#clanJoinForm").classList.add("hidden");
+}
+
+function showClanJoin() {
+  $("#clanJoinForm").classList.toggle("hidden");
+  $("#clanCreateForm").classList.add("hidden");
+}
+
+async function createClan() {
+  const name = $("#clanNameInput").value.trim();
+  const tag  = $("#clanTagInput").value.trim();
+  if (!name || !tag) return;
+
+  try {
+    const res  = await fetch("/api/social/clans/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user_id: state.userId, name, tag }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      _clanData = data.clan;
+      _renderMyClan(data.clan);
+    } else {
+      alert(data.detail || "Ошибка создания клана");
+    }
+  } catch(e) { alert("Ошибка сети"); }
+}
+
+async function joinClan() {
+  const tag = $("#clanTagJoinInput").value.trim();
+  if (!tag) return;
+
+  try {
+    const res  = await fetch("/api/social/clans/join", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user_id: state.userId, tag }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      _clanData = data.clan;
+      _renderMyClan(data.clan);
+    } else {
+      alert(data.detail || "Клан не найден или переполнен");
+    }
+  } catch(e) { alert("Ошибка сети"); }
+}
+
+async function leaveClan() {
+  if (!confirm("Покинуть клан?")) return;
+  try {
+    const res  = await fetch("/api/social/clans/leave", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user_id: state.userId }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      _clanData = null;
+      _renderMyClan(null);
+    }
+  } catch(e) { alert("Ошибка сети"); }
+}
+
+function showContributeModal() {
+  const modal = $("#contributeModal");
+  modal.classList.remove("hidden");
+  const avail = state.userState?.souls || 0;
+  $("#contributeSoulsAvail").textContent = avail;
+  $("#contributeAmount").value = "";
+}
+
+function closeContributeModal() {
+  $("#contributeModal").classList.add("hidden");
+}
+
+async function confirmContribute() {
+  const amount = parseInt($("#contributeAmount").value);
+  if (!amount || amount < 10) { alert("Минимум 10 душ"); return; }
+
+  try {
+    const res  = await fetch("/api/social/clans/contribute", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user_id: state.userId, amount }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      closeContributeModal();
+      if (state.userState) {
+        state.userState.souls = data.souls_remaining;
+        updateSoulsHUD();
+      }
+      _clanData = data.clan;
+      _renderMyClan(data.clan);
+    } else {
+      alert(data.detail || "Недостаточно душ");
+    }
+  } catch(e) { alert("Ошибка сети"); }
+}
+
+// Expose globals
+window.openPhantoms        = openPhantoms;
+window.closePhantoms       = closePhantoms;
+window.sendPhantom         = sendPhantom;
+window.votePhantom         = votePhantom;
+window.openDaily           = openDaily;
+window.closeDaily          = closeDaily;
+window.openClanPanel       = openClanPanel;
+window.closeClanPanel      = closeClanPanel;
+window.showClanCreate      = showClanCreate;
+window.showClanJoin        = showClanJoin;
+window.createClan          = createClan;
+window.joinClan            = joinClan;
+window.leaveClan           = leaveClan;
+window.showContributeModal = showContributeModal;
+window.closeContributeModal = closeContributeModal;
+window.confirmContribute   = confirmContribute;
 
 // ── BTN START ─────────────────────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", () => {

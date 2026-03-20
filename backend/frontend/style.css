@@ -4440,3 +4440,1702 @@ body.frenzy-mode .bg-overlay {
   0%   { transform: translate(-50%, -50%) scale(0);   opacity: 1; }
   100% { transform: translate(-50%, -50%) scale(3.5); opacity: 0; }
 }
+
+/* ══════════════════════════════════════════════════════════════════════
+   SOULS-LIKE SYSTEM — Phase 1
+   "Рынок не прощает. Мы тоже."
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* ── SOULS COLOR TOKENS ─────────────────────────────────────────────── */
+:root {
+  --souls-gold:       #c8a84e;
+  --souls-gold2:      #e8c96e;
+  --souls-gold-glow:  0 0 12px rgba(200,168,78,0.6), 0 0 24px rgba(200,168,78,0.2);
+  --souls-red:        #8b1a1a;
+  --souls-red2:       #c0392b;
+  --souls-red-glow:   0 0 12px rgba(139,26,26,0.7);
+  --souls-bonfire:    #e8751a;
+  --souls-hollow-bg:  rgba(8,8,12,0.96);
+}
+
+/* ── SOULS HUD (header) ─────────────────────────────────────────────── */
+.souls-hud {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  background: rgba(200,168,78,0.08);
+  border: 1px solid rgba(200,168,78,0.25);
+  border-radius: 20px;
+  cursor: pointer;
+  transition: background 0.2s, box-shadow 0.2s;
+}
+.souls-hud:hover { box-shadow: var(--souls-gold-glow); }
+
+.souls-icon {
+  font-size: 13px;
+  filter: drop-shadow(0 0 4px rgba(200,168,78,0.8));
+}
+
+.souls-count {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--souls-gold);
+  text-shadow: 0 0 8px rgba(200,168,78,0.5);
+  transition: color 0.3s;
+}
+
+.souls-count.souls-gaining {
+  color: var(--souls-gold2);
+  text-shadow: var(--souls-gold-glow);
+  animation: soulsGainPulse 0.4s ease-out;
+}
+
+@keyframes soulsGainPulse {
+  0%   { transform: scale(1);    }
+  50%  { transform: scale(1.25); }
+  100% { transform: scale(1);    }
+}
+
+/* ── ESTUS FLASKS HUD ────────────────────────────────────────────────── */
+.estus-hud {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+  padding: 2px 6px;
+  background: rgba(45,90,39,0.12);
+  border: 1px solid rgba(45,90,39,0.3);
+  border-radius: 12px;
+}
+
+.estus-flask {
+  font-size: 12px;
+  opacity: 1;
+  transition: opacity 0.3s, filter 0.3s;
+  filter: drop-shadow(0 0 3px rgba(0,232,122,0.5));
+}
+
+.estus-flask.empty {
+  opacity: 0.2;
+  filter: none;
+}
+
+/* ── USER TITLE (Souls rank) ─────────────────────────────────────────── */
+.header-title.souls-title {
+  display: block;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--souls-gold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.85;
+  margin-top: 1px;
+}
+
+/* ── SOULS FLOAT PARTICLES ───────────────────────────────────────────── */
+.souls-float-layer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9990;
+}
+
+.soul-particle {
+  position: absolute;
+  font-size: 13px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  color: var(--souls-gold);
+  text-shadow: 0 0 6px rgba(200,168,78,0.8);
+  pointer-events: none;
+  animation: soulFloat 1.2s ease-out forwards;
+  white-space: nowrap;
+}
+
+@keyframes soulFloat {
+  0%   { transform: translateY(0)   scale(1);    opacity: 1; }
+  60%  { transform: translateY(-40px) scale(1.1); opacity: 1; }
+  100% { transform: translateY(-70px) scale(0.8); opacity: 0; }
+}
+
+.soul-particle.losing {
+  color: var(--souls-red2);
+  text-shadow: var(--souls-red-glow);
+  animation: soulSink 1s ease-in forwards;
+}
+
+@keyframes soulSink {
+  0%   { transform: translateY(0)   scale(1);   opacity: 1; }
+  100% { transform: translateY(30px) scale(0.7); opacity: 0; }
+}
+
+/* ── HOLLOW OVERLAY ──────────────────────────────────────────────────── */
+.hollow-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9995;
+  background: var(--souls-hollow-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Apply hollow visual filter when user is in hollow state */
+body.is-hollow #app {
+  filter: grayscale(80%) opacity(0.7) brightness(0.8);
+}
+body.is-hollow::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9980;
+  background: radial-gradient(ellipse at center,
+    transparent 30%, rgba(50,30,10,0.25) 100%);
+}
+
+.hollow-content {
+  text-align: center;
+  padding: 32px 24px;
+  max-width: 340px;
+  position: relative;
+}
+
+.hollow-vignette {
+  position: absolute;
+  inset: -40px;
+  background: radial-gradient(ellipse at center,
+    transparent 40%, rgba(139,26,26,0.4) 100%);
+  pointer-events: none;
+}
+
+.hollow-status-text {
+  font-size: 44px;
+  font-weight: 900;
+  letter-spacing: 0.15em;
+  color: rgba(200,168,78,0.15);
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.hollow-title {
+  font-size: 28px;
+  font-weight: 800;
+  color: #e8e6e1;
+  margin-bottom: 12px;
+  text-shadow: 0 0 20px rgba(200,168,78,0.3);
+}
+
+.hollow-desc {
+  font-size: 14px;
+  color: rgba(232,230,225,0.65);
+  line-height: 1.6;
+  margin-bottom: 20px;
+}
+
+.hollow-desc strong { color: var(--souls-red2); }
+
+.hollow-cost {
+  font-size: 15px;
+  color: #e8e6e1;
+  margin-bottom: 20px;
+}
+
+.souls-gold { color: var(--souls-gold); font-weight: 700; }
+
+.btn-hollow-exit {
+  width: 100%;
+  padding: 14px 20px;
+  background: linear-gradient(135deg, rgba(200,168,78,0.15), rgba(200,168,78,0.08));
+  border: 1.5px solid rgba(200,168,78,0.4);
+  border-radius: 14px;
+  color: var(--souls-gold);
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.25s;
+  letter-spacing: 0.02em;
+  margin-bottom: 16px;
+}
+
+.btn-hollow-exit:hover {
+  background: linear-gradient(135deg, rgba(200,168,78,0.25), rgba(200,168,78,0.12));
+  box-shadow: var(--souls-gold-glow);
+}
+
+.hollow-quote {
+  font-size: 12px;
+  color: rgba(232,230,225,0.3);
+  font-style: italic;
+  letter-spacing: 0.03em;
+}
+
+/* ── SOULS DROP OVERLAY ──────────────────────────────────────────────── */
+.souls-drop-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9994;
+  background: rgba(0,0,0,0.92);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: deathFadeIn 0.5s ease-out;
+}
+
+@keyframes deathFadeIn {
+  0%   { opacity: 0; background: rgba(139,26,26,0.6); }
+  100% { opacity: 1; background: rgba(0,0,0,0.92); }
+}
+
+.souls-drop-content {
+  text-align: center;
+  padding: 40px 24px;
+  max-width: 320px;
+}
+
+.souls-drop-title {
+  font-size: 52px;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  color: var(--souls-red2);
+  text-shadow: 0 0 30px rgba(192,57,43,0.8), 0 0 60px rgba(192,57,43,0.3);
+  margin-bottom: 8px;
+  animation: deathTextPulse 2s ease-in-out infinite;
+}
+
+@keyframes deathTextPulse {
+  0%, 100% { opacity: 1; text-shadow: 0 0 30px rgba(192,57,43,0.8); }
+  50%       { opacity: 0.8; text-shadow: 0 0 50px rgba(192,57,43,1); }
+}
+
+.souls-drop-amount {
+  font-size: 32px;
+  font-weight: 800;
+  color: var(--souls-gold);
+  text-shadow: var(--souls-gold-glow);
+  margin-bottom: 20px;
+  font-family: var(--font-mono);
+}
+
+.souls-drop-desc {
+  font-size: 14px;
+  color: rgba(232,230,225,0.7);
+  line-height: 1.7;
+  margin-bottom: 28px;
+}
+
+.souls-drop-desc em { color: var(--souls-red2); font-style: normal; font-weight: 700; }
+
+.btn-souls-retry {
+  background: linear-gradient(135deg, rgba(200,168,78,0.2), rgba(200,168,78,0.08)) !important;
+  border: 1.5px solid rgba(200,168,78,0.4) !important;
+  color: var(--souls-gold) !important;
+}
+
+/* ── DROPPED SOULS INDICATOR (on quests) ────────────────────────────── */
+.souls-dropped-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: linear-gradient(135deg,
+    rgba(139,26,26,0.15), rgba(192,57,43,0.08));
+  border: 1px solid rgba(139,26,26,0.35);
+  border-radius: 12px;
+  margin: 8px 16px;
+  animation: droppedPulse 2s ease-in-out infinite;
+}
+
+@keyframes droppedPulse {
+  0%, 100% { border-color: rgba(139,26,26,0.35); }
+  50%       { border-color: rgba(192,57,43,0.6); box-shadow: 0 0 12px rgba(139,26,26,0.3); }
+}
+
+.dropped-icon { font-size: 18px; }
+
+.dropped-info { flex: 1; }
+.dropped-label { font-size: 11px; color: var(--souls-red2); font-weight: 600; letter-spacing: 0.05em; }
+.dropped-amount { font-size: 15px; color: var(--souls-gold); font-weight: 700; font-family: var(--font-mono); }
+
+.btn-retrieve-souls {
+  padding: 6px 12px;
+  background: rgba(200,168,78,0.12);
+  border: 1px solid rgba(200,168,78,0.3);
+  border-radius: 8px;
+  color: var(--souls-gold);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-retrieve-souls:hover { background: rgba(200,168,78,0.22); }
+
+/* ── SOULS MULTIPLIER BADGE ──────────────────────────────────────────── */
+.souls-mult-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  background: rgba(200,168,78,0.1);
+  border: 1px solid rgba(200,168,78,0.25);
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--souls-gold);
+  font-family: var(--font-mono);
+}
+
+/* ── BONFIRE GLOW (between modules) ─────────────────────────────────── */
+.bonfire-ready-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: linear-gradient(135deg,
+    rgba(232,117,26,0.12), rgba(232,117,26,0.05));
+  border: 1px solid rgba(232,117,26,0.3);
+  border-radius: 12px;
+  margin: 8px 16px;
+  font-size: 13px;
+  color: var(--souls-bonfire);
+  font-weight: 600;
+  animation: bonfireGlow 2.5s ease-in-out infinite;
+}
+
+@keyframes bonfireGlow {
+  0%, 100% { box-shadow: none; }
+  50%       { box-shadow: 0 0 16px rgba(232,117,26,0.3); }
+}
+
+/* ── TAP → SOUL RIPPLE ───────────────────────────────────────────────── */
+.souls-tap-ripple {
+  position: absolute;
+  border-radius: 50%;
+  border: 1.5px solid rgba(200,168,78,0.6);
+  pointer-events: none;
+  transform: translate(-50%, -50%) scale(0);
+  animation: soulsTapRipple 0.6s ease-out forwards;
+}
+
+@keyframes soulsTapRipple {
+  0%   { transform: translate(-50%, -50%) scale(0);   opacity: 1; }
+  100% { transform: translate(-50%, -50%) scale(4);   opacity: 0; }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   PHASE 2 — BOSS, BONFIRE, BLOODSTAINS, ESTUS HINTS
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* ── BOSS QUEST CARD enhancement ──────────────────────────────────── */
+.quest-card.boss {
+  border-color: rgba(200,168,78,0.35);
+  background: linear-gradient(135deg,
+    rgba(200,168,78,0.06) 0%,
+    rgba(18,18,26,0.95)   100%);
+  box-shadow: 0 0 20px rgba(200,168,78,0.08);
+}
+.quest-card.boss .quest-title {
+  color: var(--souls-gold);
+}
+.quest-card.boss::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(135deg, rgba(200,168,78,0.04), transparent);
+  pointer-events: none;
+}
+
+/* ── BLOODSTAINS ─────────────────────────────────────────────────────── */
+.bloodstain-dot {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--souls-red2);
+  font-weight: 600;
+  opacity: 0.85;
+  animation: bloodFadeIn 0.6s ease-out;
+}
+.bloodstain-dot::before {
+  content: '🩸';
+  font-size: 10px;
+}
+
+@keyframes bloodFadeIn {
+  0%   { opacity: 0; transform: scale(0.8); }
+  100% { opacity: 0.85; transform: scale(1); }
+}
+
+/* ── ESTUS HINT BUTTON ───────────────────────────────────────────────── */
+.estus-hint-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.btn-estus-hint {
+  align-self: flex-start;
+  padding: 6px 14px;
+  background: rgba(45,90,39,0.15);
+  border: 1px solid rgba(45,90,39,0.35);
+  border-radius: 10px;
+  color: #00e87a;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-estus-hint:hover { background: rgba(45,90,39,0.28); }
+.btn-estus-hint:disabled { opacity: 0.35; cursor: not-allowed; }
+
+.estus-hint-text {
+  padding: 10px 14px;
+  background: rgba(45,90,39,0.12);
+  border: 1px solid rgba(45,90,39,0.25);
+  border-radius: 10px;
+  font-size: 13px;
+  color: #a0d0a0;
+  line-height: 1.5;
+  animation: hintReveal 0.4s ease-out;
+}
+@keyframes hintReveal {
+  0%   { opacity: 0; transform: translateY(-6px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+/* ── BOSS INTRO OVERLAY ──────────────────────────────────────────────── */
+.boss-intro-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9993;
+  background: rgba(0,0,0,0.97);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: bossIntroFade 0.6s ease-out;
+}
+@keyframes bossIntroFade {
+  0%   { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+.boss-intro-bg {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse at 20% 80%, rgba(139,26,26,0.25) 0%, transparent 60%),
+    radial-gradient(ellipse at 80% 20%, rgba(200,168,78,0.12) 0%, transparent 60%);
+  pointer-events: none;
+}
+
+.boss-intro-content {
+  text-align: center;
+  padding: 32px 24px;
+  max-width: 360px;
+  position: relative;
+  z-index: 1;
+}
+
+.boss-warning-text {
+  font-size: 11px;
+  letter-spacing: 0.25em;
+  color: var(--souls-red2);
+  font-weight: 700;
+  text-transform: uppercase;
+  margin-bottom: 16px;
+  animation: warnPulse 1.5s ease-in-out infinite;
+}
+@keyframes warnPulse {
+  0%, 100% { opacity: 0.7; }
+  50%       { opacity: 1; }
+}
+
+.boss-intro-name {
+  font-size: 36px;
+  font-weight: 900;
+  color: var(--souls-gold);
+  text-shadow: var(--souls-gold-glow);
+  letter-spacing: 0.05em;
+  margin-bottom: 16px;
+  animation: namePulse 3s ease-in-out infinite;
+}
+@keyframes namePulse {
+  0%, 100% { text-shadow: var(--souls-gold-glow); }
+  50%       { text-shadow: 0 0 30px rgba(200,168,78,0.9), 0 0 60px rgba(200,168,78,0.4); }
+}
+
+.boss-intro-lore {
+  font-size: 14px;
+  color: rgba(232,230,225,0.65);
+  line-height: 1.65;
+  margin-bottom: 20px;
+  font-style: italic;
+}
+
+.boss-souls-stake {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 18px;
+  background: rgba(139,26,26,0.2);
+  border: 1px solid rgba(139,26,26,0.4);
+  border-radius: 12px;
+  margin-bottom: 12px;
+}
+.bs-label { font-size: 11px; letter-spacing: 0.1em; color: rgba(232,230,225,0.5); }
+.bs-amount { font-size: 20px; font-weight: 800; color: var(--souls-gold); font-family: var(--font-mono); }
+
+.boss-timer-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 13px;
+  color: rgba(200,168,78,0.6);
+  margin-bottom: 24px;
+}
+
+.btn-boss-start {
+  width: 100%;
+  padding: 15px;
+  background: linear-gradient(135deg, rgba(200,168,78,0.18), rgba(200,168,78,0.08));
+  border: 1.5px solid rgba(200,168,78,0.5);
+  border-radius: 14px;
+  color: var(--souls-gold);
+  font-size: 16px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.25s;
+  letter-spacing: 0.05em;
+  margin-bottom: 10px;
+}
+.btn-boss-start:hover { box-shadow: var(--souls-gold-glow); transform: scale(1.01); }
+
+.btn-boss-cancel {
+  width: 100%;
+  padding: 10px;
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 10px;
+  color: rgba(232,230,225,0.35);
+  font-size: 13px;
+  cursor: pointer;
+  transition: color 0.2s;
+  margin-bottom: 16px;
+}
+.btn-boss-cancel:hover { color: rgba(232,230,225,0.6); }
+
+.boss-intro-quote {
+  font-size: 12px;
+  color: rgba(232,230,225,0.2);
+  font-style: italic;
+  letter-spacing: 0.05em;
+}
+
+/* ── BOSS ARENA ──────────────────────────────────────────────────────── */
+.boss-arena {
+  position: fixed;
+  inset: 0;
+  z-index: 9992;
+  background: #060810;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.boss-arena-bg {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse at 50% 0%, rgba(200,168,78,0.06) 0%, transparent 50%),
+    radial-gradient(ellipse at 0% 100%, rgba(139,26,26,0.12) 0%, transparent 40%);
+  pointer-events: none;
+}
+
+/* Boss HUD */
+.boss-hud {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  padding: 12px 16px 8px;
+  gap: 12px;
+  border-bottom: 1px solid rgba(200,168,78,0.12);
+  background: rgba(6,8,16,0.9);
+}
+.boss-hud-left   { flex: 1; }
+.boss-hud-center { flex: 0 0 auto; }
+.boss-hud-right  { flex: 1; text-align: right; }
+
+.boss-name-hud {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--souls-gold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+.boss-progress-bar-wrap {
+  height: 3px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.boss-progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, var(--souls-gold), var(--souls-gold2));
+  border-radius: 2px;
+  transition: width 0.3s ease;
+  width: 0%;
+}
+
+.boss-timer-ring {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.boss-timer-num {
+  position: absolute;
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--souls-gold);
+}
+.boss-timer-num.critical { color: var(--souls-red2); animation: timerCrit 0.5s ease-in-out infinite; }
+@keyframes timerCrit {
+  0%, 100% { transform: scale(1); }
+  50%       { transform: scale(1.15); }
+}
+
+.boss-souls-hud {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--souls-gold);
+}
+.boss-accuracy-hud {
+  font-size: 11px;
+  color: rgba(232,230,225,0.5);
+  margin-top: 2px;
+}
+
+/* Boss question area */
+.boss-question-wrap {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  padding: 20px 16px;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.boss-q-counter {
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  color: rgba(200,168,78,0.5);
+  font-weight: 700;
+  margin-bottom: 12px;
+  text-transform: uppercase;
+}
+
+.boss-question-text {
+  font-size: 16px;
+  font-weight: 600;
+  color: #e8e6e1;
+  line-height: 1.5;
+  margin-bottom: 20px;
+}
+
+.boss-options {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.boss-option {
+  padding: 14px 16px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px;
+  color: #e8e6e1;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: var(--font-body);
+}
+.boss-option:hover:not(:disabled) {
+  background: rgba(200,168,78,0.08);
+  border-color: rgba(200,168,78,0.25);
+}
+.boss-option.correct {
+  background: rgba(0,232,122,0.12);
+  border-color: rgba(0,232,122,0.4);
+  color: #00e87a;
+}
+.boss-option.wrong {
+  background: rgba(192,57,43,0.12);
+  border-color: rgba(192,57,43,0.4);
+  color: var(--souls-red2);
+}
+.boss-option:disabled { cursor: not-allowed; }
+
+.boss-q-feedback {
+  margin-top: 12px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.boss-q-feedback.correct-fb {
+  background: rgba(0,232,122,0.08);
+  border: 1px solid rgba(0,232,122,0.2);
+  color: #00e87a;
+}
+.boss-q-feedback.wrong-fb {
+  background: rgba(192,57,43,0.08);
+  border: 1px solid rgba(192,57,43,0.2);
+  color: var(--souls-red2);
+}
+
+/* ── BOSS DEATH SCREEN ─────────────────────────────────────────────── */
+.boss-death-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 9996;
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.death-crack-overlay {
+  position: absolute;
+  inset: 0;
+  background:
+    repeating-linear-gradient(
+      45deg,
+      transparent,
+      transparent 2px,
+      rgba(139,26,26,0.03) 2px,
+      rgba(139,26,26,0.03) 4px
+    );
+  pointer-events: none;
+  animation: crackReveal 0.8s ease-out forwards;
+  opacity: 0;
+}
+@keyframes crackReveal {
+  0%   { opacity: 0; transform: scale(1.05); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+.death-vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at center, transparent 20%, rgba(139,26,26,0.6) 100%);
+  pointer-events: none;
+  animation: deathVignetteIn 1s ease-out;
+}
+@keyframes deathVignetteIn {
+  0%   { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+.death-content {
+  text-align: center;
+  padding: 40px 24px;
+  max-width: 340px;
+  position: relative;
+  z-index: 1;
+  animation: deathContentIn 0.8s ease-out 0.3s both;
+}
+@keyframes deathContentIn {
+  0%   { opacity: 0; transform: translateY(20px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+.death-big-text {
+  font-size: 56px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  color: rgba(255,255,255,0.06);
+  text-transform: uppercase;
+  line-height: 1;
+  margin-bottom: 4px;
+}
+
+.death-sub-text {
+  font-size: 32px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  color: var(--souls-red2);
+  text-shadow: 0 0 30px rgba(192,57,43,0.9), 0 0 60px rgba(192,57,43,0.3);
+  margin-bottom: 24px;
+  animation: deathSubPulse 2s ease-in-out infinite;
+}
+@keyframes deathSubPulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.75; }
+}
+
+.death-souls-info { margin-bottom: 20px; }
+.death-souls-dropped {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  background: rgba(139,26,26,0.2);
+  border: 1px solid rgba(139,26,26,0.4);
+  border-radius: 12px;
+}
+.ds-icon { font-size: 20px; }
+.ds-amount { font-size: 22px; font-weight: 800; color: var(--souls-gold); font-family: var(--font-mono); }
+.ds-label { font-size: 12px; color: rgba(232,230,225,0.5); }
+
+.death-lore-text {
+  font-size: 14px;
+  color: rgba(232,230,225,0.55);
+  line-height: 1.65;
+  margin-bottom: 28px;
+}
+.death-lore-text strong { color: var(--souls-red2); }
+
+.btn-death-retry {
+  width: 100%;
+  padding: 14px;
+  background: linear-gradient(135deg, rgba(192,57,43,0.2), rgba(139,26,26,0.1));
+  border: 1.5px solid rgba(192,57,43,0.4);
+  border-radius: 14px;
+  color: var(--souls-red2);
+  font-size: 16px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.25s;
+  margin-bottom: 10px;
+}
+.btn-death-retry:hover { box-shadow: 0 0 20px rgba(192,57,43,0.4); }
+
+.btn-death-leave {
+  width: 100%;
+  padding: 10px;
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 10px;
+  color: rgba(232,230,225,0.3);
+  font-size: 13px;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+.btn-death-leave:hover { color: rgba(232,230,225,0.6); }
+
+/* ── BOSS VICTORY SCREEN ─────────────────────────────────────────────── */
+.boss-victory-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 9996;
+  background: radial-gradient(ellipse at center, #0d0a04 0%, #000 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.victory-particles-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.victory-content {
+  text-align: center;
+  padding: 40px 24px;
+  max-width: 360px;
+  position: relative;
+  z-index: 1;
+  animation: victoryReveal 0.7s ease-out;
+}
+@keyframes victoryReveal {
+  0%   { opacity: 0; transform: scale(0.95); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+.victory-title {
+  font-size: 44px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  color: var(--souls-gold);
+  text-shadow: var(--souls-gold-glow);
+  margin-bottom: 8px;
+  animation: victoryGoldPulse 2s ease-in-out infinite;
+}
+@keyframes victoryGoldPulse {
+  0%, 100% { text-shadow: var(--souls-gold-glow); }
+  50%       { text-shadow: 0 0 40px rgba(200,168,78,1), 0 0 80px rgba(200,168,78,0.5); }
+}
+
+.victory-boss-name {
+  font-size: 18px;
+  font-weight: 700;
+  color: rgba(232,230,225,0.7);
+  margin-bottom: 20px;
+  letter-spacing: 0.04em;
+}
+
+.victory-stats {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.victory-stat {
+  padding: 8px 16px;
+  background: rgba(200,168,78,0.08);
+  border: 1px solid rgba(200,168,78,0.2);
+  border-radius: 10px;
+}
+.vs-label { font-size: 10px; color: rgba(232,230,225,0.4); letter-spacing: 0.08em; }
+.vs-value { font-size: 18px; font-weight: 800; color: var(--souls-gold); font-family: var(--font-mono); }
+
+.victory-souls-earned {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--souls-gold);
+  text-shadow: var(--souls-gold-glow);
+  margin-bottom: 8px;
+  font-family: var(--font-mono);
+}
+.victory-souls-retrieved {
+  font-size: 15px;
+  color: #00e87a;
+  margin-bottom: 20px;
+}
+
+.btn-victory-continue {
+  width: 100%;
+  padding: 16px;
+  background: linear-gradient(135deg, rgba(232,117,26,0.2), rgba(200,100,10,0.1));
+  border: 1.5px solid rgba(232,117,26,0.45);
+  border-radius: 14px;
+  color: var(--souls-bonfire);
+  font-size: 16px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.25s;
+  animation: bonfireGlow 2s ease-in-out infinite;
+}
+.btn-victory-continue:hover { box-shadow: 0 0 24px rgba(232,117,26,0.5); }
+
+/* Victory particle */
+.vp-particle {
+  position: absolute;
+  font-size: 16px;
+  pointer-events: none;
+  animation: vpFloat var(--dur, 2s) ease-out forwards;
+}
+@keyframes vpFloat {
+  0%   { transform: translate(0, 0) rotate(0deg) scale(1); opacity: 1; }
+  100% { transform: translate(var(--tx, 50px), var(--ty, -120px)) rotate(var(--rot, 360deg)) scale(0.3); opacity: 0; }
+}
+
+/* ── BONFIRE SCREEN ──────────────────────────────────────────────────── */
+.bonfire-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 9991;
+  background: #050407;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.bonfire-bg {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 50% 70%, rgba(232,117,26,0.12) 0%, transparent 60%);
+  pointer-events: none;
+  animation: bonBgPulse 3s ease-in-out infinite;
+}
+@keyframes bonBgPulse {
+  0%, 100% { opacity: 0.7; }
+  50%       { opacity: 1; }
+}
+
+.bonfire-content {
+  text-align: center;
+  padding: 32px 20px;
+  max-width: 340px;
+  position: relative;
+  z-index: 1;
+  animation: bonfireReveal 0.8s ease-out;
+}
+@keyframes bonfireReveal {
+  0%   { opacity: 0; transform: translateY(20px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+/* CSS Fire animation */
+.bonfire-fire-wrap {
+  margin: 0 auto 12px;
+  width: 80px;
+  position: relative;
+}
+.bonfire-fire {
+  position: relative;
+  width: 80px;
+  height: 90px;
+  margin: 0 auto;
+}
+.fire-layer {
+  position: absolute;
+  border-radius: 50% 50% 20% 20%;
+  animation: fireFlicker var(--dur, 1.5s) ease-in-out infinite alternate;
+  transform-origin: bottom center;
+}
+.f1 {
+  width: 44px; height: 70px;
+  bottom: 0; left: 18px;
+  background: linear-gradient(to top, #e8751a, #fbbf24, rgba(251,191,36,0));
+  opacity: 0.9;
+  --dur: 1.3s;
+}
+.f2 {
+  width: 30px; height: 50px;
+  bottom: 8px; left: 25px;
+  background: linear-gradient(to top, #f59e0b, #fde68a, rgba(253,230,138,0));
+  opacity: 0.8;
+  --dur: 1.0s;
+}
+.f3 {
+  width: 18px; height: 32px;
+  bottom: 16px; left: 31px;
+  background: linear-gradient(to top, #fbbf24, #fff, rgba(255,255,255,0));
+  opacity: 0.6;
+  --dur: 0.8s;
+}
+@keyframes fireFlicker {
+  0%   { transform: scale(1,1) translateX(0px) rotate(-2deg); }
+  30%  { transform: scale(0.96,1.04) translateX(2px) rotate(1deg); }
+  60%  { transform: scale(1.03,0.97) translateX(-2px) rotate(-1deg); }
+  100% { transform: scale(0.97,1.03) translateX(1px) rotate(2deg); }
+}
+
+.fire-sparks { position: absolute; inset: 0; pointer-events: none; }
+.spark {
+  position: absolute;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: #fbbf24;
+  animation: sparkFly var(--dur, 1s) ease-out var(--delay, 0s) infinite;
+}
+@keyframes sparkFly {
+  0%   { bottom: 10px; left: var(--sx, 50%); opacity: 1; transform: scale(1); }
+  100% { bottom: 80px; left: calc(var(--sx, 50%) + var(--dx, 0px)); opacity: 0; transform: scale(0.2); }
+}
+
+.bonfire-base {
+  font-size: 20px;
+  opacity: 0.6;
+  margin-top: -4px;
+}
+
+.bonfire-title {
+  font-size: 32px;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  color: var(--souls-bonfire);
+  text-shadow: 0 0 20px rgba(232,117,26,0.7);
+  margin-bottom: 6px;
+  animation: bonfireTextGlow 2s ease-in-out infinite;
+}
+@keyframes bonfireTextGlow {
+  0%, 100% { text-shadow: 0 0 20px rgba(232,117,26,0.7); }
+  50%       { text-shadow: 0 0 35px rgba(232,117,26,1), 0 0 60px rgba(232,117,26,0.3); }
+}
+
+.bonfire-module-name {
+  font-size: 16px;
+  color: rgba(232,230,225,0.65);
+  margin-bottom: 20px;
+  font-weight: 600;
+}
+
+.bonfire-stats {
+  display: flex;
+  justify-content: center;
+  gap: 14px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.bf-stat {
+  padding: 8px 14px;
+  background: rgba(232,117,26,0.08);
+  border: 1px solid rgba(232,117,26,0.2);
+  border-radius: 10px;
+  font-size: 12px;
+}
+.bf-stat-label { color: rgba(232,230,225,0.4); }
+.bf-stat-value { font-size: 17px; font-weight: 800; color: var(--souls-bonfire); font-family: var(--font-mono); }
+
+.bonfire-next-boss {
+  font-size: 13px;
+  color: rgba(232,230,225,0.45);
+  margin-bottom: 20px;
+  padding: 10px 16px;
+  background: rgba(200,168,78,0.05);
+  border: 1px solid rgba(200,168,78,0.12);
+  border-radius: 10px;
+}
+
+.btn-bonfire-continue {
+  width: 100%;
+  padding: 15px;
+  background: linear-gradient(135deg, rgba(232,117,26,0.2), rgba(232,117,26,0.08));
+  border: 1.5px solid rgba(232,117,26,0.45);
+  border-radius: 14px;
+  color: var(--souls-bonfire);
+  font-size: 16px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.25s;
+  margin-bottom: 12px;
+}
+.btn-bonfire-continue:hover { box-shadow: 0 0 24px rgba(232,117,26,0.4); }
+
+.bonfire-quote {
+  font-size: 11px;
+  color: rgba(232,230,225,0.2);
+  font-style: italic;
+  letter-spacing: 0.03em;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   PHASE 3 — SOCIAL SYSTEMS
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+/* ── Social Quick-Access Bar ─────────────────────────────────────────────── */
+.social-bar {
+  display: flex;
+  gap: 8px;
+  padding: 8px 16px 4px;
+  background: rgba(10,10,15,0.6);
+  border-bottom: 1px solid rgba(200,168,78,0.12);
+}
+.social-bar-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  background: rgba(200,168,78,0.08);
+  border: 1px solid rgba(200,168,78,0.2);
+  border-radius: 20px;
+  color: #c8a84e;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+  position: relative;
+}
+.social-bar-btn:hover { background: rgba(200,168,78,0.18); border-color: rgba(200,168,78,0.4); }
+.social-bar-icon { font-size: 14px; }
+.social-bar-badge {
+  position: absolute;
+  top: -4px; right: -4px;
+  background: #8b1a1a;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  border-radius: 50%;
+  width: 14px; height: 14px;
+  display: flex; align-items: center; justify-content: center;
+}
+
+/* ── Phantom Messages ─────────────────────────────────────────────────────── */
+.btn-phantom-hint {
+  width: 100%;
+  padding: 6px 12px;
+  margin-bottom: 6px;
+  background: rgba(139,26,138,0.12);
+  border: 1px dashed rgba(139,26,138,0.35);
+  border-radius: 8px;
+  color: rgba(200,168,220,0.7);
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: left;
+}
+.btn-phantom-hint:hover {
+  background: rgba(139,26,138,0.22);
+  border-color: rgba(139,26,138,0.6);
+  color: rgba(200,168,220,1);
+}
+
+.phantom-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.75);
+  backdrop-filter: blur(4px);
+  z-index: 9000;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+.phantom-panel {
+  width: 100%; max-width: 480px;
+  background: #0f0f18;
+  border: 1px solid rgba(139,26,138,0.4);
+  border-bottom: none;
+  border-radius: 18px 18px 0 0;
+  padding: 20px 16px;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+.phantom-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.phantom-icon { font-size: 20px; }
+.phantom-title {
+  font-size: 15px; font-weight: 700;
+  color: #e8e6e1; flex: 1;
+}
+.phantom-close {
+  background: none; border: none;
+  color: rgba(232,230,225,0.4);
+  font-size: 18px; cursor: pointer;
+  padding: 0 4px;
+}
+.phantom-subtitle {
+  font-size: 11px;
+  color: rgba(232,230,225,0.35);
+  margin-bottom: 14px;
+  font-style: italic;
+}
+.phantom-loading {
+  text-align: center;
+  color: rgba(232,230,225,0.3);
+  font-size: 13px;
+  padding: 20px 0;
+}
+.phantom-item {
+  background: rgba(139,26,138,0.08);
+  border: 1px solid rgba(139,26,138,0.2);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+}
+.phantom-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.phantom-item-user {
+  font-size: 11px;
+  color: rgba(200,168,220,0.6);
+  font-style: italic;
+}
+.phantom-item-text {
+  font-size: 13px;
+  color: rgba(232,230,225,0.85);
+  line-height: 1.5;
+}
+.phantom-vote-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+.phantom-vote-btn {
+  display: flex; align-items: center; gap: 4px;
+  padding: 3px 10px;
+  background: rgba(200,168,78,0.08);
+  border: 1px solid rgba(200,168,78,0.2);
+  border-radius: 12px;
+  color: rgba(232,230,225,0.6);
+  font-size: 11px; cursor: pointer;
+  transition: all 0.15s;
+}
+.phantom-vote-btn:hover { background: rgba(200,168,78,0.2); color: #c8a84e; }
+.phantom-vote-btn.voted { opacity: 0.4; pointer-events: none; }
+.phantom-empty {
+  text-align: center;
+  color: rgba(232,230,225,0.25);
+  font-size: 12px;
+  padding: 16px 0;
+  font-style: italic;
+}
+
+.phantom-write-wrap { margin-top: 14px; }
+.phantom-input {
+  width: 100%;
+  box-sizing: border-box;
+  background: rgba(232,230,225,0.05);
+  border: 1px solid rgba(139,26,138,0.3);
+  border-radius: 10px;
+  color: #e8e6e1;
+  font-size: 13px;
+  padding: 10px 12px;
+  resize: none;
+  font-family: inherit;
+}
+.phantom-input::placeholder { color: rgba(232,230,225,0.25); }
+.phantom-input-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 6px;
+}
+.phantom-char-count {
+  font-size: 10px;
+  color: rgba(232,230,225,0.3);
+}
+.btn-phantom-send {
+  padding: 7px 16px;
+  background: rgba(139,26,138,0.3);
+  border: 1px solid rgba(139,26,138,0.5);
+  border-radius: 20px;
+  color: rgba(200,168,220,0.9);
+  font-size: 12px; font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-phantom-send:hover { background: rgba(139,26,138,0.5); color: #fff; }
+
+/* ── Daily Challenge ──────────────────────────────────────────────────────── */
+.daily-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.8);
+  backdrop-filter: blur(6px);
+  z-index: 9100;
+  display: flex; align-items: center; justify-content: center;
+  padding: 16px;
+}
+.daily-panel {
+  width: 100%; max-width: 420px;
+  background: #0a0a0f;
+  border: 1px solid rgba(200,168,78,0.3);
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 0 60px rgba(200,168,78,0.12), inset 0 0 40px rgba(139,26,26,0.05);
+}
+.daily-header {
+  text-align: center;
+  margin-bottom: 16px;
+  position: relative;
+}
+.daily-streak-badge {
+  display: inline-block;
+  background: rgba(249,115,22,0.15);
+  border: 1px solid rgba(249,115,22,0.3);
+  border-radius: 20px;
+  padding: 3px 12px;
+  font-size: 11px;
+  color: #f97316;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+.daily-title {
+  font-size: 18px; font-weight: 900;
+  letter-spacing: 0.12em;
+  color: #c8a84e;
+  text-shadow: 0 0 20px rgba(200,168,78,0.3);
+}
+.daily-date {
+  font-size: 11px;
+  color: rgba(232,230,225,0.3);
+  margin-top: 4px;
+  letter-spacing: 0.05em;
+}
+.daily-reward-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.daily-reward-label { font-size: 12px; color: rgba(232,230,225,0.5); }
+.daily-reward-souls { font-size: 16px; font-weight: 700; color: #c8a84e; }
+.daily-question {
+  font-size: 14px; font-weight: 600;
+  color: #e8e6e1;
+  line-height: 1.5;
+  margin-bottom: 14px;
+  text-align: center;
+  padding: 0 8px;
+}
+.daily-options {
+  display: flex; flex-direction: column;
+  gap: 8px; margin-bottom: 16px;
+}
+.daily-option {
+  padding: 11px 14px;
+  background: rgba(232,230,225,0.04);
+  border: 1px solid rgba(232,230,225,0.12);
+  border-radius: 10px;
+  color: rgba(232,230,225,0.8);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s;
+  text-align: left;
+}
+.daily-option:hover { background: rgba(200,168,78,0.1); border-color: rgba(200,168,78,0.35); color: #e8e6e1; }
+.daily-option.correct { background: rgba(34,197,94,0.15); border-color: rgba(34,197,94,0.4); color: #22c55e; pointer-events: none; }
+.daily-option.wrong   { background: rgba(239,68,68,0.12); border-color: rgba(239,68,68,0.3); color: rgba(239,68,68,0.7); pointer-events: none; }
+.daily-result {
+  text-align: center;
+  padding: 16px 0 8px;
+}
+.daily-result-icon { font-size: 36px; margin-bottom: 8px; }
+.daily-result-text { font-size: 15px; font-weight: 600; color: #e8e6e1; margin-bottom: 6px; }
+.daily-souls-won  { font-size: 20px; font-weight: 800; color: #c8a84e; margin-bottom: 6px; }
+.daily-streak-update { font-size: 12px; color: #f97316; margin-bottom: 14px; }
+.daily-completed { text-align: center; padding: 20px 0; }
+.daily-done-icon { font-size: 32px; margin-bottom: 8px; }
+.daily-done-text { font-size: 13px; color: rgba(232,230,225,0.6); margin-bottom: 10px; }
+.daily-streak-display { font-size: 16px; font-weight: 700; color: #f97316; }
+.btn-daily-close {
+  padding: 10px 28px;
+  background: rgba(200,168,78,0.15);
+  border: 1px solid rgba(200,168,78,0.35);
+  border-radius: 24px;
+  color: #c8a84e;
+  font-size: 13px; font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-daily-close:hover { background: rgba(200,168,78,0.25); }
+
+/* ── Clan Panel ───────────────────────────────────────────────────────────── */
+.clan-panel {
+  position: fixed; inset: 0;
+  background: #0a0a0f;
+  z-index: 8900;
+  overflow-y: auto;
+  padding: 0 0 80px;
+}
+.clan-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px;
+  border-bottom: 1px solid rgba(200,168,78,0.15);
+  background: #0a0a0f;
+  position: sticky; top: 0; z-index: 1;
+}
+.clan-title { font-size: 16px; font-weight: 700; color: #c8a84e; }
+.clan-close  {
+  background: none; border: none;
+  color: rgba(232,230,225,0.4);
+  font-size: 20px; cursor: pointer;
+}
+
+.clan-none {
+  padding: 24px 16px;
+  text-align: center;
+}
+.clan-none-text {
+  color: rgba(232,230,225,0.5);
+  font-size: 13px; line-height: 1.6;
+  margin-bottom: 20px;
+}
+.clan-actions-row {
+  display: flex; gap: 10px; justify-content: center;
+  margin-bottom: 16px;
+}
+.btn-clan-action {
+  padding: 9px 20px;
+  background: rgba(200,168,78,0.1);
+  border: 1px solid rgba(200,168,78,0.3);
+  border-radius: 20px;
+  color: #c8a84e;
+  font-size: 13px; font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-clan-action:hover { background: rgba(200,168,78,0.2); }
+.clan-input {
+  display: block;
+  width: 100%; box-sizing: border-box;
+  background: rgba(232,230,225,0.05);
+  border: 1px solid rgba(200,168,78,0.2);
+  border-radius: 10px;
+  color: #e8e6e1; font-size: 13px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  font-family: inherit;
+}
+.clan-input::placeholder { color: rgba(232,230,225,0.25); }
+.btn-clan-submit {
+  width: 100%; padding: 11px;
+  background: rgba(200,168,78,0.18);
+  border: 1px solid rgba(200,168,78,0.4);
+  border-radius: 10px;
+  color: #c8a84e; font-size: 14px; font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-clan-submit:hover { background: rgba(200,168,78,0.3); }
+
+.clan-mine { padding: 16px; }
+.clan-mine-header {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 16px;
+}
+.clan-mine-tag {
+  font-size: 16px; font-weight: 800;
+  color: #c8a84e;
+  background: rgba(200,168,78,0.1);
+  border: 1px solid rgba(200,168,78,0.3);
+  border-radius: 6px;
+  padding: 2px 8px;
+}
+.clan-mine-name { font-size: 15px; font-weight: 600; color: #e8e6e1; }
+
+.clan-progress-wrap { margin-bottom: 14px; }
+.clan-progress-label {
+  font-size: 12px; color: rgba(232,230,225,0.5);
+  margin-bottom: 6px;
+}
+.clan-progress-bar-outer {
+  height: 8px;
+  background: rgba(232,230,225,0.08);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.clan-progress-bar-inner {
+  height: 100%;
+  background: linear-gradient(90deg, #c8a84e, #fbbf24);
+  border-radius: 4px;
+  transition: width 0.5s ease;
+}
+
+.clan-members-list { margin-bottom: 12px; }
+.clan-member-row {
+  display: flex; align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(232,230,225,0.05);
+  gap: 8px;
+}
+.clan-member-icon { font-size: 14px; }
+.clan-member-name { font-size: 13px; color: rgba(232,230,225,0.7); flex: 1; }
+.clan-member-hollow { font-size: 10px; color: #6b6b6b; font-style: italic; }
+.clan-member-leader { font-size: 10px; color: #c8a84e; font-weight: 700; }
+
+.clan-hollow-warning {
+  background: rgba(139,26,26,0.15);
+  border: 1px solid rgba(139,26,26,0.3);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 12px; color: rgba(239,68,68,0.8);
+  margin-bottom: 12px;
+}
+.clan-mine-actions {
+  display: flex; flex-direction: column; gap: 8px;
+}
+.btn-clan-contribute {
+  padding: 11px;
+  background: rgba(200,168,78,0.12);
+  border: 1px solid rgba(200,168,78,0.3);
+  border-radius: 10px;
+  color: #c8a84e; font-size: 13px; font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-clan-contribute:hover { background: rgba(200,168,78,0.22); }
+.btn-clan-leave {
+  padding: 9px;
+  background: transparent;
+  border: 1px solid rgba(139,26,26,0.3);
+  border-radius: 10px;
+  color: rgba(239,68,68,0.5);
+  font-size: 12px; cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-clan-leave:hover { border-color: rgba(239,68,68,0.5); color: rgba(239,68,68,0.8); }
+
+.clan-lb-title {
+  font-size: 12px; font-weight: 700;
+  color: rgba(200,168,78,0.5);
+  letter-spacing: 0.1em;
+  padding: 14px 16px 8px;
+  text-transform: uppercase;
+}
+.clan-leaderboard { padding: 0 16px; }
+.clan-lb-loading {
+  font-size: 12px; color: rgba(232,230,225,0.3);
+  text-align: center; padding: 12px 0;
+}
+.clan-lb-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 0;
+  border-bottom: 1px solid rgba(232,230,225,0.05);
+}
+.clan-lb-rank { width: 20px; font-size: 12px; color: rgba(232,230,225,0.3); }
+.clan-lb-tag {
+  font-size: 11px; font-weight: 700;
+  color: #c8a84e;
+  background: rgba(200,168,78,0.08);
+  border: 1px solid rgba(200,168,78,0.2);
+  border-radius: 4px;
+  padding: 1px 6px;
+}
+.clan-lb-name { font-size: 13px; color: #e8e6e1; flex: 1; }
+.clan-lb-souls { font-size: 12px; color: #c8a84e; font-weight: 600; }
+.clan-lb-members { font-size: 11px; color: rgba(232,230,225,0.35); }
+
+/* ── Contribute Modal ─────────────────────────────────────────────────────── */
+.contribute-modal {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.7);
+  z-index: 9500;
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+}
+.contribute-content {
+  width: 100%; max-width: 320px;
+  background: #0f0f18;
+  border: 1px solid rgba(200,168,78,0.3);
+  border-radius: 14px;
+  padding: 20px;
+  text-align: center;
+}
+.contribute-title { font-size: 16px; font-weight: 700; color: #c8a84e; margin-bottom: 8px; }
+.contribute-souls-avail { font-size: 12px; color: rgba(232,230,225,0.5); margin-bottom: 14px; }
+.contribute-input {
+  width: 100%; box-sizing: border-box;
+  background: rgba(232,230,225,0.05);
+  border: 1px solid rgba(200,168,78,0.25);
+  border-radius: 8px;
+  color: #e8e6e1; font-size: 16px;
+  padding: 10px 12px;
+  text-align: center;
+  margin-bottom: 14px;
+  font-family: inherit;
+}
+.contribute-actions { display: flex; flex-direction: column; gap: 8px; }
+.btn-contribute-confirm {
+  padding: 11px;
+  background: rgba(200,168,78,0.2);
+  border: 1px solid rgba(200,168,78,0.4);
+  border-radius: 10px;
+  color: #c8a84e; font-size: 14px; font-weight: 700;
+  cursor: pointer; transition: all 0.2s;
+}
+.btn-contribute-confirm:hover { background: rgba(200,168,78,0.3); }
+.btn-contribute-cancel {
+  padding: 9px;
+  background: transparent;
+  border: 1px solid rgba(232,230,225,0.1);
+  border-radius: 10px;
+  color: rgba(232,230,225,0.4);
+  font-size: 13px; cursor: pointer;
+}
