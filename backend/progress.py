@@ -118,6 +118,26 @@ BADGE_DEFS = {
                          "desc": "Лучшая домашняя работа недели"},
     "speed_trader":     {"title": "Скоростной трейдер",       "icon": "⚡",
                          "desc": "Выдан преподавателем за скорость"},
+
+    # ── Boss / Souls system ───────────────────────────────────────────────
+    "boss_0_clear":     {"title": "Убийца Структуры",         "icon": "⚔️",
+                         "desc": "Побеждён Structure Breaker"},
+    "boss_1_clear":     {"title": "Охотник Побеждён",         "icon": "🏹",
+                         "desc": "Побеждён Liquidity Hunter"},
+    "boss_2_clear":     {"title": "Мастер OB",                "icon": "🛡️",
+                         "desc": "Побеждён OB Guardian"},
+    "boss_3_clear":     {"title": "Видящий Фантом",           "icon": "👁️",
+                         "desc": "Побеждён FVG Phantom"},
+    "boss_0_flawless":  {"title": "Без смертей: Структура",   "icon": "💀",
+                         "desc": "Босс модуля 1 — без единой смерти"},
+    "boss_1_flawless":  {"title": "Без смертей: Ликвидность", "icon": "💀",
+                         "desc": "Босс модуля 2 — без единой смерти"},
+    "boss_2_flawless":  {"title": "Без смертей: OB",          "icon": "💀",
+                         "desc": "Босс модуля 3 — без единой смерти"},
+    "hollow_escaped":   {"title": "Вышел из Hollow",          "icon": "🔥",
+                         "desc": "Оплатил выход из состояния Hollow"},
+    "soul_retriever":   {"title": "Душесборщик",              "icon": "⚡",
+                         "desc": "Подобрал упавшие души после поражения"},
 }
 
 user_progress: Dict[int, Dict[str, Any]] = {}
@@ -215,6 +235,9 @@ def get_user_state(user_id: int) -> Dict[str, Any]:
     state.setdefault("estus_flasks", 3)
     state.setdefault("estus_max", 3)
     state.setdefault("souls_module_earned", 0)
+    # Boss system back-compat
+    state.setdefault("boss_attempts", [])
+    state.setdefault("bonfire_rested", [])  # list of module_ids where bonfire was rested
     return state
 
 

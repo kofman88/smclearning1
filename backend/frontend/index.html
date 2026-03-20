@@ -693,6 +693,13 @@
       <h3 id="quizQuestion" class="quiz-question"></h3>
       <div id="quizOptions" class="quiz-options"></div>
       <div id="quizFeedback" class="quiz-feedback hidden"></div>
+      <!-- Estus hint row -->
+      <div class="estus-hint-row" id="estusHintRow">
+        <button class="btn-estus-hint" id="estusHintBtn" onclick="useEstusHint()" title="Использовать фласку">
+          🔶 Подсказка (<span id="estusHintCount">3</span>)
+        </button>
+        <div class="estus-hint-text hidden" id="estusHintText"></div>
+      </div>
       <button id="quizNext" class="btn-primary hidden" onclick="quizNextQuestion()">
         Следующий вопрос →
       </button>
@@ -928,6 +935,139 @@
       <button class="btn-primary" onclick="closeModal('evolutionModal')">
         Потрясающе!
       </button>
+    </div>
+  </div>
+
+  <!-- ══ BOSS INTRO ════════════════════════════════════════════════════ -->
+  <div id="bossIntroOverlay" class="boss-intro-overlay hidden">
+    <div class="boss-intro-bg"></div>
+    <div class="boss-intro-content">
+      <div class="boss-warning-text">ВНИМАНИЕ</div>
+      <div class="boss-intro-name" id="bossIntroName">Structure Breaker</div>
+      <div class="boss-intro-lore" id="bossIntroLore"></div>
+      <div class="boss-souls-stake">
+        <span class="bs-label">НА КОНУ:</span>
+        <span class="bs-amount" id="bossStakeAmount">0 ⚡</span>
+      </div>
+      <div class="boss-timer-preview">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+          <circle cx="7" cy="7" r="6" stroke="#c8a84e" stroke-width="1.5"/>
+          <path d="M7 3.5V7L9.5 9" stroke="#c8a84e" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+        <span id="bossTimerPreview">120 сек</span>
+      </div>
+      <button class="btn-boss-start" id="bossStartBtn" onclick="startBossFight()">
+        ⚔️ Принять вызов
+      </button>
+      <button class="btn-boss-cancel" onclick="closeBossIntro()">
+        Уйти (вернуться позже)
+      </button>
+      <div class="boss-intro-quote">«Prepare to trade.»</div>
+    </div>
+  </div>
+
+  <!-- ══ BOSS ARENA ══════════════════════════════════════════════════════ -->
+  <div id="bossArena" class="boss-arena hidden">
+    <div class="boss-arena-bg"></div>
+    <!-- HUD -->
+    <div class="boss-hud">
+      <div class="boss-hud-left">
+        <div class="boss-name-hud" id="bossArenaName">Structure Breaker</div>
+        <div class="boss-progress-bar-wrap">
+          <div class="boss-progress-bar" id="bossProgressBar"></div>
+        </div>
+      </div>
+      <div class="boss-hud-center">
+        <div class="boss-timer-ring" id="bossTimerRing">
+          <svg viewBox="0 0 60 60" width="60" height="60">
+            <circle cx="30" cy="30" r="26" fill="none" stroke="rgba(200,168,78,0.15)" stroke-width="4"/>
+            <circle cx="30" cy="30" r="26" fill="none" stroke="#c8a84e" stroke-width="4"
+              stroke-dasharray="163" stroke-dashoffset="0" id="bossTimerCircle"
+              stroke-linecap="round" transform="rotate(-90 30 30)"/>
+          </svg>
+          <div class="boss-timer-num" id="bossTimerNum">120</div>
+        </div>
+      </div>
+      <div class="boss-hud-right">
+        <div class="boss-souls-hud">⚡ <span id="bossArenaStake">0</span></div>
+        <div class="boss-accuracy-hud" id="bossAccuracyHud">0%</div>
+      </div>
+    </div>
+
+    <!-- Question area -->
+    <div class="boss-question-wrap" id="bossQuestionWrap">
+      <div class="boss-q-counter" id="bossQCounter">1/5</div>
+      <div class="boss-question-text" id="bossQuestionText"></div>
+      <div class="boss-options" id="bossOptions"></div>
+      <div class="boss-q-feedback hidden" id="bossQFeedback"></div>
+    </div>
+  </div>
+
+  <!-- ══ BOSS DEATH SCREEN ═══════════════════════════════════════════════ -->
+  <div id="bossDeathScreen" class="boss-death-screen hidden">
+    <div class="death-crack-overlay"></div>
+    <div class="death-vignette"></div>
+    <div class="death-content">
+      <div class="death-big-text">YOU DIED</div>
+      <div class="death-sub-text">ЛИКВИДИРОВАН</div>
+      <div class="death-souls-info">
+        <div class="death-souls-dropped" id="deathSoulsDropped">
+          <span class="ds-icon">💀</span>
+          <span class="ds-amount" id="deathDroppedAmount">0 ⚡</span>
+          <span class="ds-label">упало на землю</span>
+        </div>
+      </div>
+      <div class="death-lore-text">
+        Рынок забрал твои души.<br>
+        Вернись — и у тебя будет <strong>один шанс</strong> их забрать.
+      </div>
+      <button class="btn-death-retry" onclick="retryBoss()">
+        ⚔️ Попробовать снова
+      </button>
+      <button class="btn-death-leave" onclick="leaveBossArena()">
+        Уйти (души будут ждать)
+      </button>
+    </div>
+  </div>
+
+  <!-- ══ BOSS VICTORY SCREEN ════════════════════════════════════════════ -->
+  <div id="bossVictoryScreen" class="boss-victory-screen hidden">
+    <div class="victory-particles-layer" id="victoryParticles"></div>
+    <div class="victory-content">
+      <div class="victory-title">BOSS DEFEATED</div>
+      <div class="victory-boss-name" id="victoryBossName">Structure Breaker</div>
+      <div class="victory-stats" id="victoryStats"></div>
+      <div class="victory-souls-earned" id="victorySoulsEarned"></div>
+      <div class="victory-souls-retrieved hidden" id="victorySoulsRetrieved"></div>
+      <button class="btn-victory-continue" onclick="afterBossVictory()">
+        🔥 К бонфайру
+      </button>
+    </div>
+  </div>
+
+  <!-- ══ BONFIRE SCREEN ═════════════════════════════════════════════════ -->
+  <div id="bonfireScreen" class="bonfire-screen hidden">
+    <div class="bonfire-bg"></div>
+    <div class="bonfire-content">
+      <div class="bonfire-fire-wrap">
+        <div class="bonfire-fire" id="bonfireFire">
+          <div class="fire-layer f1"></div>
+          <div class="fire-layer f2"></div>
+          <div class="fire-layer f3"></div>
+          <div class="fire-sparks" id="fireSparks"></div>
+        </div>
+        <div class="bonfire-base">⚔</div>
+      </div>
+      <div class="bonfire-title">BONFIRE LIT</div>
+      <div class="bonfire-module-name" id="bonfireModuleName">Модуль пройден</div>
+      <div class="bonfire-stats" id="bonfireStats"></div>
+      <div class="bonfire-next-boss" id="bonfireNextBoss"></div>
+      <div class="bonfire-actions">
+        <button class="btn-bonfire-continue" onclick="closeBonfire()">
+          Идти дальше →
+        </button>
+      </div>
+      <div class="bonfire-quote">«Ты разжёг огонь. Следующий мир ждёт.»</div>
     </div>
   </div>
 

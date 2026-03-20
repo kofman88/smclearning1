@@ -51,6 +51,7 @@ from lessons import LESSONS, MODULES
 from quests import QUESTS, QUIZZES
 from charts import generate_chart
 from bot import bot as telegram_bot, setup_webhook, process_update, make_hw_keyboard
+from boss import router as boss_router
 
 @asynccontextmanager
 async def lifespan(application: FastAPI):
@@ -81,6 +82,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ── Boss router ────────────────────────────────────────────────────────────
+app.include_router(boss_router)
 
 # ── Static frontend ───────────────────────────────────────────────────────────
 FRONTEND_DIR = Path(__file__).parent / "frontend"
@@ -1120,16 +1124,41 @@ async def estus_use(req: EstusUseRequest):
 
 @app.post("/api/souls/bonfire/{user_id}")
 async def bonfire_rest(user_id: int):
-    """Rest at bonfire: refill Estus flasks, reset module soul tracking."""
+    """Rest at bonfire: refill Estus flasks, reset module soul tracking, record checkpoint."""
+    from boss import get_bloodstains
     state  = get_user_state(user_id)
+    module_idx = state.get("module_index", 0)
+
+    # Mark bonfire as rested for this module
+    rested = state.setdefault("bonfire_rested", [])
+    if module_idx not in rested:
+        rested.append(module_idx)
+
     flasks = refill_estus(user_id)
     title  = update_title(user_id)
+
+    # Burn any unclaimed dropped souls (expired opportunity)
+    burned = burn_dropped_souls(user_id)
+    if burned > 0:
+        logger.info("Bonfire: burned %d unclaimed dropped souls for user %d", burned, user_id)
+
+    # Fetch bloodstains for next module boss (if exists)
+    next_module_id = module_idx + 1
+    bloodstains = None
+    try:
+        bloodstains = get_bloodstains(next_module_id)
+    except Exception:
+        pass
+
+    save_progress()
     return {
         "ok": True,
         "message": "Пламя бонфайра восстановлено. Готовься к следующему испытанию.",
         "estus_flasks": flasks,
         "current_title": title,
         "souls": state.get("souls", 0),
+        "burned_dropped": burned,
+        "next_boss_bloodstains": bloodstains,
     }
 
 

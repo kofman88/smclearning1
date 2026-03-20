@@ -2374,6 +2374,485 @@ window.exitHollow      = exitHollow;
 window.closeSoulsDrop  = closeSoulsDrop;
 window.showSoulsDrop   = showSoulsDrop;
 
+// ══════════════════════════════════════════════════════════════════════════
+// ── PHASE 2: BOSS, BONFIRE, BLOODSTAINS, ESTUS HINTS ─────────────────────
+// ══════════════════════════════════════════════════════════════════════════
+
+// ── Boss state ──────────────────────────────────────────────────────────
+const bossState = {
+  moduleId:    null,
+  config:      null,    // boss config from API
+  questions:   [],
+  current:     0,
+  correct:     0,
+  timer:       null,
+  timerLeft:   0,
+  timerMax:    120,
+  startedAt:   null,
+  soulsAtStake: 0,
+};
+
+// ── Open boss intro (called when user clicks boss quest) ─────────────────
+async function openBossIntro(moduleId) {
+  try {
+    const res  = await fetch(`${API}/boss/${moduleId}/start`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user_id: state.userId }),
+    });
+    const data = await res.json();
+    if (!data.ok) { showToast(data.reason || "Босс недоступен", "error"); return; }
+
+    bossState.moduleId     = moduleId;
+    bossState.config       = data;
+    bossState.questions    = data.questions || [];
+    bossState.soulsAtStake = data.souls_at_stake || 0;
+
+    document.getElementById("bossIntroName").textContent  = data.name || "Босс";
+    document.getElementById("bossIntroLore").textContent  = data.lore || "";
+    document.getElementById("bossStakeAmount").textContent= `${bossState.soulsAtStake} ⚡`;
+    document.getElementById("bossTimerPreview").textContent = `${data.timer_secs} сек`;
+
+    document.getElementById("bossIntroOverlay").classList.remove("hidden");
+  } catch (e) {
+    console.error("openBossIntro:", e);
+    showToast("Ошибка загрузки босса", "error");
+  }
+}
+
+function closeBossIntro() {
+  document.getElementById("bossIntroOverlay")?.classList.add("hidden");
+}
+
+// ── Actually start the fight ─────────────────────────────────────────────
+function startBossFight() {
+  closeBossIntro();
+  const arena = document.getElementById("bossArena");
+  if (!arena) return;
+
+  bossState.current   = 0;
+  bossState.correct   = 0;
+  bossState.startedAt = Date.now();
+  bossState.timerMax  = bossState.config?.timer_secs ?? 120;
+  bossState.timerLeft = bossState.timerMax;
+
+  // Update HUD
+  document.getElementById("bossArenaName").textContent = bossState.config?.name ?? "Босс";
+  document.getElementById("bossArenaStake").textContent = bossState.soulsAtStake;
+  _updateBossProgress();
+
+  arena.classList.remove("hidden");
+  _renderBossQuestion();
+  _startBossTimer();
+
+  // Block back button
+  if (tg) { tg.BackButton.show(); tg.BackButton.onClick(() => {}); }
+}
+
+function _updateBossProgress() {
+  const total = bossState.questions.length;
+  const done  = bossState.current;
+  const pct   = total > 0 ? Math.round(done / total * 100) : 0;
+  const bar   = document.getElementById("bossProgressBar");
+  if (bar) bar.style.width = pct + "%";
+  const counter = document.getElementById("bossQCounter");
+  if (counter) counter.textContent = `${done + 1}/${total}`;
+  const acc = document.getElementById("bossAccuracyHud");
+  if (acc && done > 0) acc.textContent = `${Math.round(bossState.correct / done * 100)}%`;
+}
+
+function _renderBossQuestion() {
+  const q = bossState.questions[bossState.current];
+  if (!q) return;
+  document.getElementById("bossQuestionText").textContent = q.question;
+  const fb = document.getElementById("bossQFeedback");
+  if (fb) { fb.className = "boss-q-feedback hidden"; fb.textContent = ""; }
+
+  const opts = document.getElementById("bossOptions");
+  opts.innerHTML = "";
+  q.options.forEach((opt, i) => {
+    const btn = document.createElement("button");
+    btn.className = "boss-option";
+    btn.textContent = opt;
+    btn.addEventListener("click", () => _onBossAnswer(i, q.correct_index, q.explanation));
+    opts.appendChild(btn);
+  });
+  _updateBossProgress();
+}
+
+function _onBossAnswer(chosen, correctIdx, explanation) {
+  const isCorrect = chosen === correctIdx;
+  if (tg?.HapticFeedback) tg.HapticFeedback.notificationOccurred(isCorrect ? "success" : "error");
+
+  // Disable all options
+  document.querySelectorAll(".boss-option").forEach((b, i) => {
+    b.disabled = true;
+    if (i === correctIdx) b.classList.add("correct");
+    if (i === chosen && !isCorrect) b.classList.add("wrong");
+  });
+
+  if (isCorrect) bossState.correct++;
+
+  const fb = document.getElementById("bossQFeedback");
+  if (fb) {
+    fb.className = `boss-q-feedback ${isCorrect ? "correct-fb" : "wrong-fb"}`;
+    fb.textContent = isCorrect ? "✓ " + (explanation || "Верно!") : "✗ " + (explanation || "Неверно.");
+    fb.classList.remove("hidden");
+  }
+
+  // Auto-advance after 1.8s
+  setTimeout(() => {
+    bossState.current++;
+    if (bossState.current >= bossState.questions.length) {
+      _finishBossFight();
+    } else {
+      _renderBossQuestion();
+    }
+  }, 1800);
+}
+
+function _startBossTimer() {
+  clearInterval(bossState.timer);
+  const totalCirc = 163; // SVG circumference for r=26
+  bossState.timer = setInterval(() => {
+    bossState.timerLeft--;
+    const num    = document.getElementById("bossTimerNum");
+    const circle = document.getElementById("bossTimerCircle");
+    if (num) {
+      num.textContent = bossState.timerLeft;
+      num.classList.toggle("critical", bossState.timerLeft <= 15);
+    }
+    if (circle) {
+      const pct = bossState.timerLeft / bossState.timerMax;
+      circle.style.strokeDashoffset = totalCirc * (1 - pct);
+      circle.style.stroke = bossState.timerLeft <= 15 ? "#c0392b" : "#c8a84e";
+    }
+    if (bossState.timerLeft <= 0) {
+      _finishBossFight();
+    }
+  }, 1000);
+}
+
+async function _finishBossFight() {
+  clearInterval(bossState.timer);
+  document.getElementById("bossArena")?.classList.add("hidden");
+
+  const timeSpent = Math.round((Date.now() - bossState.startedAt) / 1000);
+  const total     = bossState.questions.length;
+
+  try {
+    const res  = await fetch(`${API}/boss/${bossState.moduleId}/submit`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        user_id:            state.userId,
+        correct:            bossState.correct,
+        total:              total,
+        time_spent_seconds: timeSpent,
+      }),
+    });
+    const data = await res.json();
+    if (!data.ok) { showToast("Ошибка боя", "error"); return; }
+
+    if (data.result === "victory") {
+      _showBossVictory(data);
+    } else {
+      _showBossDeath(data);
+    }
+  } catch (e) {
+    console.error("boss submit:", e);
+    showToast("Ошибка отправки результата", "error");
+  }
+
+  // Re-enable back button
+  if (tg) tg.BackButton.hide();
+}
+
+// ── Death screen ─────────────────────────────────────────────────────────
+function _showBossDeath(data) {
+  const screen = document.getElementById("bossDeathScreen");
+  if (!screen) return;
+  document.getElementById("deathDroppedAmount").textContent = `${data.dropped_souls ?? 0} ⚡`;
+  screen.classList.remove("hidden");
+  if (tg?.HapticFeedback) tg.HapticFeedback.notificationOccurred("error");
+  // Update souls HUD
+  spawnSoulParticle(`-${data.dropped_souls ?? 0} ⚡`, false);
+}
+
+function retryBoss() {
+  document.getElementById("bossDeathScreen")?.classList.add("hidden");
+  openBossIntro(bossState.moduleId);
+}
+
+function leaveBossArena() {
+  document.getElementById("bossDeathScreen")?.classList.add("hidden");
+  loadQuests();
+}
+
+// ── Victory screen ───────────────────────────────────────────────────────
+function _showBossVictory(data) {
+  const screen = document.getElementById("bossVictoryScreen");
+  if (!screen) return;
+  document.getElementById("victoryBossName").textContent = data.boss_name || "Босс";
+
+  // Stats
+  const statsEl = document.getElementById("victoryStats");
+  if (statsEl) {
+    statsEl.innerHTML = `
+      <div class="victory-stat">
+        <div class="vs-label">ТОЧНОСТЬ</div>
+        <div class="vs-value">${data.accuracy}%</div>
+      </div>
+      <div class="victory-stat">
+        <div class="vs-label">ВЕРНО</div>
+        <div class="vs-value">${data.correct}/${data.total}</div>
+      </div>
+    `;
+  }
+
+  const soulsEl = document.getElementById("victorySoulsEarned");
+  if (soulsEl) soulsEl.textContent = `+${data.souls_earned ?? 0} ⚡`;
+  spawnSoulParticle(`+${data.souls_earned ?? 0} ⚡`, true);
+
+  const retrievedEl = document.getElementById("victorySoulsRetrieved");
+  if (retrievedEl && data.souls_retrieved > 0) {
+    retrievedEl.textContent = `+${data.souls_retrieved} ⚡ душ подобрано с земли!`;
+    retrievedEl.classList.remove("hidden");
+  }
+
+  screen.classList.remove("hidden");
+  _spawnVictoryParticles();
+  if (tg?.HapticFeedback) tg.HapticFeedback.notificationOccurred("success");
+
+  // Refresh header souls
+  setTimeout(() => { refreshHeader(); loadQuests(); }, 500);
+}
+
+function afterBossVictory() {
+  document.getElementById("bossVictoryScreen")?.classList.add("hidden");
+  showBonfire();
+}
+
+function _spawnVictoryParticles() {
+  const layer = document.getElementById("victoryParticles");
+  if (!layer) return;
+  layer.innerHTML = "";
+  const emojis = ["⚡","✨","💛","🌟","⭐","💎","🏆"];
+  for (let i = 0; i < 30; i++) {
+    const p = document.createElement("div");
+    p.className = "vp-particle";
+    p.textContent = emojis[Math.floor(Math.random() * emojis.length)];
+    const tx  = (Math.random() - 0.5) * 300;
+    const ty  = -(80 + Math.random() * 200);
+    const rot = (Math.random() - 0.5) * 720;
+    const dur = 1.5 + Math.random() * 1.5;
+    p.style.cssText = `
+      left:${20 + Math.random() * 60}%;
+      top:${40 + Math.random() * 20}%;
+      --tx:${tx}px; --ty:${ty}px; --rot:${rot}deg; --dur:${dur}s;
+      animation-delay:${Math.random() * 0.5}s;
+    `;
+    layer.appendChild(p);
+    setTimeout(() => p.remove(), (dur + 0.5) * 1000);
+  }
+}
+
+// ── Bonfire screen ───────────────────────────────────────────────────────
+async function showBonfire() {
+  try {
+    const res  = await fetch(`${API}/souls/bonfire/${state.userId}`, { method: "POST" });
+    const data = await res.json();
+
+    const screen = document.getElementById("bonfireScreen");
+    if (!screen) return;
+
+    // Module name
+    const modName = document.getElementById("bonfireModuleName");
+    if (modName && state.userState) {
+      modName.textContent = `Модуль ${(state.userState.module_index ?? 0) + 1} пройден`;
+    }
+
+    // Stats
+    const statsEl = document.getElementById("bonfireStats");
+    if (statsEl) {
+      statsEl.innerHTML = `
+        <div class="bf-stat">
+          <div class="bf-stat-label">ФЛАСКИ</div>
+          <div class="bf-stat-value">${data.estus_flasks}/3</div>
+        </div>
+        <div class="bf-stat">
+          <div class="bf-stat-label">ДУШИ</div>
+          <div class="bf-stat-value">${data.souls} ⚡</div>
+        </div>
+      `;
+    }
+
+    // Next boss bloodstains
+    const nextBossEl = document.getElementById("bonfireNextBoss");
+    if (nextBossEl && data.next_boss_bloodstains?.total_attempts > 0) {
+      const bs = data.next_boss_bloodstains;
+      nextBossEl.textContent = `⚠️ Следующий босс: ${bs.boss_name} — ${bs.death_pct}% учеников погибли там`;
+    } else if (nextBossEl) {
+      nextBossEl.textContent = "";
+    }
+
+    // Spawn fire sparks
+    _spawnFireSparks();
+
+    // Update flasks HUD
+    updateEstusHUD(data.estus_flasks, 3);
+
+    screen.classList.remove("hidden");
+  } catch (e) {
+    console.error("showBonfire:", e);
+    // If bonfire fails, just refresh quests
+    loadQuests();
+    refreshHeader();
+  }
+}
+
+function _spawnFireSparks() {
+  const sparks = document.getElementById("fireSparks");
+  if (!sparks) return;
+  sparks.innerHTML = "";
+  for (let i = 0; i < 8; i++) {
+    const s = document.createElement("div");
+    s.className = "spark";
+    const sx  = 20 + Math.random() * 60;
+    const dx  = (Math.random() - 0.5) * 30;
+    const dur = 0.6 + Math.random() * 0.8;
+    const del = Math.random() * 1.5;
+    s.style.cssText = `--sx:${sx}%; --dx:${dx}px; --dur:${dur}s; animation-delay:${del}s`;
+    sparks.appendChild(s);
+  }
+}
+
+function closeBonfire() {
+  document.getElementById("bonfireScreen")?.classList.add("hidden");
+  loadQuests();
+  refreshHeader();
+}
+
+// ── Bloodstains on quest cards ────────────────────────────────────────────
+const _bloodstainCache = {};
+
+async function loadBloodstainForModule(moduleId) {
+  if (_bloodstainCache[moduleId] !== undefined) return _bloodstainCache[moduleId];
+  try {
+    const res  = await fetch(`${API}/boss/${moduleId}/bloodstains`);
+    const data = await res.json();
+    _bloodstainCache[moduleId] = data.ok ? data : null;
+    return _bloodstainCache[moduleId];
+  } catch { return null; }
+}
+
+async function injectBloodstains(moduleId) {
+  const data = await loadBloodstainForModule(moduleId);
+  if (!data || !data.total_attempts) return;
+
+  const bossCards = document.querySelectorAll(".quest-card.boss");
+  bossCards.forEach(card => {
+    // Avoid duplicate
+    if (card.querySelector(".bloodstain-dot")) return;
+    const dot = document.createElement("div");
+    dot.className = "bloodstain-dot";
+    dot.textContent = `${data.death_pct ?? 0}% учеников погибли здесь`;
+    // Insert before the button
+    const btn = card.querySelector(".btn-quest");
+    if (btn) btn.before(dot);
+  });
+}
+
+// ── Override quest card button for boss quests ────────────────────────────
+const _origRenderQuests = window.renderQuests;
+
+/**
+ * Patch: after renderQuests() runs, make boss quest cards open BossIntro.
+ */
+function _patchBossButtons() {
+  const cards = document.querySelectorAll(".quest-card.boss");
+  cards.forEach(card => {
+    const btn = card.querySelector(".btn-quest");
+    if (!btn || btn.dataset.bossPatched) return;
+    btn.dataset.bossPatched = "1";
+    // Re-wire click handler to boss intro
+    const newBtn = btn.cloneNode(true);
+    btn.replaceWith(newBtn);
+    // Determine moduleId from the card (added below via data attribute)
+    const moduleId = parseInt(card.dataset.moduleId ?? "0", 10);
+    if (!newBtn.disabled) {
+      newBtn.addEventListener("click", () => openBossIntro(moduleId));
+    }
+  });
+}
+
+// ── Estus hint in quiz ────────────────────────────────────────────────────
+async function useEstusHint() {
+  if (!state.userId) return;
+  const q = state.quizData?.questions?.[state.quizData?.current];
+  if (!q) return;
+
+  try {
+    const res  = await fetch(`${API}/souls/estus-use`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user_id: state.userId }),
+    });
+    const data = await res.json();
+    if (!data.ok) {
+      showToast(data.reason === "no_flasks" ? "Фласки закончились!" : "Ошибка", "error", "🔶");
+      return;
+    }
+
+    // Update flask counter
+    const cnt = document.getElementById("estusHintCount");
+    if (cnt) cnt.textContent = data.remaining;
+    updateEstusHUD(data.remaining, 3);
+
+    // Show hint: eliminate one wrong option
+    const correctIdx = q.correct_index;
+    const wrongIdxs  = q.options
+      .map((_, i) => i)
+      .filter(i => i !== correctIdx);
+    const eliminate  = wrongIdxs[Math.floor(Math.random() * wrongIdxs.length)];
+
+    const hintEl = document.getElementById("estusHintText");
+    if (hintEl) {
+      hintEl.textContent = `💡 Подсказка: вариант "${q.options[eliminate]}" — неверный.`;
+      hintEl.classList.remove("hidden");
+    }
+
+    // Dim the eliminated option
+    const optBtns = document.querySelectorAll(".quiz-option");
+    if (optBtns[eliminate]) {
+      optBtns[eliminate].style.opacity = "0.3";
+      optBtns[eliminate].disabled = true;
+    }
+
+    showToast(`Фласка использована. Осталось: ${data.remaining}`, "success", "🔶");
+  } catch (e) {
+    console.error("useEstusHint:", e);
+  }
+}
+window.useEstusHint = useEstusHint;
+
+// ── Wire up boss buttons after quests are rendered ────────────────────────
+const _origLoadQuests = window.loadQuests;
+window.loadQuests = async function() {
+  // Call original (defined elsewhere)
+  if (typeof loadQuests_original === "function") await loadQuests_original();
+};
+
+// Expose functions globally
+window.openBossIntro    = openBossIntro;
+window.closeBossIntro   = closeBossIntro;
+window.startBossFight   = startBossFight;
+window.retryBoss        = retryBoss;
+window.leaveBossArena   = leaveBossArena;
+window.afterBossVictory = afterBossVictory;
+window.showBonfire      = showBonfire;
+window.closeBonfire     = closeBonfire;
+
 // ── BTN START ─────────────────────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", () => {
   init();

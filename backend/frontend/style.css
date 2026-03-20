@@ -4822,3 +4822,797 @@ body.is-hollow::after {
   0%   { transform: translate(-50%, -50%) scale(0);   opacity: 1; }
   100% { transform: translate(-50%, -50%) scale(4);   opacity: 0; }
 }
+
+/* ══════════════════════════════════════════════════════════════════════
+   PHASE 2 — BOSS, BONFIRE, BLOODSTAINS, ESTUS HINTS
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* ── BOSS QUEST CARD enhancement ──────────────────────────────────── */
+.quest-card.boss {
+  border-color: rgba(200,168,78,0.35);
+  background: linear-gradient(135deg,
+    rgba(200,168,78,0.06) 0%,
+    rgba(18,18,26,0.95)   100%);
+  box-shadow: 0 0 20px rgba(200,168,78,0.08);
+}
+.quest-card.boss .quest-title {
+  color: var(--souls-gold);
+}
+.quest-card.boss::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(135deg, rgba(200,168,78,0.04), transparent);
+  pointer-events: none;
+}
+
+/* ── BLOODSTAINS ─────────────────────────────────────────────────────── */
+.bloodstain-dot {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--souls-red2);
+  font-weight: 600;
+  opacity: 0.85;
+  animation: bloodFadeIn 0.6s ease-out;
+}
+.bloodstain-dot::before {
+  content: '🩸';
+  font-size: 10px;
+}
+
+@keyframes bloodFadeIn {
+  0%   { opacity: 0; transform: scale(0.8); }
+  100% { opacity: 0.85; transform: scale(1); }
+}
+
+/* ── ESTUS HINT BUTTON ───────────────────────────────────────────────── */
+.estus-hint-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.btn-estus-hint {
+  align-self: flex-start;
+  padding: 6px 14px;
+  background: rgba(45,90,39,0.15);
+  border: 1px solid rgba(45,90,39,0.35);
+  border-radius: 10px;
+  color: #00e87a;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-estus-hint:hover { background: rgba(45,90,39,0.28); }
+.btn-estus-hint:disabled { opacity: 0.35; cursor: not-allowed; }
+
+.estus-hint-text {
+  padding: 10px 14px;
+  background: rgba(45,90,39,0.12);
+  border: 1px solid rgba(45,90,39,0.25);
+  border-radius: 10px;
+  font-size: 13px;
+  color: #a0d0a0;
+  line-height: 1.5;
+  animation: hintReveal 0.4s ease-out;
+}
+@keyframes hintReveal {
+  0%   { opacity: 0; transform: translateY(-6px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+/* ── BOSS INTRO OVERLAY ──────────────────────────────────────────────── */
+.boss-intro-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9993;
+  background: rgba(0,0,0,0.97);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: bossIntroFade 0.6s ease-out;
+}
+@keyframes bossIntroFade {
+  0%   { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+.boss-intro-bg {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse at 20% 80%, rgba(139,26,26,0.25) 0%, transparent 60%),
+    radial-gradient(ellipse at 80% 20%, rgba(200,168,78,0.12) 0%, transparent 60%);
+  pointer-events: none;
+}
+
+.boss-intro-content {
+  text-align: center;
+  padding: 32px 24px;
+  max-width: 360px;
+  position: relative;
+  z-index: 1;
+}
+
+.boss-warning-text {
+  font-size: 11px;
+  letter-spacing: 0.25em;
+  color: var(--souls-red2);
+  font-weight: 700;
+  text-transform: uppercase;
+  margin-bottom: 16px;
+  animation: warnPulse 1.5s ease-in-out infinite;
+}
+@keyframes warnPulse {
+  0%, 100% { opacity: 0.7; }
+  50%       { opacity: 1; }
+}
+
+.boss-intro-name {
+  font-size: 36px;
+  font-weight: 900;
+  color: var(--souls-gold);
+  text-shadow: var(--souls-gold-glow);
+  letter-spacing: 0.05em;
+  margin-bottom: 16px;
+  animation: namePulse 3s ease-in-out infinite;
+}
+@keyframes namePulse {
+  0%, 100% { text-shadow: var(--souls-gold-glow); }
+  50%       { text-shadow: 0 0 30px rgba(200,168,78,0.9), 0 0 60px rgba(200,168,78,0.4); }
+}
+
+.boss-intro-lore {
+  font-size: 14px;
+  color: rgba(232,230,225,0.65);
+  line-height: 1.65;
+  margin-bottom: 20px;
+  font-style: italic;
+}
+
+.boss-souls-stake {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 18px;
+  background: rgba(139,26,26,0.2);
+  border: 1px solid rgba(139,26,26,0.4);
+  border-radius: 12px;
+  margin-bottom: 12px;
+}
+.bs-label { font-size: 11px; letter-spacing: 0.1em; color: rgba(232,230,225,0.5); }
+.bs-amount { font-size: 20px; font-weight: 800; color: var(--souls-gold); font-family: var(--font-mono); }
+
+.boss-timer-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 13px;
+  color: rgba(200,168,78,0.6);
+  margin-bottom: 24px;
+}
+
+.btn-boss-start {
+  width: 100%;
+  padding: 15px;
+  background: linear-gradient(135deg, rgba(200,168,78,0.18), rgba(200,168,78,0.08));
+  border: 1.5px solid rgba(200,168,78,0.5);
+  border-radius: 14px;
+  color: var(--souls-gold);
+  font-size: 16px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.25s;
+  letter-spacing: 0.05em;
+  margin-bottom: 10px;
+}
+.btn-boss-start:hover { box-shadow: var(--souls-gold-glow); transform: scale(1.01); }
+
+.btn-boss-cancel {
+  width: 100%;
+  padding: 10px;
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 10px;
+  color: rgba(232,230,225,0.35);
+  font-size: 13px;
+  cursor: pointer;
+  transition: color 0.2s;
+  margin-bottom: 16px;
+}
+.btn-boss-cancel:hover { color: rgba(232,230,225,0.6); }
+
+.boss-intro-quote {
+  font-size: 12px;
+  color: rgba(232,230,225,0.2);
+  font-style: italic;
+  letter-spacing: 0.05em;
+}
+
+/* ── BOSS ARENA ──────────────────────────────────────────────────────── */
+.boss-arena {
+  position: fixed;
+  inset: 0;
+  z-index: 9992;
+  background: #060810;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.boss-arena-bg {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse at 50% 0%, rgba(200,168,78,0.06) 0%, transparent 50%),
+    radial-gradient(ellipse at 0% 100%, rgba(139,26,26,0.12) 0%, transparent 40%);
+  pointer-events: none;
+}
+
+/* Boss HUD */
+.boss-hud {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  padding: 12px 16px 8px;
+  gap: 12px;
+  border-bottom: 1px solid rgba(200,168,78,0.12);
+  background: rgba(6,8,16,0.9);
+}
+.boss-hud-left   { flex: 1; }
+.boss-hud-center { flex: 0 0 auto; }
+.boss-hud-right  { flex: 1; text-align: right; }
+
+.boss-name-hud {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--souls-gold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+.boss-progress-bar-wrap {
+  height: 3px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.boss-progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, var(--souls-gold), var(--souls-gold2));
+  border-radius: 2px;
+  transition: width 0.3s ease;
+  width: 0%;
+}
+
+.boss-timer-ring {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.boss-timer-num {
+  position: absolute;
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--souls-gold);
+}
+.boss-timer-num.critical { color: var(--souls-red2); animation: timerCrit 0.5s ease-in-out infinite; }
+@keyframes timerCrit {
+  0%, 100% { transform: scale(1); }
+  50%       { transform: scale(1.15); }
+}
+
+.boss-souls-hud {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--souls-gold);
+}
+.boss-accuracy-hud {
+  font-size: 11px;
+  color: rgba(232,230,225,0.5);
+  margin-top: 2px;
+}
+
+/* Boss question area */
+.boss-question-wrap {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  padding: 20px 16px;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.boss-q-counter {
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  color: rgba(200,168,78,0.5);
+  font-weight: 700;
+  margin-bottom: 12px;
+  text-transform: uppercase;
+}
+
+.boss-question-text {
+  font-size: 16px;
+  font-weight: 600;
+  color: #e8e6e1;
+  line-height: 1.5;
+  margin-bottom: 20px;
+}
+
+.boss-options {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.boss-option {
+  padding: 14px 16px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px;
+  color: #e8e6e1;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: var(--font-body);
+}
+.boss-option:hover:not(:disabled) {
+  background: rgba(200,168,78,0.08);
+  border-color: rgba(200,168,78,0.25);
+}
+.boss-option.correct {
+  background: rgba(0,232,122,0.12);
+  border-color: rgba(0,232,122,0.4);
+  color: #00e87a;
+}
+.boss-option.wrong {
+  background: rgba(192,57,43,0.12);
+  border-color: rgba(192,57,43,0.4);
+  color: var(--souls-red2);
+}
+.boss-option:disabled { cursor: not-allowed; }
+
+.boss-q-feedback {
+  margin-top: 12px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.boss-q-feedback.correct-fb {
+  background: rgba(0,232,122,0.08);
+  border: 1px solid rgba(0,232,122,0.2);
+  color: #00e87a;
+}
+.boss-q-feedback.wrong-fb {
+  background: rgba(192,57,43,0.08);
+  border: 1px solid rgba(192,57,43,0.2);
+  color: var(--souls-red2);
+}
+
+/* ── BOSS DEATH SCREEN ─────────────────────────────────────────────── */
+.boss-death-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 9996;
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.death-crack-overlay {
+  position: absolute;
+  inset: 0;
+  background:
+    repeating-linear-gradient(
+      45deg,
+      transparent,
+      transparent 2px,
+      rgba(139,26,26,0.03) 2px,
+      rgba(139,26,26,0.03) 4px
+    );
+  pointer-events: none;
+  animation: crackReveal 0.8s ease-out forwards;
+  opacity: 0;
+}
+@keyframes crackReveal {
+  0%   { opacity: 0; transform: scale(1.05); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+.death-vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at center, transparent 20%, rgba(139,26,26,0.6) 100%);
+  pointer-events: none;
+  animation: deathVignetteIn 1s ease-out;
+}
+@keyframes deathVignetteIn {
+  0%   { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+.death-content {
+  text-align: center;
+  padding: 40px 24px;
+  max-width: 340px;
+  position: relative;
+  z-index: 1;
+  animation: deathContentIn 0.8s ease-out 0.3s both;
+}
+@keyframes deathContentIn {
+  0%   { opacity: 0; transform: translateY(20px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+.death-big-text {
+  font-size: 56px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  color: rgba(255,255,255,0.06);
+  text-transform: uppercase;
+  line-height: 1;
+  margin-bottom: 4px;
+}
+
+.death-sub-text {
+  font-size: 32px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  color: var(--souls-red2);
+  text-shadow: 0 0 30px rgba(192,57,43,0.9), 0 0 60px rgba(192,57,43,0.3);
+  margin-bottom: 24px;
+  animation: deathSubPulse 2s ease-in-out infinite;
+}
+@keyframes deathSubPulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.75; }
+}
+
+.death-souls-info { margin-bottom: 20px; }
+.death-souls-dropped {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  background: rgba(139,26,26,0.2);
+  border: 1px solid rgba(139,26,26,0.4);
+  border-radius: 12px;
+}
+.ds-icon { font-size: 20px; }
+.ds-amount { font-size: 22px; font-weight: 800; color: var(--souls-gold); font-family: var(--font-mono); }
+.ds-label { font-size: 12px; color: rgba(232,230,225,0.5); }
+
+.death-lore-text {
+  font-size: 14px;
+  color: rgba(232,230,225,0.55);
+  line-height: 1.65;
+  margin-bottom: 28px;
+}
+.death-lore-text strong { color: var(--souls-red2); }
+
+.btn-death-retry {
+  width: 100%;
+  padding: 14px;
+  background: linear-gradient(135deg, rgba(192,57,43,0.2), rgba(139,26,26,0.1));
+  border: 1.5px solid rgba(192,57,43,0.4);
+  border-radius: 14px;
+  color: var(--souls-red2);
+  font-size: 16px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.25s;
+  margin-bottom: 10px;
+}
+.btn-death-retry:hover { box-shadow: 0 0 20px rgba(192,57,43,0.4); }
+
+.btn-death-leave {
+  width: 100%;
+  padding: 10px;
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 10px;
+  color: rgba(232,230,225,0.3);
+  font-size: 13px;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+.btn-death-leave:hover { color: rgba(232,230,225,0.6); }
+
+/* ── BOSS VICTORY SCREEN ─────────────────────────────────────────────── */
+.boss-victory-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 9996;
+  background: radial-gradient(ellipse at center, #0d0a04 0%, #000 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.victory-particles-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.victory-content {
+  text-align: center;
+  padding: 40px 24px;
+  max-width: 360px;
+  position: relative;
+  z-index: 1;
+  animation: victoryReveal 0.7s ease-out;
+}
+@keyframes victoryReveal {
+  0%   { opacity: 0; transform: scale(0.95); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+.victory-title {
+  font-size: 44px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  color: var(--souls-gold);
+  text-shadow: var(--souls-gold-glow);
+  margin-bottom: 8px;
+  animation: victoryGoldPulse 2s ease-in-out infinite;
+}
+@keyframes victoryGoldPulse {
+  0%, 100% { text-shadow: var(--souls-gold-glow); }
+  50%       { text-shadow: 0 0 40px rgba(200,168,78,1), 0 0 80px rgba(200,168,78,0.5); }
+}
+
+.victory-boss-name {
+  font-size: 18px;
+  font-weight: 700;
+  color: rgba(232,230,225,0.7);
+  margin-bottom: 20px;
+  letter-spacing: 0.04em;
+}
+
+.victory-stats {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.victory-stat {
+  padding: 8px 16px;
+  background: rgba(200,168,78,0.08);
+  border: 1px solid rgba(200,168,78,0.2);
+  border-radius: 10px;
+}
+.vs-label { font-size: 10px; color: rgba(232,230,225,0.4); letter-spacing: 0.08em; }
+.vs-value { font-size: 18px; font-weight: 800; color: var(--souls-gold); font-family: var(--font-mono); }
+
+.victory-souls-earned {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--souls-gold);
+  text-shadow: var(--souls-gold-glow);
+  margin-bottom: 8px;
+  font-family: var(--font-mono);
+}
+.victory-souls-retrieved {
+  font-size: 15px;
+  color: #00e87a;
+  margin-bottom: 20px;
+}
+
+.btn-victory-continue {
+  width: 100%;
+  padding: 16px;
+  background: linear-gradient(135deg, rgba(232,117,26,0.2), rgba(200,100,10,0.1));
+  border: 1.5px solid rgba(232,117,26,0.45);
+  border-radius: 14px;
+  color: var(--souls-bonfire);
+  font-size: 16px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.25s;
+  animation: bonfireGlow 2s ease-in-out infinite;
+}
+.btn-victory-continue:hover { box-shadow: 0 0 24px rgba(232,117,26,0.5); }
+
+/* Victory particle */
+.vp-particle {
+  position: absolute;
+  font-size: 16px;
+  pointer-events: none;
+  animation: vpFloat var(--dur, 2s) ease-out forwards;
+}
+@keyframes vpFloat {
+  0%   { transform: translate(0, 0) rotate(0deg) scale(1); opacity: 1; }
+  100% { transform: translate(var(--tx, 50px), var(--ty, -120px)) rotate(var(--rot, 360deg)) scale(0.3); opacity: 0; }
+}
+
+/* ── BONFIRE SCREEN ──────────────────────────────────────────────────── */
+.bonfire-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 9991;
+  background: #050407;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.bonfire-bg {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 50% 70%, rgba(232,117,26,0.12) 0%, transparent 60%);
+  pointer-events: none;
+  animation: bonBgPulse 3s ease-in-out infinite;
+}
+@keyframes bonBgPulse {
+  0%, 100% { opacity: 0.7; }
+  50%       { opacity: 1; }
+}
+
+.bonfire-content {
+  text-align: center;
+  padding: 32px 20px;
+  max-width: 340px;
+  position: relative;
+  z-index: 1;
+  animation: bonfireReveal 0.8s ease-out;
+}
+@keyframes bonfireReveal {
+  0%   { opacity: 0; transform: translateY(20px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+/* CSS Fire animation */
+.bonfire-fire-wrap {
+  margin: 0 auto 12px;
+  width: 80px;
+  position: relative;
+}
+.bonfire-fire {
+  position: relative;
+  width: 80px;
+  height: 90px;
+  margin: 0 auto;
+}
+.fire-layer {
+  position: absolute;
+  border-radius: 50% 50% 20% 20%;
+  animation: fireFlicker var(--dur, 1.5s) ease-in-out infinite alternate;
+  transform-origin: bottom center;
+}
+.f1 {
+  width: 44px; height: 70px;
+  bottom: 0; left: 18px;
+  background: linear-gradient(to top, #e8751a, #fbbf24, rgba(251,191,36,0));
+  opacity: 0.9;
+  --dur: 1.3s;
+}
+.f2 {
+  width: 30px; height: 50px;
+  bottom: 8px; left: 25px;
+  background: linear-gradient(to top, #f59e0b, #fde68a, rgba(253,230,138,0));
+  opacity: 0.8;
+  --dur: 1.0s;
+}
+.f3 {
+  width: 18px; height: 32px;
+  bottom: 16px; left: 31px;
+  background: linear-gradient(to top, #fbbf24, #fff, rgba(255,255,255,0));
+  opacity: 0.6;
+  --dur: 0.8s;
+}
+@keyframes fireFlicker {
+  0%   { transform: scale(1,1) translateX(0px) rotate(-2deg); }
+  30%  { transform: scale(0.96,1.04) translateX(2px) rotate(1deg); }
+  60%  { transform: scale(1.03,0.97) translateX(-2px) rotate(-1deg); }
+  100% { transform: scale(0.97,1.03) translateX(1px) rotate(2deg); }
+}
+
+.fire-sparks { position: absolute; inset: 0; pointer-events: none; }
+.spark {
+  position: absolute;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: #fbbf24;
+  animation: sparkFly var(--dur, 1s) ease-out var(--delay, 0s) infinite;
+}
+@keyframes sparkFly {
+  0%   { bottom: 10px; left: var(--sx, 50%); opacity: 1; transform: scale(1); }
+  100% { bottom: 80px; left: calc(var(--sx, 50%) + var(--dx, 0px)); opacity: 0; transform: scale(0.2); }
+}
+
+.bonfire-base {
+  font-size: 20px;
+  opacity: 0.6;
+  margin-top: -4px;
+}
+
+.bonfire-title {
+  font-size: 32px;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  color: var(--souls-bonfire);
+  text-shadow: 0 0 20px rgba(232,117,26,0.7);
+  margin-bottom: 6px;
+  animation: bonfireTextGlow 2s ease-in-out infinite;
+}
+@keyframes bonfireTextGlow {
+  0%, 100% { text-shadow: 0 0 20px rgba(232,117,26,0.7); }
+  50%       { text-shadow: 0 0 35px rgba(232,117,26,1), 0 0 60px rgba(232,117,26,0.3); }
+}
+
+.bonfire-module-name {
+  font-size: 16px;
+  color: rgba(232,230,225,0.65);
+  margin-bottom: 20px;
+  font-weight: 600;
+}
+
+.bonfire-stats {
+  display: flex;
+  justify-content: center;
+  gap: 14px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.bf-stat {
+  padding: 8px 14px;
+  background: rgba(232,117,26,0.08);
+  border: 1px solid rgba(232,117,26,0.2);
+  border-radius: 10px;
+  font-size: 12px;
+}
+.bf-stat-label { color: rgba(232,230,225,0.4); }
+.bf-stat-value { font-size: 17px; font-weight: 800; color: var(--souls-bonfire); font-family: var(--font-mono); }
+
+.bonfire-next-boss {
+  font-size: 13px;
+  color: rgba(232,230,225,0.45);
+  margin-bottom: 20px;
+  padding: 10px 16px;
+  background: rgba(200,168,78,0.05);
+  border: 1px solid rgba(200,168,78,0.12);
+  border-radius: 10px;
+}
+
+.btn-bonfire-continue {
+  width: 100%;
+  padding: 15px;
+  background: linear-gradient(135deg, rgba(232,117,26,0.2), rgba(232,117,26,0.08));
+  border: 1.5px solid rgba(232,117,26,0.45);
+  border-radius: 14px;
+  color: var(--souls-bonfire);
+  font-size: 16px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.25s;
+  margin-bottom: 12px;
+}
+.btn-bonfire-continue:hover { box-shadow: 0 0 24px rgba(232,117,26,0.4); }
+
+.bonfire-quote {
+  font-size: 11px;
+  color: rgba(232,230,225,0.2);
+  font-style: italic;
+  letter-spacing: 0.03em;
+}
