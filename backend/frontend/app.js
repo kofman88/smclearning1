@@ -666,7 +666,18 @@ function renderQuests(resp) {
       else openTask(q.id, q.title, q.xp_reward, q.description);
     });
 
-    card.append(headerRow, badges, desc, btn);
+    // Phantom hint button (not on boss cards)
+    if (!isBoss) {
+      const phantomBtn = el("button", "btn-phantom-hint", "👻 Послания призраков");
+      phantomBtn.dataset.questId = q.id;
+      phantomBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        openPhantoms(q.id);
+      });
+      card.append(headerRow, badges, desc, phantomBtn, btn);
+    } else {
+      card.append(headerRow, badges, desc, btn);
+    }
     container.appendChild(card);
   });
 }
@@ -1391,6 +1402,9 @@ async function init() {
 
     // Check for dream (after a short delay so UI is settled)
     setTimeout(checkDream, 2000);
+
+    // Phase 3: check daily challenge badge
+    setTimeout(_checkDailyBadge, 1500);
 
   } catch (e) {
     console.error("init error:", e);
@@ -2852,6 +2866,447 @@ window.leaveBossArena   = leaveBossArena;
 window.afterBossVictory = afterBossVictory;
 window.showBonfire      = showBonfire;
 window.closeBonfire     = closeBonfire;
+
+// ══════════════════════════════════════════════════════════════════════════════
+// PHASE 3 — SOCIAL SYSTEMS
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ── PHANTOM MESSAGES ──────────────────────────────────────────────────────────
+
+let _currentPhantomQuestId = null;
+
+async function openPhantoms(questId) {
+  _currentPhantomQuestId = questId;
+  const overlay = $("#phantomOverlay");
+  const list    = $("#phantomList");
+  overlay.classList.remove("hidden");
+  list.innerHTML = `<div class="phantom-loading">Призываем призраков…</div>`;
+
+  try {
+    const uid = state.userId;
+    const res = await fetch(`/api/social/phantoms/${questId}?user_id=${uid}`);
+    const data = await res.json();
+    const phantoms = data.phantoms || [];
+
+    if (!phantoms.length) {
+      list.innerHTML = `<div class="phantom-empty">Никто ещё не оставил послания.<br>Будь первым призраком.</div>`;
+    } else {
+      list.innerHTML = "";
+      phantoms.forEach(ph => {
+        const item = document.createElement("div");
+        item.className = "phantom-item";
+        item.dataset.id = ph.id;
+        item.innerHTML = `
+          <div class="phantom-item-header">
+            <span class="phantom-item-user">👻 ${_esc(ph.username)}</span>
+          </div>
+          <div class="phantom-item-text">${_esc(ph.text)}</div>
+          <div class="phantom-vote-row">
+            <button class="phantom-vote-btn" onclick="votePhantom('${questId}','${ph.id}','up',this)">
+              👍 ${ph.votes_up}
+            </button>
+            <button class="phantom-vote-btn" onclick="votePhantom('${questId}','${ph.id}','down',this)">
+              👎 ${ph.votes_down}
+            </button>
+          </div>`;
+        list.appendChild(item);
+      });
+    }
+  } catch(e) {
+    list.innerHTML = `<div class="phantom-empty">Не удалось призвать призраков.</div>`;
+  }
+
+  // Char counter
+  const input = $("#phantomInput");
+  const counter = $("#phantomCharCount");
+  if (input) {
+    input.value = "";
+    input.oninput = () => { counter.textContent = `${input.value.length}/200`; };
+  }
+}
+
+function closePhantoms() {
+  $("#phantomOverlay").classList.add("hidden");
+  _currentPhantomQuestId = null;
+}
+
+async function votePhantom(questId, phantomId, vote, btn) {
+  btn.classList.add("voted");
+  try {
+    await fetch(`/api/social/phantoms/${questId}/${phantomId}/vote`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user_id: state.userId, vote }),
+    });
+  } catch(e) { /* silent */ }
+}
+
+async function sendPhantom() {
+  const input = $("#phantomInput");
+  const text  = input?.value.trim();
+  if (!text || !_currentPhantomQuestId) return;
+
+  const btn = document.querySelector(".btn-phantom-send");
+  if (btn) btn.disabled = true;
+
+  try {
+    await fetch(`/api/social/phantoms/${_currentPhantomQuestId}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        user_id:  state.userId,
+        username: state.userState?.username || "Призрак",
+        text,
+      }),
+    });
+    input.value = "";
+    $("#phantomCharCount").textContent = "0/200";
+    // Refresh list
+    await openPhantoms(_currentPhantomQuestId);
+  } catch(e) { /* silent */ } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+function _esc(str) {
+  const d = document.createElement("div");
+  d.textContent = str || "";
+  return d.innerHTML;
+}
+
+// ── DAILY CHALLENGE ───────────────────────────────────────────────────────────
+
+let _dailyData = null;
+
+async function openDaily() {
+  const overlay = $("#dailyOverlay");
+  overlay.classList.remove("hidden");
+  await _loadDailyChallenge();
+}
+
+function closeDaily() {
+  $("#dailyOverlay").classList.add("hidden");
+}
+
+async function _loadDailyChallenge() {
+  try {
+    const res  = await fetch(`/api/social/daily?user_id=${state.userId}`);
+    _dailyData = await res.json();
+
+    $("#dailyDate").textContent       = _dailyData.date || "";
+    $("#dailyStreakBadge").textContent = `🔥 ${_dailyData.streak || 0} дней`;
+    $("#dailyRewardSouls").textContent = `${_dailyData.souls_reward || 0} ⚡`;
+    $("#dailyQuestion").textContent   = _dailyData.question || "";
+
+    const optEl = $("#dailyOptions");
+    optEl.innerHTML = "";
+    const resultEl   = $("#dailyResult");
+    const completedEl = $("#dailyCompleted");
+    resultEl.classList.add("hidden");
+    completedEl.classList.add("hidden");
+
+    if (_dailyData.completed) {
+      // Already done today
+      optEl.classList.add("hidden");
+      completedEl.classList.remove("hidden");
+      const streak = _dailyData.streak || 0;
+      $("#dailyStreakDisplay").textContent = `🔥 Серия: ${streak} дней`;
+    } else {
+      optEl.classList.remove("hidden");
+      (_dailyData.options || []).forEach((opt, i) => {
+        const btn = document.createElement("button");
+        btn.className = "daily-option";
+        btn.textContent = opt;
+        btn.addEventListener("click", () => _submitDailyAnswer(i));
+        optEl.appendChild(btn);
+      });
+    }
+  } catch(e) {
+    $("#dailyQuestion").textContent = "Не удалось загрузить вызов.";
+  }
+}
+
+async function _submitDailyAnswer(answerIdx) {
+  // Disable all options immediately
+  document.querySelectorAll(".daily-option").forEach(b => b.disabled = true);
+
+  try {
+    const res    = await fetch("/api/social/daily/submit", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user_id: state.userId, answer_idx: answerIdx }),
+    });
+    const result = await res.json();
+
+    // Mark correct/wrong options visually
+    document.querySelectorAll(".daily-option").forEach((b, i) => {
+      if (i === result.correct_idx) b.classList.add("correct");
+      else if (i === answerIdx && !result.correct) b.classList.add("wrong");
+    });
+
+    // Show result after 600ms
+    setTimeout(() => {
+      $("#dailyOptions").classList.add("hidden");
+      const resultEl = $("#dailyResult");
+      resultEl.classList.remove("hidden");
+
+      if (result.correct) {
+        $("#dailyResultIcon").textContent  = "⚔️";
+        $("#dailyResultText").textContent  = "Правильно! Рынок поклоняется тебе.";
+        $("#dailySoulsWon").textContent    = `+${result.souls_won} ⚡`;
+        $("#dailyStreakUpdate").textContent = `🔥 Серия: ${result.streak} дней`;
+        // Update HUD
+        if (state.userState) {
+          state.userState.souls = (state.userState.souls || 0) + result.souls_won;
+          updateSoulsHUD();
+        }
+      } else {
+        $("#dailyResultIcon").textContent  = "💀";
+        $("#dailyResultText").textContent  = "Ликвидирован. Рынок безжалостен.";
+        $("#dailySoulsWon").textContent    = "0 ⚡";
+        $("#dailyStreakUpdate").textContent = "Серия прервана.";
+      }
+    }, 600);
+
+  } catch(e) {
+    document.querySelectorAll(".daily-option").forEach(b => b.disabled = false);
+  }
+}
+
+// Badge on daily button if not yet completed today
+async function _checkDailyBadge() {
+  try {
+    const res  = await fetch(`/api/social/daily?user_id=${state.userId}`);
+    const data = await res.json();
+    const badge = $("#dailyBadge");
+    if (badge) {
+      if (!data.completed) badge.classList.remove("hidden");
+      else badge.classList.add("hidden");
+    }
+  } catch(e) { /* silent */ }
+}
+
+// ── CLANS ─────────────────────────────────────────────────────────────────────
+
+let _clanData = null;
+
+async function openClanPanel() {
+  $("#clanPanel").classList.remove("hidden");
+  await _loadClanData();
+}
+
+function closeClanPanel() {
+  $("#clanPanel").classList.add("hidden");
+}
+
+async function _loadClanData() {
+  // Load user's clan
+  try {
+    const res   = await fetch(`/api/social/clans/me?user_id=${state.userId}`);
+    const data  = await res.json();
+    _clanData   = data.clan;
+    _renderMyClan(_clanData);
+  } catch(e) { /* silent */ }
+
+  // Load leaderboard
+  try {
+    const res  = await fetch("/api/social/clans");
+    const data = await res.json();
+    _renderClanLeaderboard(data.clans || []);
+  } catch(e) { /* silent */ }
+}
+
+function _renderMyClan(clan) {
+  const noneEl = $("#clanNone");
+  const mineEl = $("#clanMine");
+
+  if (!clan) {
+    noneEl.classList.remove("hidden");
+    mineEl.classList.add("hidden");
+    return;
+  }
+
+  noneEl.classList.add("hidden");
+  mineEl.classList.remove("hidden");
+
+  $("#clanMineTag").textContent  = `[${clan.tag}]`;
+  $("#clanMineName").textContent = clan.name;
+
+  const weeklySouls  = clan.weekly_souls || 0;
+  const weeklyTarget = clan.weekly_target || 1000;
+  $("#clanWeeklySouls").textContent  = weeklySouls;
+  $("#clanWeeklyTarget").textContent = weeklyTarget;
+  $("#clanProgressBar").style.width  = `${clan.progress_pct || 0}%`;
+
+  // Members list
+  const membersList = $("#clanMembersList");
+  membersList.innerHTML = "";
+  (clan.members || []).forEach(uid => {
+    const row = document.createElement("div");
+    row.className = "clan-member-row";
+    const isLeader = uid === clan.leader_id;
+    const isMe     = uid === state.userId;
+    row.innerHTML = `
+      <span class="clan-member-icon">${isLeader ? "👑" : "⚔️"}</span>
+      <span class="clan-member-name">${isMe ? "Ты" : `Трейдер #${uid}`}</span>
+      ${isLeader ? '<span class="clan-member-leader">Лидер</span>' : ""}
+    `;
+    membersList.appendChild(row);
+  });
+
+  // Hollow warning
+  const hollowCount = clan.hollow_count || 0;
+  const hollowWarn  = $("#clanHollowWarning");
+  if (hollowCount > 0) {
+    hollowWarn.classList.remove("hidden");
+    $("#clanHollowCount").textContent = hollowCount;
+  } else {
+    hollowWarn.classList.add("hidden");
+  }
+}
+
+function _renderClanLeaderboard(clans) {
+  const lb = $("#clanLeaderboard");
+  if (!clans.length) {
+    lb.innerHTML = `<div class="clan-lb-loading">Кланов пока нет.</div>`;
+    return;
+  }
+  lb.innerHTML = "";
+  clans.forEach((c, i) => {
+    const row = document.createElement("div");
+    row.className = "clan-lb-row";
+    row.innerHTML = `
+      <span class="clan-lb-rank">${i + 1}</span>
+      <span class="clan-lb-tag">[${c.tag}]</span>
+      <span class="clan-lb-name">${_esc(c.name)}</span>
+      <span class="clan-lb-souls">${c.souls_pool} ⚡</span>
+      <span class="clan-lb-members">${c.member_count}/5</span>
+    `;
+    lb.appendChild(row);
+  });
+}
+
+function showClanCreate() {
+  $("#clanCreateForm").classList.toggle("hidden");
+  $("#clanJoinForm").classList.add("hidden");
+}
+
+function showClanJoin() {
+  $("#clanJoinForm").classList.toggle("hidden");
+  $("#clanCreateForm").classList.add("hidden");
+}
+
+async function createClan() {
+  const name = $("#clanNameInput").value.trim();
+  const tag  = $("#clanTagInput").value.trim();
+  if (!name || !tag) return;
+
+  try {
+    const res  = await fetch("/api/social/clans/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user_id: state.userId, name, tag }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      _clanData = data.clan;
+      _renderMyClan(data.clan);
+    } else {
+      alert(data.detail || "Ошибка создания клана");
+    }
+  } catch(e) { alert("Ошибка сети"); }
+}
+
+async function joinClan() {
+  const tag = $("#clanTagJoinInput").value.trim();
+  if (!tag) return;
+
+  try {
+    const res  = await fetch("/api/social/clans/join", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user_id: state.userId, tag }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      _clanData = data.clan;
+      _renderMyClan(data.clan);
+    } else {
+      alert(data.detail || "Клан не найден или переполнен");
+    }
+  } catch(e) { alert("Ошибка сети"); }
+}
+
+async function leaveClan() {
+  if (!confirm("Покинуть клан?")) return;
+  try {
+    const res  = await fetch("/api/social/clans/leave", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user_id: state.userId }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      _clanData = null;
+      _renderMyClan(null);
+    }
+  } catch(e) { alert("Ошибка сети"); }
+}
+
+function showContributeModal() {
+  const modal = $("#contributeModal");
+  modal.classList.remove("hidden");
+  const avail = state.userState?.souls || 0;
+  $("#contributeSoulsAvail").textContent = avail;
+  $("#contributeAmount").value = "";
+}
+
+function closeContributeModal() {
+  $("#contributeModal").classList.add("hidden");
+}
+
+async function confirmContribute() {
+  const amount = parseInt($("#contributeAmount").value);
+  if (!amount || amount < 10) { alert("Минимум 10 душ"); return; }
+
+  try {
+    const res  = await fetch("/api/social/clans/contribute", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user_id: state.userId, amount }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      closeContributeModal();
+      if (state.userState) {
+        state.userState.souls = data.souls_remaining;
+        updateSoulsHUD();
+      }
+      _clanData = data.clan;
+      _renderMyClan(data.clan);
+    } else {
+      alert(data.detail || "Недостаточно душ");
+    }
+  } catch(e) { alert("Ошибка сети"); }
+}
+
+// Expose globals
+window.openPhantoms        = openPhantoms;
+window.closePhantoms       = closePhantoms;
+window.sendPhantom         = sendPhantom;
+window.votePhantom         = votePhantom;
+window.openDaily           = openDaily;
+window.closeDaily          = closeDaily;
+window.openClanPanel       = openClanPanel;
+window.closeClanPanel      = closeClanPanel;
+window.showClanCreate      = showClanCreate;
+window.showClanJoin        = showClanJoin;
+window.createClan          = createClan;
+window.joinClan            = joinClan;
+window.leaveClan           = leaveClan;
+window.showContributeModal = showContributeModal;
+window.closeContributeModal = closeContributeModal;
+window.confirmContribute   = confirmContribute;
 
 // ── BTN START ─────────────────────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", () => {

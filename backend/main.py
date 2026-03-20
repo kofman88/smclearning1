@@ -52,6 +52,7 @@ from quests import QUESTS, QUIZZES
 from charts import generate_chart
 from bot import bot as telegram_bot, setup_webhook, process_update, make_hw_keyboard
 from boss import router as boss_router
+from social import router as social_router, get_daily_challenge, _msk_now
 
 @asynccontextmanager
 async def lifespan(application: FastAPI):
@@ -71,6 +72,11 @@ async def lifespan(application: FastAPI):
         setup_webhook()
     else:
         logger.info("WEBHOOK_URL not set — webhook not configured (polling mode)")
+
+    # Start daily-challenge push loop
+    asyncio.create_task(_daily_challenge_loop())
+    logger.info("Daily challenge loop started")
+
     yield
 
 app = FastAPI(title="CHM Smart Money Academy API", version="4.0.0", lifespan=lifespan)
@@ -83,8 +89,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ── Boss router ────────────────────────────────────────────────────────────
+# ── Boss & Social routers ──────────────────────────────────────────────────
 app.include_router(boss_router)
+app.include_router(social_router)
 
 # ── Static frontend ───────────────────────────────────────────────────────────
 FRONTEND_DIR = Path(__file__).parent / "frontend"
@@ -1241,3 +1248,52 @@ async def _keep_alive_loop(base_url: str):
                 logger.info("Keep-alive: webhook re-registered")
         except Exception as e:
             logger.warning(f"Keep-alive ping failed: {e}")
+
+
+# ── Daily Challenge push loop (09:00 MSK) ─────────────────────────────────────
+
+async def _daily_challenge_loop():
+    """At 09:00 MSK every day, push the daily challenge to all known users via bot."""
+    from datetime import timezone
+    _sent_date: str | None = None
+
+    while True:
+        await asyncio.sleep(60)  # check every minute
+        try:
+            now_msk = _msk_now()
+            today   = now_msk.strftime("%Y-%m-%d")
+            # Fire once per day at 09:00 MSK (window 09:00–09:01)
+            if now_msk.hour != 9 or now_msk.minute != 0:
+                continue
+            if _sent_date == today:
+                continue  # already sent today
+
+            _sent_date = today
+            logger.info("Daily challenge push: %s", today)
+
+            loop     = asyncio.get_event_loop()
+            user_ids = list(user_progress.keys())
+            sent = 0
+            for uid in user_ids:
+                try:
+                    ch = get_daily_challenge(int(uid))
+                    text = (
+                        f"⚔️ <b>Ежедневный вызов</b> — {today}\n\n"
+                        f"<b>{ch['question']}</b>\n\n"
+                        f"Серия: {ch['streak']} дней 🔥\n"
+                        f"Награда: <b>{ch['souls_reward']} душ</b>\n\n"
+                        f"Открой приложение, чтобы ответить!"
+                    )
+                    await loop.run_in_executor(
+                        None,
+                        lambda u=int(uid), t=text: telegram_bot.send_message(
+                            u, t, parse_mode="HTML"
+                        )
+                    )
+                    sent += 1
+                except Exception as e:
+                    logger.debug("Daily push failed for %s: %r", uid, e)
+            logger.info("Daily challenge: pushed to %d/%d users", sent, len(user_ids))
+        except Exception as e:
+            logger.error("_daily_challenge_loop error: %r", e)
+

@@ -268,6 +268,19 @@
       </button>
     </div>
 
+    <!-- SOCIAL QUICK-ACCESS BAR -->
+    <div class="social-bar">
+      <button class="social-bar-btn" id="dailyBtn" onclick="openDaily()">
+        <span class="social-bar-icon">⚔️</span>
+        <span class="social-bar-label">Вызов</span>
+        <span class="social-bar-badge hidden" id="dailyBadge">!</span>
+      </button>
+      <button class="social-bar-btn" onclick="openClanPanel()">
+        <span class="social-bar-icon">🛡️</span>
+        <span class="social-bar-label">Клан</span>
+      </button>
+    </div>
+
     <!-- TABS -->
     <nav class="tabs tabs--4">
       <button class="tab active" data-tab="lessons" onclick="switchTab('lessons')">
@@ -1110,6 +1123,132 @@
 
   <!-- ══ SOULS FLOAT LAYER ════════════════════════════════════════════════ -->
   <div id="soulsFloatLayer" class="souls-float-layer"></div>
+
+  <!-- ══════════════════ PHASE 3: SOCIAL ══════════════════════════════════ -->
+
+  <!-- ══ PHANTOM MESSAGES OVERLAY ═══════════════════════════════════════════ -->
+  <div id="phantomOverlay" class="phantom-overlay hidden">
+    <div class="phantom-panel">
+      <div class="phantom-header">
+        <span class="phantom-icon">👻</span>
+        <span class="phantom-title">Послания Призраков</span>
+        <button class="phantom-close" onclick="closePhantoms()">✕</button>
+      </div>
+      <div class="phantom-subtitle">Советы павших трейдеров перед этим заданием</div>
+      <div class="phantom-list" id="phantomList">
+        <div class="phantom-loading">Призываем призраков…</div>
+      </div>
+      <div class="phantom-write-wrap">
+        <textarea id="phantomInput" class="phantom-input"
+          placeholder="Оставь совет следующему…" maxlength="200" rows="3"></textarea>
+        <div class="phantom-input-footer">
+          <span class="phantom-char-count" id="phantomCharCount">0/200</span>
+          <button class="btn-phantom-send" onclick="sendPhantom()">Оставить послание 👻</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ DAILY CHALLENGE OVERLAY ════════════════════════════════════════════ -->
+  <div id="dailyOverlay" class="daily-overlay hidden">
+    <div class="daily-panel">
+      <div class="daily-header">
+        <div class="daily-streak-badge" id="dailyStreakBadge">🔥 0 дней</div>
+        <div class="daily-title">ЕЖЕДНЕВНЫЙ ВЫЗОВ</div>
+        <div class="daily-date" id="dailyDate"></div>
+      </div>
+      <div class="daily-reward-row">
+        <span class="daily-reward-label">Награда:</span>
+        <span class="daily-reward-souls" id="dailyRewardSouls">500 ⚡</span>
+      </div>
+      <div class="daily-question" id="dailyQuestion">Загрузка…</div>
+      <div class="daily-options" id="dailyOptions"></div>
+      <!-- Result state (shown after answer) -->
+      <div class="daily-result hidden" id="dailyResult">
+        <div class="daily-result-icon" id="dailyResultIcon"></div>
+        <div class="daily-result-text" id="dailyResultText"></div>
+        <div class="daily-souls-won" id="dailySoulsWon"></div>
+        <div class="daily-streak-update" id="dailyStreakUpdate"></div>
+        <button class="btn-daily-close" onclick="closeDaily()">Закрыть</button>
+      </div>
+      <!-- Completed state -->
+      <div class="daily-completed hidden" id="dailyCompleted">
+        <div class="daily-done-icon">✅</div>
+        <div class="daily-done-text">Вызов принят! Возвращайся завтра.</div>
+        <div class="daily-streak-display" id="dailyStreakDisplay"></div>
+        <button class="btn-daily-close" onclick="closeDaily()">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ CLAN PANEL ══════════════════════════════════════════════════════════ -->
+  <div id="clanPanel" class="clan-panel hidden">
+    <div class="clan-panel-header">
+      <span class="clan-title">⚔️ Кланы</span>
+      <button class="clan-close" onclick="closeClanPanel()">✕</button>
+    </div>
+
+    <!-- No clan state -->
+    <div id="clanNone" class="clan-none">
+      <div class="clan-none-text">Ты одинокий трейдер.<br>Объединись с другими для силы.</div>
+      <div class="clan-actions-row">
+        <button class="btn-clan-action" onclick="showClanCreate()">Создать клан</button>
+        <button class="btn-clan-action" onclick="showClanJoin()">Вступить в клан</button>
+      </div>
+      <div class="clan-create-form hidden" id="clanCreateForm">
+        <input id="clanNameInput" class="clan-input" type="text" placeholder="Название клана (макс 30)" maxlength="30">
+        <input id="clanTagInput" class="clan-input" type="text" placeholder="Тег [макс 5 букв]" maxlength="5">
+        <button class="btn-clan-submit" onclick="createClan()">Создать ⚔️</button>
+      </div>
+      <div class="clan-join-form hidden" id="clanJoinForm">
+        <input id="clanTagJoinInput" class="clan-input" type="text" placeholder="Тег клана" maxlength="5">
+        <button class="btn-clan-submit" onclick="joinClan()">Вступить →</button>
+      </div>
+    </div>
+
+    <!-- My clan state -->
+    <div id="clanMine" class="clan-mine hidden">
+      <div class="clan-mine-header">
+        <span class="clan-mine-tag" id="clanMineTag">[SMC]</span>
+        <span class="clan-mine-name" id="clanMineName">Smart Money Clan</span>
+      </div>
+      <div class="clan-progress-wrap">
+        <div class="clan-progress-label">
+          Недельный пул: <span id="clanWeeklySouls">0</span> / <span id="clanWeeklyTarget">1000</span> ⚡
+        </div>
+        <div class="clan-progress-bar-outer">
+          <div class="clan-progress-bar-inner" id="clanProgressBar" style="width:0%"></div>
+        </div>
+      </div>
+      <div class="clan-members-list" id="clanMembersList"></div>
+      <div class="clan-hollow-warning hidden" id="clanHollowWarning">
+        ⚠️ <span id="clanHollowCount">0</span> члена клана в Hollow режиме — клан теряет <strong>200 ⚡</strong> за каждого
+      </div>
+      <div class="clan-mine-actions">
+        <button class="btn-clan-contribute" onclick="showContributeModal()">💎 Пожертвовать души</button>
+        <button class="btn-clan-leave" onclick="leaveClan()">Покинуть клан</button>
+      </div>
+    </div>
+
+    <!-- Leaderboard -->
+    <div class="clan-lb-title">Топ кланов</div>
+    <div class="clan-leaderboard" id="clanLeaderboard">
+      <div class="clan-lb-loading">Загрузка…</div>
+    </div>
+  </div>
+
+  <!-- ══ CLAN CONTRIBUTE MODAL ══════════════════════════════════════════════ -->
+  <div id="contributeModal" class="contribute-modal hidden">
+    <div class="contribute-content">
+      <div class="contribute-title">Пожертвовать клану</div>
+      <div class="contribute-souls-avail">У тебя: <span id="contributeSoulsAvail">0</span> ⚡</div>
+      <input id="contributeAmount" class="contribute-input" type="number" min="10" placeholder="Количество душ">
+      <div class="contribute-actions">
+        <button class="btn-contribute-confirm" onclick="confirmContribute()">Пожертвовать ⚡</button>
+        <button class="btn-contribute-cancel" onclick="closeContributeModal()">Отмена</button>
+      </div>
+    </div>
+  </div>
 
   <script src="/static/app.js"></script>
 </body>
