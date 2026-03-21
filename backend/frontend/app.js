@@ -601,6 +601,7 @@ function applyDeadlineInfo(dlInfo) {
 // ── RENDER MODULES ────────────────────────────────────────────────────────
 function renderModules(modules) {
   const container = $("#modulesList");
+  if (!container) return;
   container.innerHTML = "";
   const currentModuleIdx = state.userState?.module_index ?? 0;
 
@@ -1480,13 +1481,17 @@ async function init() {
   const info = getUserInfo();
   state.userId = info.id;
 
-  // Show a "slow start" hint after 5s if still waiting
+  // Show a "slow start" hint after 4s if still waiting (cold start can take 30-60s)
   const slowTimer = setTimeout(() => {
     const el = $("#moduleName");
     if (el && el.textContent === "Загрузка...") {
       el.textContent = "Сервер запускается…";
     }
-  }, 5000);
+    const progLabel = $("#progressLabel");
+    if (progLabel && progLabel.textContent === "0/0 квестов") {
+      progLabel.textContent = "Подождите ~30 сек при первом запуске";
+    }
+  }, 4000);
 
   try {
     let initData = {};
@@ -1524,13 +1529,19 @@ async function init() {
     }
 
     const userId = state.userId;
+    const LOAD_TIMEOUT = 60000; // 60s to handle Render.com cold starts
     const [userRes, modulesRes, questsRes, metaRes, lbRes] = await Promise.all([
-      fetchWithTimeout(`${API}/user/${userId}`, {}, 20000),
-      fetchWithTimeout(`${API}/modules`, {}, 20000),
-      fetchWithTimeout(`${API}/quests/${userId}`, {}, 20000),
-      fetchWithTimeout(`${API}/lessons/meta`, {}, 20000),
-      fetchWithTimeout(`${API}/leaderboard`, {}, 20000),
+      fetchWithTimeout(`${API}/user/${userId}`, {}, LOAD_TIMEOUT),
+      fetchWithTimeout(`${API}/modules`, {}, LOAD_TIMEOUT),
+      fetchWithTimeout(`${API}/quests/${userId}`, {}, LOAD_TIMEOUT),
+      fetchWithTimeout(`${API}/lessons/meta`, {}, LOAD_TIMEOUT),
+      fetchWithTimeout(`${API}/leaderboard`, {}, LOAD_TIMEOUT),
     ]);
+
+    // Check HTTP status before parsing JSON — error responses may be HTML
+    for (const [res, name] of [[userRes, "user"], [modulesRes, "modules"], [questsRes, "quests"], [metaRes, "meta"], [lbRes, "leaderboard"]]) {
+      if (!res.ok) throw new Error(`HTTP ${res.status} on /api/${name}`);
+    }
 
     const [userData, modulesData, questsData, metaData, lbData] = await Promise.all([
       userRes.json(), modulesRes.json(), questsRes.json(), metaRes.json(), lbRes.json(),
@@ -1592,7 +1603,12 @@ async function init() {
     clearTimeout(slowTimer);
     console.error("init error:", e);
     const isTimeout = e?.name === "AbortError";
-    showLoadingError(isTimeout ? "Сервер не отвечает. Попробуй ещё раз." : "Ошибка загрузки данных.");
+    const isHttp    = e?.message?.startsWith("HTTP ");
+    let msg;
+    if (isTimeout) msg = "Сервер не отвечает. Нажми «Повторить» через 30 сек.";
+    else if (isHttp) msg = `Ошибка сервера (${e.message}). Попробуй ещё раз.`;
+    else msg = "Ошибка загрузки данных. Попробуй ещё раз.";
+    showLoadingError(msg);
   }
 }
 
