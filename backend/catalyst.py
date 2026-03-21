@@ -121,18 +121,9 @@ def attack(attacker_id: int, attacker_name: str, attacker_level: int,
     if _S["user_id"] == attacker_id:
         return {"ok": False, "error": "self", "message": "Нельзя атаковать себя."}
 
-    # Попытки
+    # NOTE: attempt limiting is now handled by spend_action() in main.py (global action pool).
+    # The atk_left check below is bypassed to avoid double-counting actions.
     st = up.setdefault(attacker_id, {})
-    today = datetime.utcnow().strftime("%Y-%m-%d")
-    if st.get("atk_date") != today:
-        st["atk_date"] = today
-        st["atk_left"] = attacker_level
-    if st.get("atk_left", 0) <= 0:
-        return {"ok": False, "error": "no_attempts",
-                "message": "Попытки на сегодня исчерпаны.\nВосстановятся в 00:00 UTC.",
-                "attempts_left": 0}
-
-    st["atk_left"] -= 1
     dmg = attacker_level
     _S["hp"] = max(0, _S["hp"] - dmg)
 
@@ -299,14 +290,17 @@ def award_isotope(user_id: int, up: dict, reason: str = "") -> int:
 
 def get_player_info(user_id: int, user_level: int, up: dict) -> Dict[str, Any]:
     """Личная информация игрока о системе Катализатора."""
-    st = up.get(user_id, {})
-    today = datetime.utcnow().strftime("%Y-%m-%d")
-    if st.get("atk_date") != today:
+    # Use the global action pool (managed by progress.py) for accurate attack counts.
+    try:
+        from progress import get_actions_pool
+        pool = get_actions_pool(user_id, up)
+        attempts_left = pool["left"]
+        max_attempts = pool["daily_total"]
+    except Exception:
+        # Fallback: level-based count
         attempts_left = user_level
         max_attempts = user_level
-    else:
-        attempts_left = st.get("atk_left", user_level)
-        max_attempts = user_level
+    st = up.get(user_id, {})
     return {
         "isotopes": st.get("unstable_isotopes", 0),
         "attempts_left": attempts_left,

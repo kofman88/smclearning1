@@ -94,6 +94,8 @@ const state = {
   quizStreak: 0,
   countdownInterval: null,
   deadlineInfo: null,
+  _catalystInterval: null,   // guard against duplicate setInterval on init() retry
+  _actionsInterval: null,    // guard against duplicate setInterval on init() retry
 };
 
 // ── SMC TRADER LEVELS (7 levels) ──────────────────────────────────────────
@@ -1560,6 +1562,7 @@ function showLoadingError(msg) {
 // ── ACTIONS POOL ─────────────────────────────────────────────────────
 
 async function loadActionsPool() {
+  if (!state.userId) return;
   try {
     const d = await fetch(`${API}/actions/${state.userId}`).then(r => r.json());
     state.actionsPool = d;
@@ -1582,7 +1585,7 @@ function renderActionsHUD(d) {
 
   el.innerHTML = `
     <div class="actions-dots">${dots}</div>
-    <div class="actions-label">${left}/${total} действий</div>
+    <span id="actionsLeft" class="actions-label">${left}/${total}</span>
     ${chance > 0 ? `<div class="cat-chance-hint">⚗️ Катализатор: ${chance}%</div>` : ''}`;
 }
 
@@ -1590,6 +1593,7 @@ function renderActionsHUD(d) {
 // ══════════════════════════════════════════════════════════════════════
 
 async function loadCatalyst() {
+  if (!state.userId) return;
   try {
     const [catR, myR] = await Promise.all([
       fetch(`${API}/catalyst/status`),
@@ -1955,11 +1959,13 @@ async function init() {
     // Phase 3: check daily challenge badge
     setTimeout(_checkDailyBadge, 1500);
 
-    // Catalyst
+    // Catalyst (prevent duplicate intervals on init() retry)
     loadCatalyst();
-    setInterval(loadCatalyst, 90000); // каждые 1.5 минуты
+    if (state._catalystInterval) clearInterval(state._catalystInterval);
+    state._catalystInterval = setInterval(loadCatalyst, 90000); // каждые 1.5 минуты
     loadActionsPool();
-    setInterval(loadActionsPool, 30000); // каждые 30 сек
+    if (state._actionsInterval) clearInterval(state._actionsInterval);
+    state._actionsInterval = setInterval(loadActionsPool, 30000); // каждые 30 сек
 
     console.log("[CHM] init complete. userId=", state.userId, "modules=", modulesData?.modules?.length);
 
@@ -3563,7 +3569,7 @@ async function _submitDailyAnswer(answerIdx) {
         // Update HUD
         if (state.userState) {
           state.userState.souls = (state.userState.souls || 0) + result.souls_won;
-          updateSoulsHUD();
+          updateSoulsHUD({ souls: state.userState.souls });
         }
       } else {
         $("#dailyResultIcon").textContent  = "💀";
@@ -3784,7 +3790,7 @@ async function confirmContribute() {
       closeContributeModal();
       if (state.userState) {
         state.userState.souls = data.souls_remaining;
-        updateSoulsHUD();
+        updateSoulsHUD({ souls: data.souls_remaining });
       }
       _clanData = data.clan;
       _renderMyClan(data.clan);
