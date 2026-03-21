@@ -224,6 +224,8 @@ def get_user_state(user_id: int) -> Dict[str, Any]:
             "estus_flasks": 3,        # hint charges (refill at bonfire)
             "estus_max": 3,           # max flask count
             "souls_module_earned": 0, # souls earned in current module (at stake)
+            # ── ONBOARDING ──
+            "onboarding_complete": False,
         }
     state = user_progress[user_id]
     # Back-compat: ensure new fields on old user records
@@ -244,6 +246,10 @@ def get_user_state(user_id: int) -> Dict[str, Any]:
     state.setdefault("estus_flasks", 3)
     state.setdefault("estus_max", 3)
     state.setdefault("souls_module_earned", 0)
+    # Onboarding back-compat
+    state.setdefault("onboarding_complete", False)
+    # Notification state back-compat
+    state.setdefault("last_hollow_notif", None)
     # Boss system back-compat
     state.setdefault("boss_attempts", [])
     state.setdefault("bonfire_rested", [])  # list of module_ids where bonfire was rested

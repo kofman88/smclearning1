@@ -6767,3 +6767,246 @@ body.is-hollow::after {
   0%   { opacity: 1; }
   100% { opacity: 0; }
 }
+
+/* ═══════════════════════════════════════════════════════════
+   SYNTHESIS RITUAL ONBOARDING
+   ═══════════════════════════════════════════════════════════ */
+
+/* Full-screen overlay */
+.synth-ritual {
+  position: fixed; inset: 0; z-index: 10000;
+  background: #000;
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden;
+}
+.synth-ritual.hidden { display: none !important; }
+
+/* Phase containers */
+.synth-phase {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  padding: 32px 24px;
+  gap: 16px;
+}
+
+/* ── Text styles ── */
+.synth-text {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 18px; font-weight: 500;
+  color: rgba(232,230,225,0.92);
+  text-align: center; line-height: 1.6;
+  max-width: 300px;
+  white-space: pre-wrap;
+}
+.synth-text--dim {
+  opacity: 0.3; font-size: 15px;
+}
+.synth-text--warning {
+  color: #8b1a1a;
+  font-size: 18px; font-weight: 600;
+  text-shadow: 0 0 20px rgba(139,26,26,0.6);
+  animation: synth-warning-pulse 1.5s ease-in-out 3;
+}
+@keyframes synth-warning-pulse {
+  0%,100% { opacity: 1; }
+  50% { opacity: 0.6; color: #c04040; }
+}
+
+/* ── Alchemical symbols ring ── */
+.synth-symbols {
+  position: absolute;
+  width: 240px; height: 240px;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -60%);
+  animation: synth-symbols-spin 60s linear infinite;
+}
+.synth-symbols span {
+  position: absolute;
+  top: 50%; left: 50%;
+  font-size: 14px; color: rgba(80,200,80,0.4);
+  transform-origin: 0 0;
+  transform: rotate(var(--a)) translate(100px, -7px);
+}
+@keyframes synth-symbols-spin {
+  from { transform: translate(-50%, -60%) rotate(0deg); }
+  to   { transform: translate(-50%, -60%) rotate(360deg); }
+}
+
+/* ── Flask wrapper ── */
+.synth-flask-wrap {
+  position: relative;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  margin-bottom: 8px;
+}
+.synth-flask-svg {
+  width: 140px; height: 186px;
+  filter: drop-shadow(0 0 18px rgba(0,200,80,0.4));
+}
+.synth-flask-glow {
+  position: absolute; inset: -30px;
+  background: radial-gradient(circle, rgba(0,200,80,0.18) 0%, transparent 70%);
+  pointer-events: none;
+  animation: synth-glow-pulse 2.5s ease-in-out infinite;
+}
+.synth-flask-glow--burst {
+  animation: synth-glow-burst 0.5s ease-out forwards;
+}
+@keyframes synth-glow-pulse {
+  0%,100% { opacity: 0.7; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.1); }
+}
+@keyframes synth-glow-burst {
+  0% { opacity: 1; transform: scale(1); }
+  50% { opacity: 1.5; transform: scale(2.5); background: radial-gradient(circle, rgba(100,255,150,0.5) 0%, transparent 70%); }
+  100% { opacity: 0; transform: scale(3); }
+}
+
+/* Liquid fill animation */
+.synth-liquid {
+  animation: synth-liquid-ripple 2s ease-in-out infinite;
+}
+@keyframes synth-liquid-ripple {
+  0%,100% { transform: scaleY(1); transform-origin: bottom; }
+  50% { transform: scaleY(1.03); }
+}
+.synth-liquid--burst {
+  animation: synth-liquid-boil 0.25s ease-in-out infinite;
+}
+@keyframes synth-liquid-boil {
+  0%,100% { transform: scaleY(1) scaleX(1); }
+  33% { transform: scaleY(1.05) scaleX(0.98); }
+  66% { transform: scaleY(0.97) scaleX(1.02); }
+}
+
+/* Bubble float */
+.synth-bubble {
+  animation: synth-bubble-rise 2s ease-in-out infinite;
+}
+@keyframes synth-bubble-rise {
+  0%,100% { transform: translateY(0); opacity: 0.7; }
+  50% { transform: translateY(-10px); opacity: 1; }
+}
+
+/* Flask shaking */
+.synth-flask--shaking .synth-flask-svg {
+  animation: synth-flask-shake 0.15s ease-in-out infinite;
+}
+@keyframes synth-flask-shake {
+  0%,100% { transform: rotate(0deg) translate(0, 0); }
+  25% { transform: rotate(-4deg) translate(-3px, 2px); }
+  50% { transform: rotate(4deg) translate(3px, -2px); }
+  75% { transform: rotate(-2deg) translate(-2px, 1px); }
+}
+
+/* Tap hint */
+.synth-tap-hint {
+  font-size: 13px; color: rgba(0,200,80,0.7);
+  letter-spacing: 0.06em; text-align: center;
+  animation: synth-hint-pulse 1.8s ease-in-out infinite;
+  margin-top: 8px;
+}
+@keyframes synth-hint-pulse {
+  0%,100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
+/* ── Flash effect ── */
+.synth-flash {
+  position: absolute; inset: 0; z-index: 1;
+  background: rgba(255,255,255,0);
+  pointer-events: none;
+}
+.synth-flash--active {
+  animation: synth-flash-anim 0.7s ease-out forwards;
+}
+@keyframes synth-flash-anim {
+  0% { background: rgba(255,255,255,0); }
+  15% { background: rgba(255,255,255,0.82); }
+  100% { background: rgba(255,255,255,0); }
+}
+
+/* ── Birth phase ── */
+.synth-birth-glow {
+  position: absolute; inset: 0;
+  background: radial-gradient(circle at center, rgba(168,85,247,0.25) 0%, transparent 65%);
+  pointer-events: none;
+  animation: synth-birth-glow-anim 1s ease-out forwards;
+}
+@keyframes synth-birth-glow-anim {
+  0% { opacity: 0; transform: scale(0.5); }
+  100% { opacity: 1; transform: scale(1); }
+}
+.synth-creature-born {
+  animation: synth-creature-appear 0.8s cubic-bezier(0.34,1.56,0.64,1) forwards;
+}
+@keyframes synth-creature-appear {
+  0% { transform: scale(0) translateY(40px); opacity: 0; }
+  100% { transform: scale(1) translateY(0); opacity: 1; }
+}
+.synth-birth-text {
+  text-align: center; margin-top: 8px;
+  animation: synth-text-fade 0.8s ease forwards;
+  animation-delay: 0.5s; opacity: 0;
+}
+@keyframes synth-text-fade {
+  to { opacity: 1; }
+}
+.synth-born-title {
+  font-size: 18px; font-weight: 700;
+  color: #c8a84e; letter-spacing: 0.03em;
+  text-shadow: 0 0 16px rgba(200,168,78,0.5);
+}
+.synth-born-sub {
+  font-size: 13px; color: rgba(232,230,225,0.55);
+  margin-top: 6px; line-height: 1.5;
+}
+.synth-souls-award {
+  display: flex; align-items: baseline; gap: 6px;
+  margin-top: 16px;
+  animation: synth-text-fade 0.5s ease forwards;
+  animation-delay: 0.8s; opacity: 0;
+}
+.synth-souls-num {
+  font-size: 42px; font-weight: 900;
+  color: #c8a84e;
+  font-family: 'JetBrains Mono', monospace;
+  text-shadow: 0 0 20px rgba(200,168,78,0.6);
+}
+.synth-souls-label {
+  font-size: 18px; color: rgba(200,168,78,0.7);
+  font-weight: 600;
+}
+
+/* ── Tooltip phase ── */
+.synth-tooltip {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(168,85,247,0.25);
+  border-radius: 16px; padding: 20px 24px;
+  max-width: 300px; text-align: center;
+  animation: synth-tooltip-appear 0.4s cubic-bezier(0.34,1.56,0.64,1) forwards;
+}
+@keyframes synth-tooltip-appear {
+  0% { transform: translateY(30px) scale(0.9); opacity: 0; }
+  100% { transform: translateY(0) scale(1); opacity: 1; }
+}
+.synth-tooltip p {
+  font-size: 15px; color: rgba(232,230,225,0.85);
+  line-height: 1.6; margin-bottom: 16px;
+}
+.synth-tooltip p b { color: #c084fc; }
+.synth-tooltip-btn {
+  padding: 10px 24px;
+  background: linear-gradient(135deg, #7c3aed, #a855f7);
+  border: none; border-radius: 12px;
+  color: #fff; font-size: 14px; font-weight: 700;
+  cursor: pointer; letter-spacing: 0.03em;
+  box-shadow: 0 4px 16px rgba(168,85,247,0.35);
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+.synth-tooltip-btn:active {
+  transform: scale(0.96);
+  box-shadow: 0 2px 8px rgba(168,85,247,0.25);
+}

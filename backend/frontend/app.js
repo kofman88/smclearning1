@@ -105,43 +105,157 @@ function el(tag, cls, text) {
 }
 
 
-// ── ONBOARDING ────────────────────────────────────────────────────────────
-let obCurrentSlide = 0;
-const OB_TOTAL = 3;
+// ── SYNTHESIS RITUAL ONBOARDING ───────────────────────────────────────────
 
-function initOnboarding() {
-  const overlay = $("#onboardingOverlay");
-  if (!overlay || localStorage.getItem("smc_onboarding_done")) return;
+// Called from init() — checks server flag first, then runs ritual if needed.
+// `onboardingDone` is set from initData.onboarding_complete in init().
+let _ritualActive = false;
+
+function initOnboarding(onboardingComplete) {
+  // Already done (server flag takes precedence over localStorage)
+  if (onboardingComplete || localStorage.getItem("smc_ritual_done")) return;
+  _ritualActive = true;
+  const overlay = $("#synthRitual");
+  if (!overlay) return;
   overlay.classList.remove("hidden");
-  const nextBtn = $("#ob-next-btn");
-  const skipBtn = $("#ob-skip-btn");
-  nextBtn.addEventListener("click", () => {
-    if (obCurrentSlide < OB_TOTAL - 1) goToSlide(obCurrentSlide + 1);
-    else closeOnboarding();
-  });
-  skipBtn.addEventListener("click", closeOnboarding);
-  document.querySelectorAll(".ob-dot").forEach(dot => {
-    dot.addEventListener("click", () => goToSlide(parseInt(dot.dataset.dot)));
+  _runRitualPhase1();
+}
+
+// ── Phase 1: Dark screen + typewriter text ──────────────────────────────
+function _runRitualPhase1() {
+  const phase = $("#srPhase1");
+  if (!phase) return;
+  phase.style.display = "flex";
+  _typewriter("srText1", "Ты пришёл учиться у рынка.", 40, () => {
+    setTimeout(_runRitualPhase2, 1500);
   });
 }
 
-function goToSlide(idx) {
-  const slides = document.querySelectorAll(".ob-slide");
-  const dots   = document.querySelectorAll(".ob-dot");
-  const nextBtn = $("#ob-next-btn");
-  slides[obCurrentSlide].classList.add("exit-left");
-  slides[obCurrentSlide].classList.remove("active");
-  setTimeout(() => slides[obCurrentSlide]?.classList.remove("exit-left"), 400);
-  obCurrentSlide = idx;
-  slides[idx].classList.add("active");
-  dots.forEach((d, i) => d.classList.toggle("active", i === idx));
-  nextBtn.textContent = idx === OB_TOTAL - 1 ? "Начать →" : "Далее";
+// ── Phase 2: Warning text ───────────────────────────────────────────────
+function _runRitualPhase2() {
+  if (tg?.HapticFeedback) tg.HapticFeedback.impactOccurred("medium");
+  const p1 = $("#srPhase1");
+  const p2 = $("#srPhase2");
+  if (p1) p1.style.display = "none";
+  if (!p2) return;
+  p2.style.display = "flex";
+  const t1b = $("#srText1b");
+  if (t1b) t1b.textContent = "Ты пришёл учиться у рынка.";
+  _typewriter("srText2", "Рынок не прощает. Мы тоже.", 45, () => {
+    setTimeout(_runRitualPhase3, 2000);
+  });
 }
 
-function closeOnboarding() {
-  const overlay = $("#onboardingOverlay");
-  if (overlay) { overlay.style.animation = "fadeOut 0.3s ease forwards"; setTimeout(() => overlay.classList.add("hidden"), 300); }
-  localStorage.setItem("smc_onboarding_done", "1");
+// ── Phase 3: Flask appears, waiting for tap ─────────────────────────────
+function _runRitualPhase3() {
+  const p2 = $("#srPhase2");
+  const p3 = $("#srPhase3");
+  if (p2) p2.style.display = "none";
+  if (!p3) return;
+  p3.style.display = "flex";
+  p3.style.opacity = "0";
+  p3.style.transition = "opacity 2s ease";
+  requestAnimationFrame(() => { p3.style.opacity = "1"; });
+}
+
+// ── Phase 4: Tap on flask → synthesis ──────────────────────────────────
+function onRitualFlaskTap() {
+  if (!_ritualActive) return;
+  if (tg?.HapticFeedback) tg.HapticFeedback.impactOccurred("heavy");
+  const p3 = $("#srPhase3");
+  const p4 = $("#srPhase4");
+  if (p3) p3.style.display = "none";
+  if (!p4) return;
+  p4.style.display = "flex";
+  // Flash effect
+  const flash = $("#srFlash");
+  if (flash) {
+    flash.style.animation = "none";
+    void flash.offsetWidth;
+    flash.classList.add("synth-flash--active");
+    setTimeout(() => flash.classList.remove("synth-flash--active"), 700);
+  }
+  setTimeout(_runRitualPhase5, 1800);
+}
+window.onRitualFlaskTap = onRitualFlaskTap;
+
+// ── Phase 5: Homunculus born, souls counter ─────────────────────────────
+function _runRitualPhase5() {
+  if (tg?.HapticFeedback) tg.HapticFeedback.notificationOccurred("success");
+  const p4 = $("#srPhase4");
+  const p5 = $("#srPhase5");
+  if (p4) p4.style.display = "none";
+  if (!p5) return;
+  p5.style.display = "flex";
+  // Animate souls counter from 0 to 50
+  let count = 0;
+  const numEl = $("#srSoulsNum");
+  const interval = setInterval(() => {
+    count += 2;
+    if (numEl) numEl.textContent = count;
+    if (count >= 50) { clearInterval(interval); if (numEl) numEl.textContent = "50"; }
+  }, 40);
+  setTimeout(_runRitualPhase6, 3500);
+}
+
+// ── Phase 6: Tooltips ───────────────────────────────────────────────────
+function _runRitualPhase6() {
+  const p5 = $("#srPhase5");
+  const p6 = $("#srPhase6");
+  if (p5) p5.style.display = "none";
+  if (!p6) return;
+  p6.style.display = "flex";
+}
+
+function onRitualTooltip1() {
+  const t1 = $("#srTooltip1");
+  const t2 = $("#srTooltip2");
+  if (t1) t1.style.display = "none";
+  if (t2) t2.style.display = "block";
+}
+window.onRitualTooltip1 = onRitualTooltip1;
+
+async function onRitualComplete() {
+  _ritualActive = false;
+  const overlay = $("#synthRitual");
+  if (overlay) {
+    overlay.style.transition = "opacity 0.6s ease";
+    overlay.style.opacity = "0";
+    setTimeout(() => overlay.classList.add("hidden"), 650);
+  }
+  localStorage.setItem("smc_ritual_done", "1");
+  // Tell server onboarding is complete (awards +50 souls)
+  try {
+    if (state.userId) {
+      const res  = await fetch(`${API}/onboarding/complete`, {
+        method:  "POST",
+        headers: {"Content-Type": "application/json"},
+        body:    JSON.stringify({user_id: state.userId}),
+      });
+      const data = await res.json();
+      if (data.total_souls != null) {
+        state.souls = data.total_souls;
+        _updateSoulsDisplay(state.souls);
+      }
+    }
+  } catch(e) { console.warn("onboarding/complete error:", e); }
+}
+window.onRitualComplete = onRitualComplete;
+
+// ── Typewriter helper ───────────────────────────────────────────────────
+function _typewriter(elId, text, msPerChar, onDone) {
+  const el = $(`#${elId}`);
+  if (!el) { if (onDone) onDone(); return; }
+  el.textContent = "";
+  let i = 0;
+  const interval = setInterval(() => {
+    el.textContent += text[i];
+    i++;
+    if (i >= text.length) {
+      clearInterval(interval);
+      if (onDone) setTimeout(onDone, 100);
+    }
+  }, msPerChar);
 }
 
 // ── CONFETTI ──────────────────────────────────────────────────────────────
@@ -1330,8 +1444,6 @@ window.showDeadlineExpiredScreen = showDeadlineExpiredScreen;
 
 // ── INITIAL LOAD ──────────────────────────────────────────────────────────
 async function init() {
-  initOnboarding();
-
   const info = getUserInfo();
   state.userId = info.id;
 
@@ -1342,6 +1454,9 @@ async function init() {
       body: JSON.stringify({ user_id: info.id, username: info.username, first_name: info.first_name, last_name: info.last_name }),
     });
     const initData = await initRes.json();
+
+    // Show Synthesis Ritual onboarding if user hasn't completed it
+    initOnboarding(initData.onboarding_complete || false);
 
     const [userRes, modulesRes, questsRes, metaRes, lbRes] = await Promise.all([
       fetch(`${API}/user/${info.id}`),
