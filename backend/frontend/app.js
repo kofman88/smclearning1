@@ -1444,46 +1444,99 @@ async function refreshHeader() {
 }
 window.showDeadlineExpiredScreen = showDeadlineExpiredScreen;
 
+// ── FETCH WITH TIMEOUT ────────────────────────────────────────────────────
+function fetchWithTimeout(url, options, timeoutMs = 20000) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  return fetch(url, { ...options, signal: ctrl.signal }).finally(() => clearTimeout(timer));
+}
+
+// ── LOADING ERROR UI ──────────────────────────────────────────────────────
+function showLoadingError(msg) {
+  const el = $("#moduleName");
+  if (el) el.textContent = "Ошибка загрузки";
+  const progLabel = $("#progressLabel");
+  if (progLabel) progLabel.textContent = msg || "Нет соединения с сервером";
+  // Show retry button inside progress area
+  const retryWrap = $("#retryWrap");
+  if (retryWrap) {
+    retryWrap.style.display = "flex";
+  } else {
+    const bar = $("#progressBar")?.parentElement;
+    if (bar) {
+      const btn = document.createElement("button");
+      btn.id = "retryWrap";
+      btn.className = "btn-primary";
+      btn.style.cssText = "margin-top:12px;width:100%;font-size:14px;";
+      btn.textContent = "Повторить";
+      btn.onclick = () => { btn.style.display = "none"; init(); };
+      bar.appendChild(btn);
+    }
+  }
+}
+
 // ── INITIAL LOAD ──────────────────────────────────────────────────────────
 async function init() {
   const info = getUserInfo();
   state.userId = info.id;
 
+  // Show a "slow start" hint after 5s if still waiting
+  const slowTimer = setTimeout(() => {
+    const el = $("#moduleName");
+    if (el && el.textContent === "Загрузка...") {
+      el.textContent = "Сервер запускается…";
+    }
+  }, 5000);
+
   try {
-    const initRes = await fetch(`${API}/user/init`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        user_id: info.id,
-        username: info.username,
-        first_name: info.first_name,
-        last_name: info.last_name,
-        init_data: tg?.initData || "",
-      }),
-    });
-    const initData = await initRes.json();
-    // Store validated user_id (may differ from initDataUnsafe if spoofed)
-    if (initData.user_id) state.userId = initData.user_id;
-    // Store session token for subsequent authenticated requests
-    if (initData.session_token) {
-      state.sessionToken = initData.session_token;
-      localStorage.setItem(`smc_session_${state.userId}`, initData.session_token);
+    let initData = {};
+    try {
+      const initRes = await fetchWithTimeout(`${API}/user/init`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id: info.id,
+          username: info.username,
+          first_name: info.first_name,
+          last_name: info.last_name,
+          init_data: tg?.initData || "",
+        }),
+      }, 20000);
+      const parsed = await initRes.json();
+      // Only use initData when the server confirmed success
+      if (parsed.ok) {
+        initData = parsed;
+        // Store validated user_id (may differ from initDataUnsafe if spoofed)
+        if (initData.user_id) state.userId = initData.user_id;
+        // Store session token for subsequent authenticated requests
+        if (initData.session_token) {
+          state.sessionToken = initData.session_token;
+          localStorage.setItem(`smc_session_${state.userId}`, initData.session_token);
+        }
+        // Show Synthesis Ritual onboarding only on confirmed success
+        initOnboarding(initData.onboarding_complete || false);
+      } else {
+        console.warn("user/init non-ok:", parsed);
+      }
+    } catch (initErr) {
+      // init endpoint timed out or failed — continue loading data anyway
+      console.warn("user/init failed, continuing:", initErr);
     }
 
-    // Show Synthesis Ritual onboarding if user hasn't completed it
-    initOnboarding(initData.onboarding_complete || false);
-
+    const userId = state.userId;
     const [userRes, modulesRes, questsRes, metaRes, lbRes] = await Promise.all([
-      fetch(`${API}/user/${info.id}`),
-      fetch(`${API}/modules`),
-      fetch(`${API}/quests/${info.id}`),
-      fetch(`${API}/lessons/meta`),
-      fetch(`${API}/leaderboard`),
+      fetchWithTimeout(`${API}/user/${userId}`, {}, 20000),
+      fetchWithTimeout(`${API}/modules`, {}, 20000),
+      fetchWithTimeout(`${API}/quests/${userId}`, {}, 20000),
+      fetchWithTimeout(`${API}/lessons/meta`, {}, 20000),
+      fetchWithTimeout(`${API}/leaderboard`, {}, 20000),
     ]);
 
     const [userData, modulesData, questsData, metaData, lbData] = await Promise.all([
       userRes.json(), modulesRes.json(), questsRes.json(), metaRes.json(), lbRes.json(),
     ]);
+
+    clearTimeout(slowTimer);
 
     Object.assign(state.lessonsMetaCache, metaData);
 
@@ -1536,8 +1589,10 @@ async function init() {
     setTimeout(_checkDailyBadge, 1500);
 
   } catch (e) {
+    clearTimeout(slowTimer);
     console.error("init error:", e);
-    showToast("Ошибка загрузки данных", "error");
+    const isTimeout = e?.name === "AbortError";
+    showLoadingError(isTimeout ? "Сервер не отвечает. Попробуй ещё раз." : "Ошибка загрузки данных.");
   }
 }
 
