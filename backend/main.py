@@ -147,6 +147,13 @@ from bot import bot as telegram_bot, setup_webhook, process_update, make_hw_keyb
 from boss import router as boss_router
 from social import router as social_router, get_daily_challenge, _msk_now
 from notification_service import notification_service
+# ── CATALYST ───────────────────────────────────────────────────────────────
+from catalyst import (
+    router as catalyst_router, get_status as cat_get_status,
+    activate as cat_activate, attack as cat_attack,
+    drain_hourly as cat_drain_hourly, award_isotope as cat_award_isotope,
+    get_player_info as cat_player_info,
+)
 
 @asynccontextmanager
 async def lifespan(application: FastAPI):
@@ -200,6 +207,8 @@ async def lifespan(application: FastAPI):
     logger.info("Notification queue flush loop started")
     asyncio.create_task(_deadline_check_loop())
     logger.info("Deadline check loop started")
+    asyncio.create_task(_catalyst_drain_loop())
+    logger.info("Catalyst drain loop started")
     if _raw_webhook:
         asyncio.create_task(_keep_alive_loop(_raw_webhook))
         logger.info("Keep-alive loop started")
@@ -246,6 +255,7 @@ app.add_middleware(NoCacheStaticMiddleware)
 # ── Boss & Social routers ──────────────────────────────────────────────────
 app.include_router(boss_router)
 app.include_router(social_router)
+app.include_router(catalyst_router)
 
 # ── Static frontend ───────────────────────────────────────────────────────────
 FRONTEND_DIR = Path(__file__).parent / "frontend"
@@ -2204,3 +2214,86 @@ async def _deadline_check_loop():
                     logger.debug("deadline_check uid=%s: %r", uid, e)
         except Exception as e:
             logger.error("_deadline_check_loop error: %r", e)
+
+# ── CATALYST API ──────────────────────────────────────────────────────────────
+
+class CatReq(BaseModel):
+    user_id: int
+
+@app.get("/api/catalyst/status")
+async def catalyst_status():
+    return cat_get_status()
+
+@app.post("/api/catalyst/activate")
+async def catalyst_activate_api(req: CatReq):
+    st = get_user_state(req.user_id)
+    result = cat_activate(req.user_id, st.get("name", str(req.user_id)),
+                          st.get("level", 1), user_progress)
+    save_progress()
+    if result.get("ok"):
+        username = st.get("name", str(req.user_id))
+        async def _notify():
+            for uid in list(user_progress.keys()):
+                try:
+                    await asyncio.get_running_loop().run_in_executor(None,
+                        lambda u=int(uid): telegram_bot.send_message(u,
+                            f"⚗️ <b>ЦЕПНАЯ РЕАКЦИЯ!</b>\n\n<b>{username}</b> стал Катализатором!\n"
+                            f"Он дренирует Души онлайн-игроков.\n<b>Нейтрализуй его → вкладка Алхимия</b>",
+                            parse_mode="HTML"))
+                except Exception:
+                    pass
+        asyncio.create_task(_notify())
+    return result
+
+@app.post("/api/catalyst/attack")
+async def catalyst_attack_api(req: CatReq):
+    st = get_user_state(req.user_id)
+    result = cat_attack(req.user_id, st.get("name", str(req.user_id)),
+                        st.get("level", 1), user_progress)
+    save_progress()
+    if result.get("slain"):
+        username = st.get("name", str(req.user_id))
+        async def _notify_slain():
+            for uid in list(user_progress.keys()):
+                try:
+                    await asyncio.get_running_loop().run_in_executor(None,
+                        lambda u=int(uid): telegram_bot.send_message(u,
+                            f"💥 <b>НЕЙТРАЛИЗОВАНО!</b>\n\n<b>{username}</b> нейтрализовал Катализатор!\nТвои Души в безопасности.",
+                            parse_mode="HTML"))
+                except Exception:
+                    pass
+        asyncio.create_task(_notify_slain())
+    return result
+
+@app.get("/api/catalyst/my/{user_id}")
+async def catalyst_my_info(user_id: int):
+    st = get_user_state(user_id)
+    return cat_player_info(user_id, st.get("level", 1), user_progress)
+
+@app.get("/api/catalyst/records")
+async def catalyst_records_api():
+    s = cat_get_status()
+    return {"records": s.get("records", []), "active": s.get("active", False)}
+
+async def _catalyst_drain_loop():
+    """Дренаж раз в ЧАС."""
+    while True:
+        await asyncio.sleep(3600)
+        try:
+            result = cat_drain_hourly(user_progress)
+            if result.get("drained", 0) > 0:
+                logger.info("Catalyst hourly drain: %.4f souls from %d victims",
+                            result["drained"], result["victims"])
+                save_progress()
+            if result.get("stabilized"):
+                save_progress()
+                for uid in list(user_progress.keys()):
+                    try:
+                        asyncio.get_running_loop().run_in_executor(None,
+                            lambda u=int(uid): telegram_bot.send_message(u,
+                                "⚗️ <b>Реакция стабилизировалась.</b>\nКатализатор выжил 24ч. Буфер × 1.5 ему.",
+                                parse_mode="HTML"))
+                    except Exception:
+                        pass
+        except Exception as e:
+            logger.error("_catalyst_drain_loop: %r", e)
