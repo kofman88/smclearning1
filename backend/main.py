@@ -428,10 +428,27 @@ async def health():
 async def user_init(req: UserInitRequest):
     """Initialize or update user session: set name, update streak, claim daily bonus."""
     # ── Telegram initData validation (when provided) ───────────────────────
+    # Non-blocking: log warnings but never reject the request.
+    # Strict enforcement can be enabled once HMAC is verified against live traffic.
     user_id = req.user_id
     if req.init_data:
         tg_user = validate_telegram_init_data(req.init_data)
         if tg_user is None:
+            # Validation failed — log for monitoring but allow through
+            logger.warning("initData validation failed for user_id=%s (non-blocking)", req.user_id)
+        else:
+            # Override user_id with the validated one — prevents spoofing
+            validated_id = tg_user.get("id")
+            if validated_id and validated_id != req.user_id:
+                logger.warning("user_id mismatch: req=%s validated=%s — using validated", req.user_id, validated_id)
+                user_id = validated_id
+            # Trust names from validated initData
+            if not req.username:
+                req.username = tg_user.get("username")
+            if not req.first_name:
+                req.first_name = tg_user.get("first_name")
+            if not req.last_name:
+                req.last_name = tg_user.get("last_name")
             # Hard rejection only for HMAC mismatches (actual spoofing attempt).
             # None means validation ran with a BOT_TOKEN and the signature was wrong.
             logger.warning("Rejecting user_id=%d: initData HMAC validation failed", user_id)
