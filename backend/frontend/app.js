@@ -157,6 +157,8 @@ function _runRitualPhase3() {
   p3.style.opacity = "0";
   p3.style.transition = "opacity 2s ease";
   requestAnimationFrame(() => { p3.style.opacity = "1"; });
+  // Auto-advance if user doesn't tap the flask within 10 seconds
+  setTimeout(() => { if (_ritualActive) onRitualFlaskTap(); }, 10000);
 }
 
 // ── Phase 4: Tap on flask → synthesis ──────────────────────────────────
@@ -206,6 +208,8 @@ function _runRitualPhase6() {
   if (p5) p5.style.display = "none";
   if (!p6) return;
   p6.style.display = "flex";
+  // Auto-complete if user doesn't click through tooltips within 12 seconds
+  setTimeout(() => { if (_ritualActive) onRitualComplete(); }, 12000);
 }
 
 function onRitualTooltip1() {
