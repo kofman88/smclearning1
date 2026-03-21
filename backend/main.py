@@ -17,6 +17,7 @@ from datetime import datetime, timedelta
 from urllib.parse import parse_qsl, unquote
 
 from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, Response, JSONResponse
@@ -209,6 +210,9 @@ app = FastAPI(title="CHM Smart Money Academy API", version="4.0.0", lifespan=lif
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
+    # Don't intercept HTTP/validation exceptions — let FastAPI handle them (404, 422, etc.)
+    if isinstance(exc, (HTTPException, RequestValidationError)):
+        raise exc
     logger.exception("Unhandled exception on %s %s: %r", request.method, request.url.path, exc)
     return JSONResponse(status_code=500, content={"ok": False, "error": "Internal server error"})
 
@@ -436,33 +440,18 @@ async def user_init(req: UserInitRequest):
         if tg_user is None:
             # Validation failed — log for monitoring but allow through
             logger.warning("initData validation failed for user_id=%s (non-blocking)", req.user_id)
-        else:
-            # Override user_id with the validated one — prevents spoofing
+        elif isinstance(tg_user, dict):
+            # Validation succeeded (or skipped if no BOT_TOKEN) — use validated data
             validated_id = tg_user.get("id")
             if validated_id and validated_id != req.user_id:
                 logger.warning("user_id mismatch: req=%s validated=%s — using validated", req.user_id, validated_id)
                 user_id = validated_id
-            # Trust names from validated initData
             if not req.username:
                 req.username = tg_user.get("username")
             if not req.first_name:
                 req.first_name = tg_user.get("first_name")
             if not req.last_name:
                 req.last_name = tg_user.get("last_name")
-            # Hard rejection only for HMAC mismatches (actual spoofing attempt).
-            # None means validation ran with a BOT_TOKEN and the signature was wrong.
-            logger.warning("Rejecting user_id=%d: initData HMAC validation failed", user_id)
-            raise HTTPException(status_code=403, detail="Invalid Telegram initData")
-        # tg_user is a dict (possibly empty if BOT_TOKEN not set — soft validation)
-        # Override user_id with the validated one — prevents spoofing
-        user_id = tg_user.get("id", user_id)
-        # Trust names from validated initData
-        if not req.username:
-            req.username = tg_user.get("username")
-        if not req.first_name:
-            req.first_name = tg_user.get("first_name")
-        if not req.last_name:
-            req.last_name = tg_user.get("last_name")
 
     state = get_user_state(user_id)
     name = (
