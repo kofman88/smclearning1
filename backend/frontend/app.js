@@ -2013,7 +2013,6 @@ window.onHomunculusTap = function(e) {
 };
 
 // Override float reward to use combo color
-const _origSpawnFloat = _spawnFloatReward;
 function _spawnFloatRewardColored(text, px, py, combo) {
   const container = document.getElementById("homFloatRewards");
   if (!container) return;
