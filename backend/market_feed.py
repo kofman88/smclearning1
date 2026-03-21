@@ -191,7 +191,7 @@ async def refresh_market_data() -> Dict[str, Any]:
         raw: Optional[Dict[str, Any]] = None
         last_err: Exception = Exception("no providers tried")
 
-        for provider_fn, name in [(_fetch_coingecko, "CoinGecko"), (_fetch_kraken, "Kraken")]:
+        for provider_fn, name in [(_fetch_kraken, "Kraken"), (_fetch_coingecko, "CoinGecko")]:
             try:
                 raw = await provider_fn()
                 break

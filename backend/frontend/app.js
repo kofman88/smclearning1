@@ -1567,8 +1567,8 @@ async function init() {
       showDailyBonus(initData.daily_bonus_xp, initData.streak);
     }
 
-    // Evolution badge from init response
-    if (initData.evolution) renderEvolution(initData.evolution);
+    // Evolution badge from init response (only show when user actually evolved)
+    if (initData.evolution?.evolved) showToast(`⚗️ Эволюция! ${initData.evolution.info?.name || "Новая стадия"}`, "info");
 
     // ── SOULS SYSTEM: update HUD from init response ─────────────────────
     if (initData.souls_state) {
