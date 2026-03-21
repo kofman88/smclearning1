@@ -3,7 +3,7 @@ services:
     name: smc-quest-miniapp
     env: python
     rootDir: backend
-    buildCommand: pip install -r ../requirements.txt
+    buildCommand: pip install -r ../requirements.txt && python -c "import matplotlib.font_manager; print('matplotlib font cache built')"
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
     envVars:

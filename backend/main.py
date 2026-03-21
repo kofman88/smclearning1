@@ -140,7 +140,9 @@ from oracle_engine import generate_oracle
 from dream_generator import generate_dream
 from lessons import LESSONS, MODULES
 from quests import QUESTS, QUIZZES
-from charts import generate_chart
+def generate_chart(lesson_key):  # lazy proxy — defers heavy matplotlib import to first chart request
+    from charts import generate_chart as _gc
+    return _gc(lesson_key)
 from bot import bot as telegram_bot, setup_webhook, process_update, make_hw_keyboard
 from boss import router as boss_router
 from social import router as social_router, get_daily_challenge, _msk_now
