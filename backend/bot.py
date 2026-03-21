@@ -8,8 +8,8 @@ from telebot import types
 load_dotenv()
 logger = logging.getLogger(__name__)
 
-BOT_TOKEN   = os.getenv("BOT_TOKEN", "")
-WEBHOOK_URL = os.getenv("WEBHOOK_URL", "")
+BOT_TOKEN   = os.getenv("BOT_TOKEN", "").strip()
+WEBHOOK_URL = os.getenv("WEBHOOK_URL", "").strip().rstrip("/")
 
 _cached_admin_ids: set = set()
 
@@ -462,13 +462,14 @@ def _do_hw_callback(call: types.CallbackQuery):
 
 
 def setup_webhook():
-    if not BOT_TOKEN or not WEBHOOK_URL:
+    # Re-read and strip env vars in case they were set after module load
+    token = os.getenv("BOT_TOKEN", "").strip()
+    webhook_url = os.getenv("WEBHOOK_URL", "").strip().rstrip("/")
+    if not token or not webhook_url:
         logger.warning("BOT_TOKEN или WEBHOOK_URL не установлены, вебхук не настроен")
         return
-    target = f"{WEBHOOK_URL}/webhook"
-    # IMPORTANT: Do NOT call remove_webhook() first.
-    # If set_webhook() then fails, the bot would have NO webhook and go silent.
-    # Telegram replaces the old webhook automatically when set_webhook() succeeds.
+    target = f"{webhook_url}/webhook"
+    logger.info("Устанавливаем вебхук: %r (len=%d)", target, len(target))
     for attempt in range(3):
         try:
             bot.set_webhook(
@@ -476,10 +477,10 @@ def setup_webhook():
                 allowed_updates=["message", "callback_query", "channel_post", "edited_channel_post"],
                 drop_pending_updates=False,
             )
-            logger.info(f"Вебхук установлен: {target}")
+            logger.info("✅ Вебхук установлен успешно: %s", target)
             return
         except Exception as e:
-            logger.error(f"Ошибка установки вебхука (попытка {attempt+1}/3): {e}")
+            logger.error("Ошибка установки вебхука (попытка %d/3): %s", attempt + 1, e)
             if attempt < 2:
                 import time; time.sleep(2 ** attempt)
     logger.critical("Не удалось установить вебхук после 3 попыток!")
