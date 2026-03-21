@@ -1430,6 +1430,7 @@ function showDailyBonus(xp, streak) {
 
 // ── API CALLS ─────────────────────────────────────────────────────────────
 async function loadQuests() {
+  if (!state.userId) { console.warn("quests fetch skipped: userId not set"); return; }
   try {
     const res  = await fetch(`${API}/quests/${state.userId}`);
     const data = await res.json();
@@ -1446,6 +1447,7 @@ async function loadLeaderboard() {
 }
 
 async function refreshHeader() {
+  if (!state.userId) { console.warn("quests fetch skipped: userId not set"); return; }
   try {
     const res = await fetch(`${API}/user/${state.userId}`);
     const s   = await res.json();
@@ -1568,6 +1570,8 @@ async function init() {
 
     clearTimeout(slowTimer);
 
+    state.userState = userData; // set BEFORE any render* calls
+
     console.log("[DEBUG] userData:", userData);
     console.log("[DEBUG] modulesData:", modulesData);
     console.log("[DEBUG] questsData:", questsData);
@@ -1622,6 +1626,8 @@ async function init() {
 
     // Phase 3: check daily challenge badge
     setTimeout(_checkDailyBadge, 1500);
+
+    console.log("[CHM] init complete. userId=", state.userId, "modules=", modulesData?.modules?.length);
 
   } catch (e) {
     clearTimeout(slowTimer);
