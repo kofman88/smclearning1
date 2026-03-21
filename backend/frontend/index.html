@@ -275,6 +275,10 @@
           <span class="hud-label">Lvl</span>
           <span class="hud-val" id="hudLevelVal">1</span>
         </div>
+        <div class="hud-pill hud-actions" id="actionsHUD">
+          <span class="hud-icon">⚡</span>
+          <span id="actionsLeft">?</span>
+        </div>
         <button id="soundBtn" class="hud-sound-btn" onclick="toggleSound()">🔊</button>
       </div>
     </header>
@@ -399,6 +403,9 @@
           </div>
           <span class="hom-status-badge" id="homStatusBadge">active</span>
         </div>
+
+        <!-- Actions reset timer -->
+        <div id="actionsResetTimer" style="display:none;text-align:center;font-size:11px;color:#475569;padding:6px 0"></div>
 
         <!-- Creature area -->
         <div class="hom-creature-wrap" id="homCreatureWrap" onclick="onHomunculusTap(event)">

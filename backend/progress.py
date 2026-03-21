@@ -1359,3 +1359,93 @@ def get_trader_dna(user_id: int) -> Dict[str, Any]:
         "lessons_studied":     dna.get("lessons_studied", {}),
         "raw":                 dna,
     }
+
+
+# ── ACTION POOL ────────────────────────────────────────────────────────────
+
+def get_actions_pool(user_id: int, up: dict) -> dict:
+    """
+    Получить текущий пул действий пользователя.
+    Автоматически сбрасывает при новом дне (00:00 UTC).
+    """
+    from datetime import datetime
+    st = up.get(user_id, {})
+    today = datetime.utcnow().strftime("%Y-%m-%d")
+    level = st.get("level", 1)
+    daily_actions = level  # тапов в день = уровень
+
+    # Сброс при новом дне
+    if st.get("actions_date") != today:
+        st["actions_date"] = today
+        st["actions_used"] = 0
+        # Шанс НЕ сбрасывается при новом дне — копится!
+
+    used = st.get("actions_used", 0)
+    left = max(0, daily_actions - used)
+
+    return {
+        "daily_total": daily_actions,
+        "used": used,
+        "left": left,
+        "has_actions": left > 0,
+        "catalyst_chance_pct": st.get("catalyst_chance_pct", 0),
+        "catalyst_chance_cap": level * 15,  # максимум накопления
+    }
+
+
+def spend_action(user_id: int, action_type: str, up: dict) -> dict:
+    """
+    Потратить 1 действие из пула.
+    action_type: "tap" | "attack_catalyst" | "catalyst_roll" | "roulette"
+    Возвращает: {ok, actions_left, ...}
+    """
+    pool = get_actions_pool(user_id, up)
+    if not pool["has_actions"]:
+        level = up.get(user_id, {}).get("level", 1)
+        return {
+            "ok": False,
+            "error": "no_actions",
+            "message": f"Действий не осталось. Уровень {level} = {pool['daily_total']} в день. Сброс в 00:00 UTC.",
+            "actions_left": 0,
+            "resets_at": "00:00 UTC",
+        }
+
+    st = up.get(user_id, {})
+    st["actions_used"] = st.get("actions_used", 0) + 1
+    left = pool["left"] - 1
+
+    result = {
+        "ok": True,
+        "action_type": action_type,
+        "actions_left": left,
+        "actions_total": pool["daily_total"],
+    }
+
+    # Обработка броска на Катализатора
+    if action_type == "catalyst_roll":
+        import random
+        current_chance = st.get("catalyst_chance_pct", 0)
+        cap = pool["catalyst_chance_cap"]
+
+        # +10% к накопленному шансу (но не выше cap)
+        new_chance = min(cap, current_chance + 10)
+        st["catalyst_chance_pct"] = new_chance
+
+        # Делаем бросок
+        roll = random.randint(1, 100)
+        became_catalyst = roll <= new_chance
+
+        result["catalyst_roll"] = {
+            "chance_pct": new_chance,
+            "roll": roll,
+            "became_catalyst": became_catalyst,
+            "cap": cap,
+        }
+
+        if became_catalyst:
+            st["catalyst_chance_pct"] = 0  # сброс после успеха
+            result["catalyst_roll"]["message"] = f"🎲 Бросок {roll} ≤ {new_chance}% — УСПЕХ!"
+        else:
+            result["catalyst_roll"]["message"] = f"🎲 Бросок {roll} > {new_chance}% — шанс накопился"
+
+    return result
