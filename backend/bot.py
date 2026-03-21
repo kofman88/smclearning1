@@ -538,3 +538,148 @@ def notify_inactivity(user_id: int, user_name: str):
         )
     except Exception as e:
         logger.error(f"Ошибка уведомления о неактивности {user_id}: {e}")
+
+
+# ══════════════════════════════════════════════════════════════════════
+# ── TELEGRAM STARS SHOP ──────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════
+
+# Защита = от потери (психологически сильнее чем "получить бонус")
+SHOP_ITEMS = [
+    {
+        "id": "shield_24h",
+        "name": "🛡 Щит от Катализатора",
+        "desc": "24ч полная защита от дренажа. Катализатор тебя не видит.",
+        "stars": 15,
+        "effect": "catalyst_shield",
+        "hours": 24,
+    },
+    {
+        "id": "revival",
+        "name": "🧬 Воскрешение Гомункула",
+        "desc": "Оживить мёртвого Гомункула. Стадия −1, но живой.",
+        "stars": 25,
+        "effect": "revive_homunculus",
+    },
+    {
+        "id": "estus_x3",
+        "name": "⚗️ Estus-фласки ×3",
+        "desc": "3 подсказки для боссов. Рынок не ждёт пока ты думаешь.",
+        "stars": 10,
+        "effect": "estus_refill",
+        "count": 3,
+    },
+    {
+        "id": "double_tap_3h",
+        "name": "⚡ Двойная реакция 3ч",
+        "desc": "Множитель тапов ×2 на 3 часа. Фарм в максимуме.",
+        "stars": 20,
+        "effect": "double_tap",
+        "hours": 3,
+    },
+    {
+        "id": "souls_300",
+        "name": "💀 300 Душ",
+        "desc": "Экстренное пополнение резерва.",
+        "stars": 50,
+        "effect": "souls_bonus",
+        "amount": 300,
+    },
+]
+
+
+@bot.message_handler(commands=["shop", "buy"])
+def cmd_shop(message):
+    kb = types.InlineKeyboardMarkup(row_width=1)
+    for item in SHOP_ITEMS:
+        kb.add(types.InlineKeyboardButton(
+            f"{item['name']} — {item['stars']} ⭐",
+            callback_data=f"buy_{item['id']}"
+        ))
+    bot.send_message(
+        message.chat.id,
+        "⚗️ <b>Лаборатория Алхимика</b>\n\n"
+        "Всё, что нужно чтобы выжить в академии.\n"
+        "Оплата через Telegram Stars (⭐):",
+        parse_mode="HTML", reply_markup=kb
+    )
+
+
+@bot.callback_query_handler(func=lambda c: c.data and c.data.startswith("buy_"))
+def cb_buy(call):
+    item_id = call.data[4:]
+    item = next((i for i in SHOP_ITEMS if i["id"] == item_id), None)
+    if not item:
+        return
+    bot.answer_callback_query(call.id)
+    bot.send_invoice(
+        call.message.chat.id,
+        title=item["name"],
+        description=item["desc"],
+        payload=f"{item_id}:{call.from_user.id}",
+        provider_token="",
+        currency="XTR",
+        prices=[types.LabeledPrice(item["name"], item["stars"])],
+    )
+
+
+@bot.pre_checkout_query_handler(func=lambda q: True)
+def pre_checkout(q):
+    bot.answer_pre_checkout_query(q.id, ok=True)
+
+
+@bot.message_handler(content_types=["successful_payment"])
+def payment_done(message):
+    payload = message.successful_payment.invoice_payload
+    parts = payload.split(":")
+    if len(parts) != 2:
+        return
+    item_id, uid_str = parts
+    user_id = int(uid_str)
+    item = next((i for i in SHOP_ITEMS if i["id"] == item_id), None)
+    if not item:
+        return
+    try:
+        from progress import user_progress, save_progress
+        st = user_progress.setdefault(user_id, {})
+        effect = item["effect"]
+        msg = ""
+        from datetime import datetime, timedelta
+
+        if effect == "catalyst_shield":
+            exp = (datetime.utcnow() + timedelta(hours=item["hours"])).isoformat()
+            st["catalyst_shield_until"] = exp
+            msg = f"🛡 Щит активен на {item['hours']}ч. Катализатор тебя не видит."
+
+        elif effect == "revive_homunculus":
+            hom = st.get("homunculus", {})
+            if hom.get("status") == "dead":
+                hom["status"] = "active"
+                hom["stage"] = max(1, hom.get("stage", 1) - 1)
+                hom["health"] = 60
+                st["homunculus"] = hom
+                msg = "🧬 Гомункул воскрешён! Стадия −1, но живой."
+            else:
+                msg = "🧬 Гомункул жив — фласка на будущее добавлена."
+                st["revival_stored"] = st.get("revival_stored", 0) + 1
+
+        elif effect == "estus_refill":
+            st["estus_flasks"] = st.get("estus_flasks", 0) + item["count"]
+            msg = f"⚗️ +{item['count']} Estus-фласки. Используй с умом."
+
+        elif effect == "double_tap":
+            exp = (datetime.utcnow() + timedelta(hours=item["hours"])).isoformat()
+            st["double_tap_until"] = exp
+            msg = f"⚡ Множитель ×2 активен на {item['hours']}ч!"
+
+        elif effect == "souls_bonus":
+            st["souls"] = round(st.get("souls", 0) + item["amount"], 2)
+            msg = f"💀 +{item['amount']} Душ зачислено. Баланс: {st['souls']:.0f}"
+
+        save_progress()
+        bot.send_message(user_id,
+            f"✅ <b>Покупка подтверждена!</b>\n\n{msg}\n\n"
+            f"<i>Рынок не прощает. Ты — да.</i>",
+            parse_mode="HTML")
+    except Exception as e:
+        logger.error("payment_done: %r", e)

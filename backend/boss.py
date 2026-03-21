@@ -425,6 +425,13 @@ async def boss_submit(module_id: int, req: BossSubmitRequest):
             "souls_retrieved": retrieved.get("recovered", 0) if retrieved.get("ok") else 0,
             "message":        f"Босс {boss['name']} повержен! +{reward['delta']} ⚡",
         })
+        try:
+            from catalyst import award_isotope as _award_iso
+            from progress import user_progress as _up
+            new_total = _award_iso(req.user_id, _up, reason="boss_win")
+            logger.info("Isotope awarded to %d (boss_win). Total: %d", req.user_id, new_total)
+        except Exception as e:
+            logger.warning("isotope award: %r", e)
     else:
         # Death → drop all module souls
         dropped = drop_souls(req.user_id)

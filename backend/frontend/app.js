@@ -9,6 +9,80 @@ const API     = "/api";
 const tg      = window.Telegram?.WebApp ?? null;
 const DEV_UID = 445677777;
 
+// ══════════════════════════════════════════════════════════════════════
+// ── SOUND ENGINE v2 — Web Audio API, zero files ──────────────────────
+// ══════════════════════════════════════════════════════════════════════
+const _sfx = (() => {
+  let ctx = null;
+  const gc = () => {
+    if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+    if (ctx.state === "suspended") ctx.resume();
+    return ctx;
+  };
+  const t = (freq, type, dur, gain = 0.22, delay = 0) => {
+    try {
+      const c = gc(), o = c.createOscillator(), g = c.createGain();
+      o.connect(g); g.connect(c.destination);
+      o.type = type; o.frequency.setValueAtTime(freq, c.currentTime + delay);
+      g.gain.setValueAtTime(0, c.currentTime + delay);
+      g.gain.linearRampToValueAtTime(gain, c.currentTime + delay + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.001, c.currentTime + delay + dur);
+      o.start(c.currentTime + delay); o.stop(c.currentTime + delay + dur + 0.05);
+    } catch(e) {}
+  };
+  const n = (dur, gain = 0.10) => {
+    try {
+      const c = gc(), buf = c.createBuffer(1, c.sampleRate * dur, c.sampleRate);
+      const d = buf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+      const s = c.createBufferSource(), g = c.createGain();
+      s.buffer = buf; s.connect(g); g.connect(c.destination);
+      g.gain.setValueAtTime(gain, c.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.001, c.currentTime + dur);
+      s.start(); s.stop(c.currentTime + dur);
+    } catch(e) {}
+  };
+  return { t, n };
+})();
+
+const SOUNDS = {
+  tap:          () => _sfx.t(480, "sine", 0.05, 0.11),
+  combo10:      () => { _sfx.t(660,"sine",0.08,0.18); _sfx.t(880,"sine",0.08,0.18,0.07); },
+  combo50:      () => [440,550,660,880].forEach((f,i)=>_sfx.t(f,"triangle",0.12,0.22,i*.05)),
+  combo100:     () => { [440,550,660,770,880,1100].forEach((f,i)=>_sfx.t(f,"sine",0.18,0.28,i*.04)); _sfx.n(0.16,0.04); },
+  xp:           () => { _sfx.t(880,"sine",0.07,0.14); _sfx.t(1100,"sine",0.07,0.12,0.08); },
+  levelup:      () => { [440,550,660,880,1100,1320].forEach((f,i)=>_sfx.t(f,"triangle",0.28,0.34,i*.07)); _sfx.n(0.26,0.04); },
+  questdone:    () => [523,659,784,1047].forEach((f,i)=>_sfx.t(f,"sine",0.22,0.30,i*.08)),
+  soulsgain:    () => { _sfx.t(660,"sine",0.09,0.17); _sfx.t(880,"sine",0.09,0.13,0.06); },
+  soulslost:    () => { _sfx.t(330,"sawtooth",0.12,0.19); _sfx.t(220,"sawtooth",0.12,0.17,0.07); },
+  hit:          () => { _sfx.n(0.07,0.26); _sfx.t(150,"sawtooth",0.09,0.20); },
+  catalyst_on:  () => {
+    [200,180,160,140,120].forEach((f,i)=>_sfx.t(f,"sawtooth",0.14,0.30,i*.04));
+    _sfx.n(0.26,0.10);
+    setTimeout(()=>_sfx.t(440,"sine",0.22,0.28),280);
+  },
+  neutralized:  () => { [880,770,660,550,440,330].forEach((f,i)=>_sfx.t(f,"sine",0.17,0.27,i*.055)); _sfx.n(0.18,0.06); },
+  evolution:    () => [440,550,660,880,1100,1320,1760].forEach((f,i)=>_sfx.t(f,"sine",0.30,0.30,i*.06)),
+  bosswin:      () => { [440,550,659,880,1100,1320].forEach((f,i)=>_sfx.t(f,"triangle",0.36,0.36,i*.08)); _sfx.n(0.35,0.06); },
+  err:          () => _sfx.t(200,"square",0.09,0.13),
+  buy:          () => { _sfx.t(880,"sine",0.06,0.16); _sfx.t(1320,"sine",0.06,0.14,0.06); _sfx.t(1760,"sine",0.06,0.12,0.12); },
+  bonus:        () => [523,659,784].forEach((f,i)=>_sfx.t(f,"sine",0.14,0.24,i*.07)),
+};
+
+let _soundOn = localStorage.getItem("chm_sfx") !== "0";
+function playSound(id) {
+  if (!_soundOn || !SOUNDS[id]) return;
+  try { SOUNDS[id](); } catch(e) {}
+}
+function toggleSound() {
+  _soundOn = !_soundOn;
+  localStorage.setItem("chm_sfx", _soundOn ? "1" : "0");
+  const btn = document.getElementById("soundBtn");
+  if (btn) btn.textContent = _soundOn ? "🔊" : "🔇";
+  if (_soundOn) playSound("bonus");
+}
+window.toggleSound = toggleSound;
+
 // ── GLOBAL STATE ──────────────────────────────────────────────────────────
 const state = {
   userId: null,
@@ -534,42 +608,35 @@ function renderMarkdown(text) {
 
 // ── RENDER USER STATE ─────────────────────────────────────────────────────
 function renderHeader(s) {
-  if (!s) { console.error("renderHeader: s is null/undefined"); return; }
-  state.userState = s;
-  const rankName = s.rank || "Наблюдатель рынка";
-  const lvlInfo  = getLevelInfo(s.xp || 0);
+  if (!s) return;
 
-  $("#userName").textContent = s.name || "Трейдер";
-  $("#userXP").textContent   = s.xp ?? 0;
-  $("#userLvl").textContent  = s.level ?? 1;
-  $("#moduleName").textContent = `Модуль ${(s.module_index ?? 0) + 1}`;
+  // Аватар
+  const avatarEl = document.getElementById("headerAvatarSvg");
+  if (avatarEl) avatarEl.innerHTML = getRankSVG(s.rank || "Наблюдатель рынка").replace(/<svg[^>]*>/,'').replace('</svg>','');
 
-  // Title
-  const titleEl = $("#userTitle");
-  if (titleEl) titleEl.textContent = s.current_title || "Ликвидность";
+  // Имя и ранг
+  const nameEl = document.getElementById("headerUsername");
+  if (nameEl) nameEl.textContent = (s.name || "CHM").slice(0,14);
+  const rankEl = document.getElementById("headerRankName");
+  if (rankEl) rankEl.textContent = s.rank || "Наблюдатель рынка";
 
-  // Souls HUD from user state
-  if (s.souls !== undefined) {
-    const soulsEl = $("#soulsCount");
-    if (soulsEl) soulsEl.textContent = s.souls;
-  }
+  // HUD пиллы
+  const soulsEl = document.getElementById("hudSoulsVal");
+  if (soulsEl) soulsEl.textContent = Math.floor(s.souls || 0);
+  const xpEl = document.getElementById("hudXPVal");
+  if (xpEl) xpEl.textContent = s.xp || 0;
+  const lvlEl = document.getElementById("hudLevelVal");
+  if (lvlEl) lvlEl.textContent = s.level || 1;
+
+  // moduleName
+  const modEl = document.getElementById("moduleName");
+  if (modEl) modEl.textContent = `Модуль ${(s.module_index ?? 0) + 1}`;
 
   // Estus flasks
   updateEstusHUD(s.estus_flasks ?? 3, s.estus_max ?? 3);
 
-  const rankWrap = $("#rankIconWrap");
-  if (rankWrap) rankWrap.innerHTML = getRankSVG(rankName);
-
-  // Streak badge
-  const streak = s.streak || 0;
-  const streakBadge = $("#streakBadge");
-  const streakCount = $("#streakCount");
-  if (streakBadge && streakCount) {
-    streakCount.textContent = streak;
-    streakBadge.classList.toggle("hidden", streak < 2);
-    if (streak >= 7) streakBadge.classList.add("streak-hot");
-    else streakBadge.classList.remove("streak-hot");
-  }
+  // Прогресс-бар (обновляется из renderQuests тоже)
+  state.userState = s;
 }
 
 function setProgress(completed, total) {
@@ -1390,6 +1457,7 @@ function _getToastContainer() {
 }
 
 function showToast(msg, type = "info", icon = "", sub = "") {
+  if (type === "success") playSound("xp"); else if (type === "error") playSound("err");
   const container = _getToastContainer();
   const toast = document.createElement("div");
   toast.className = `toast ${type}`;
@@ -1488,11 +1556,187 @@ function showLoadingError(msg) {
   }
 }
 
+// ══════════════════════════════════════════════════════════════════════
+// ── CATALYST UI ──────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════
+
+async function loadCatalyst() {
+  try {
+    const [catR, myR] = await Promise.all([
+      fetch(`${API}/catalyst/status`),
+      fetch(`${API}/catalyst/my/${state.userId}`),
+    ]);
+    const [cat, my] = await Promise.all([catR.json(), myR.json()]);
+    renderCatalyst(cat, my);
+    // Показать/скрыть быструю кнопку в хедере
+    const qaBtn = document.getElementById("qaCatalyst");
+    if (qaBtn) qaBtn.style.display = cat.active ? "flex" : "none";
+  } catch(e) { console.warn("catalyst:", e); }
+}
+
+function renderCatalyst(cat, my) {
+  const wrap = document.getElementById("catalystWrap");
+  if (!wrap) return;
+
+  const isMe = cat.active && cat.user_id === state.userId;
+  const iso = my?.isotopes ?? 0;
+  const atkLeft = my?.attempts_left ?? 0;
+  const atkMax = my?.max_attempts ?? 1;
+
+  if (!cat.active) {
+    wrap.innerHTML = `
+    <div class="cat-card cat-idle">
+      <div class="cat-card-header">
+        <span class="cat-icon">⚗️</span>
+        <div class="cat-card-title-block">
+          <span class="cat-card-title">КАТАЛИЗАТОР РАСПАДА</span>
+          <span class="cat-card-subtitle">Система в равновесии</span>
+        </div>
+        <div class="cat-iso-chip ${iso > 0 ? 'cat-iso-has' : ''}"
+          ${iso > 0 ? 'onclick="doActivateCatalyst()"' : ''}>
+          🧪 ${iso > 0 ? `${iso} изотоп${iso > 1 ? 'а' : ''}` : 'Нет изотопов'}
+        </div>
+      </div>
+      <div id="catRecordsZone"></div>
+      <div class="cat-hint">Получи Нестабильный Изотоп: победи Босса или войди в топ-3 ежедневного вызова</div>
+    </div>`;
+    _loadCatRecords();
+    return;
+  }
+
+  const hpPct = cat.hp_pct || 0;
+  const hpCol = hpPct > 60 ? '#00e87a' : hpPct > 25 ? '#f59e0b' : '#ff4d6d';
+  const atkPct = atkMax > 0 ? Math.round(atkLeft / atkMax * 100) : 0;
+
+  wrap.innerHTML = `
+  <div class="cat-card cat-active-card ${isMe ? 'cat-is-me' : ''}">
+
+    <div class="cat-active-top">
+      <span class="cat-live-badge">⚗️ РЕАКЦИЯ АКТИВНА</span>
+      <span class="cat-time-left">${cat.hours_left || 0}ч осталось</span>
+    </div>
+
+    <div class="cat-who ${isMe ? 'cat-who-me' : ''}">
+      ${isMe ? '⚠️ ТЫ КАТАЛИЗАТОР' : `💀 ${cat.username || 'Неизвестный'}`}
+    </div>
+
+    <div class="cat-drain-line">
+      <span>Дренаж: 0.01 ⚡/ч с онлайн-игроков</span>
+      <span class="cat-drained-total">${(cat.total_drained || 0).toFixed(2)} собрано</span>
+    </div>
+
+    <div class="cat-hp-block">
+      <div class="cat-hp-top">
+        <span>HP Катализатора</span>
+        <span style="color:${hpCol};font-weight:700">${cat.hp} / ${cat.max_hp}</span>
+      </div>
+      <div class="cat-hp-bg">
+        <div class="cat-hp-fill" style="width:${hpPct}%;background:${hpCol}"></div>
+      </div>
+    </div>
+
+    ${!isMe ? `
+    <div class="cat-atk-block">
+      <div class="cat-atk-top">
+        <span>Твои попытки</span>
+        <span class="${atkLeft > 0 ? 'cat-green' : 'cat-red'}">${atkLeft}/${atkMax} (${atkLeft > 0 ? 'есть' : 'исчерпаны'})</span>
+      </div>
+      <div class="cat-atk-bar-bg"><div class="cat-atk-bar" style="width:${atkPct}%"></div></div>
+      <button class="cat-atk-btn ${atkLeft <= 0 ? 'cat-atk-disabled' : ''}"
+        id="catAtkBtn" onclick="doAttackCatalyst()" ${atkLeft <= 0 ? 'disabled' : ''}>
+        ${atkLeft > 0
+          ? `⚡ НЕЙТРАЛИЗОВАТЬ (−${state.userState?.level || 1} HP)`
+          : '❌ Нет попыток — восст. в 00:00 UTC'}
+      </button>
+      <p class="cat-atk-hint">Финальный удар → +30% буфера + Нестабильный Изотоп</p>
+    </div>` : `
+    <div class="cat-me-block">
+      <div class="cat-me-row">
+        <span>🔒 Гарантированно</span>
+        <span class="cat-green">${(cat.drained_secure || 0).toFixed(3)} ⚡</span>
+      </div>
+      <div class="cat-me-row">
+        <span>⚠️ Под риском (буфер)</span>
+        <span style="color:#f59e0b">${(cat.drained_buffer || 0).toFixed(3)} ⚡</span>
+      </div>
+      <div class="cat-me-tip">Выживи 24ч → буфер × 1.5 + ачивка</div>
+    </div>`}
+  </div>`;
+}
+
+async function _loadCatRecords() {
+  try {
+    const d = await fetch(`${API}/catalyst/records`).then(r=>r.json());
+    const z = document.getElementById("catRecordsZone");
+    if (!z || !d.records?.length) return;
+    const medals = ["🥇","🥈","🥉"];
+    z.innerHTML = `<div class="cat-rec-title">Рекорды выживания</div>` +
+      d.records.slice(0,3).map((r,i)=>`
+        <div class="cat-rec-row">
+          <span>${medals[i]}</span>
+          <span class="cat-rec-name">${r.username}</span>
+          <span class="cat-rec-time">${Math.floor(r.duration_minutes/60)}ч ${r.duration_minutes%60}м</span>
+          <span class="cat-rec-soul">${r.drained_total}⚡</span>
+        </div>`).join("");
+  } catch(e) {}
+}
+
+async function doActivateCatalyst() {
+  const my = await fetch(`${API}/catalyst/my/${state.userId}`).then(r=>r.json());
+  if (!my.isotopes) { showToast("Нужен Нестабильный Изотоп!", "error"); return; }
+  if (!confirm("Использовать Нестабильный Изотоп?\n\nТы станешь Катализатором на 24ч.\nВсе игроки получат уведомление и смогут атаковать тебя.\n\nПродолжить?")) return;
+  try {
+    const d = await fetch(`${API}/catalyst/activate`,{
+      method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({user_id:state.userId})
+    }).then(r=>r.json());
+    if (d.ok) {
+      playSound("catalyst_on");
+      if (tg?.HapticFeedback) tg.HapticFeedback.notificationOccurred("warning");
+      showToast(d.message,"warning");
+      loadCatalyst();
+    } else {
+      showToast(d.message||d.error,"error");
+    }
+  } catch(e){ showToast("Ошибка","error"); }
+}
+window.doActivateCatalyst = doActivateCatalyst;
+
+async function doAttackCatalyst() {
+  const btn = document.getElementById("catAtkBtn");
+  if (btn) btn.disabled = true;
+  try {
+    const d = await fetch(`${API}/catalyst/attack`,{
+      method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({user_id:state.userId})
+    }).then(r=>r.json());
+    if (d.ok) {
+      playSound(d.slain ? "neutralized" : "hit");
+      if (tg?.HapticFeedback) tg.HapticFeedback.impactOccurred(d.slain?"heavy":"medium");
+      showToast(d.message, d.slain?"success":"info");
+      if (d.slain) {
+        const wrap = document.getElementById("catalystWrap");
+        if (wrap) wrap.style.animation = "catExplode 0.7s ease forwards";
+        setTimeout(()=>{ if(wrap) wrap.style.animation=""; loadCatalyst(); }, 800);
+      } else {
+        setTimeout(loadCatalyst, 400);
+      }
+    } else {
+      showToast(d.message||"Нет попыток","error");
+      if (btn) btn.disabled = false;
+    }
+  } catch(e){ showToast("Ошибка","error"); if(btn) btn.disabled=false; }
+}
+window.doAttackCatalyst = doAttackCatalyst;
+
 // ── INITIAL LOAD ──────────────────────────────────────────────────────────
 async function init() {
   console.log("[CHM] init() called, userId will be:", getUserInfo()?.id);
   const info = getUserInfo();
   state.userId = info.id;
+
+  const sb = document.getElementById("soundBtn");
+  if (sb) sb.textContent = _soundOn ? "🔊" : "🔇";
 
   // Immediate visual proof that new JS is running
   const _dbgLabel = $("#progressLabel");
@@ -1628,6 +1872,10 @@ async function init() {
 
     // Phase 3: check daily challenge badge
     setTimeout(_checkDailyBadge, 1500);
+
+    // Catalyst
+    loadCatalyst();
+    setInterval(loadCatalyst, 90000); // каждые 1.5 минуты
 
     console.log("[CHM] init complete. userId=", state.userId, "modules=", modulesData?.modules?.length);
 
@@ -1773,6 +2021,7 @@ function onHomunculusTap(e) {
   }
 
   _spawnHomFloat(e, "✦");
+  playSound("tap");
 
   if (tg?.HapticFeedback) tg.HapticFeedback.impactOccurred("light");
 
@@ -1799,10 +2048,12 @@ async function _flushHomTaps() {
     if (data.souls_earned != null) {
       state.souls = (state.souls || 0) + data.souls_earned;
       _updateSoulsDisplay(state.souls);
+      if (data.souls_earned > 0) playSound("soulsgain");
     }
     renderHomunculus(data);
 
     if (data.evolved) {
+      playSound("evolution");
       _triggerHomunculusEvolution(data.stage, data.stage_name);
     }
   } catch(e) { console.error("flushHomTaps:", e); }
@@ -1818,6 +2069,7 @@ function _updateHomComboBar(combo) {
   if (label) label.textContent = `Комбо: ${combo}`;
 
   const threshold = combo >= 100 ? 100 : combo >= 50 ? 50 : combo >= 25 ? 25 : combo >= 10 ? 10 : 0;
+  if (threshold >= 100) playSound("combo100"); else if (threshold >= 50) playSound("combo50"); else if (threshold >= 10) playSound("combo10");
   if (threshold > 0 && badge && text) {
     text.textContent = `×${threshold} COMBO!`;
     badge.style.display = "block";
@@ -2388,12 +2640,9 @@ function _spawnEvolutionParticles() {
  */
 function updateSoulsHUD(s) {
   if (!s) return;
-  const soulsEl = document.getElementById("soulsCount");
-  if (soulsEl) soulsEl.textContent = s.souls ?? 0;
+  const soulsEl = document.getElementById("hudSoulsVal");
+  if (soulsEl) soulsEl.textContent = Math.floor(s.souls ?? 0);
   updateEstusHUD(s.estus_flasks ?? 3, s.estus_max ?? 3);
-  // Title
-  const titleEl = document.getElementById("userTitle");
-  if (titleEl && s.current_title) titleEl.textContent = s.current_title;
 }
 
 /**
@@ -3216,8 +3465,7 @@ async function _checkDailyBadge() {
     const data = await res.json();
     const badge = $("#dailyBadge");
     if (badge) {
-      if (!data.completed) badge.classList.remove("hidden");
-      else badge.classList.add("hidden");
+      badge.style.display = !data.completed ? "flex" : "none";
     }
   } catch(e) { /* silent */ }
 }
@@ -3449,7 +3697,7 @@ document.addEventListener("DOMContentLoaded", () => {
   init();
   initChartLightbox();
 
-  document.getElementById("btn-start")?.addEventListener("click", () => {
+  document.getElementById("startBtn")?.addEventListener("click", () => {
     switchTab("lessons");
     setTimeout(() => {
       const firstOpen = document.querySelector(".module-card.open .lesson-item");
@@ -3586,7 +3834,7 @@ async function spinRoulette() {
     if (state.userState) state.userState.souls = data.souls_remaining;
     const soulsEl = document.getElementById("rouletteSoulsBalance");
     if (soulsEl) soulsEl.textContent = data.souls_remaining;
-    const hudEl = document.getElementById("soulsCount");
+    const hudEl = document.getElementById("hudSoulsVal");
     if (hudEl) hudEl.textContent = data.souls_remaining;
 
     // Draw wheel with real topics
@@ -3641,7 +3889,7 @@ async function submitRouletteAnswer(isCorrect) {
     const data = await res.json();
     if (data.ok) {
       if (state.userState) state.userState.souls = data.total_souls;
-      const hudEl = document.getElementById("soulsCount");
+      const hudEl = document.getElementById("hudSoulsVal");
       if (hudEl) hudEl.textContent = data.total_souls;
       spawnSoulParticle(data.message, isCorrect);
       showToast(data.message, isCorrect ? "success" : "error");
@@ -3729,7 +3977,7 @@ async function submitInvasion() {
       resEl.textContent = `⚔️ Вторжение отражено! +${data.souls_earned} ⚡`;
       resEl.className = "invasion-result survived";
       if (state.userState) state.userState.souls = data.total_souls;
-      const hudEl = document.getElementById("soulsCount");
+      const hudEl = document.getElementById("hudSoulsVal");
       if (hudEl) hudEl.textContent = data.total_souls;
       spawnSoulParticle(`+${data.souls_earned} ⚡`, true);
     } else {
@@ -3913,7 +4161,7 @@ function _showPvPResult(data) {
 
   if (state.userState && data.souls_earned) {
     state.userState.souls = (state.userState.souls || 0) + data.souls_earned;
-    const hudEl = document.getElementById("soulsCount");
+    const hudEl = document.getElementById("hudSoulsVal");
     if (hudEl) hudEl.textContent = state.userState.souls;
     if (data.souls_earned > 0) spawnSoulParticle(`+${data.souls_earned} ⚡`, true);
   }
