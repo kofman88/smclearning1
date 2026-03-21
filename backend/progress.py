@@ -138,6 +138,15 @@ BADGE_DEFS = {
                          "desc": "Оплатил выход из состояния Hollow"},
     "soul_retriever":   {"title": "Душесборщик",              "icon": "⚡",
                          "desc": "Подобрал упавшие души после поражения"},
+    # Phase 4
+    "invader_slayer":   {"title": "Охотник на вторжения",     "icon": "⚔️",
+                         "desc": "Отразил вторжение за 30 минут"},
+    "roulette_lucky":   {"title": "Удача Рынка",              "icon": "🎰",
+                         "desc": "Выиграл в рулетке знаний x3"},
+    "pvp_champion":     {"title": "Чемпион разметки",         "icon": "🏆",
+                         "desc": "Победил в 5 PvP-битвах"},
+    "darkwraith":       {"title": "Darkwraith",               "icon": "🌑",
+                         "desc": "10 побед во вторжениях"},
 }
 
 user_progress: Dict[int, Dict[str, Any]] = {}
