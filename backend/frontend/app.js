@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════════════
-   CHM Smart Money Academy — app.js v5.0
+   CHM Smart Money Academy — app.js v6.0
    72h Deadlines · SMC Levels · Streak · Penalty Flow · Countdown Timer
    ═══════════════════════════════════════════════════════════════════════ */
 
@@ -1481,6 +1481,10 @@ async function init() {
   const info = getUserInfo();
   state.userId = info.id;
 
+  // Immediate visual proof that new JS is running
+  const _dbgLabel = $("#progressLabel");
+  if (_dbgLabel) _dbgLabel.textContent = "v6 | запуск…";
+
   // Show a "slow start" hint after 4s if still waiting (cold start can take 30-60s)
   const slowTimer = setTimeout(() => {
     const el = $("#moduleName");
@@ -1488,14 +1492,16 @@ async function init() {
       el.textContent = "Сервер запускается…";
     }
     const progLabel = $("#progressLabel");
-    if (progLabel && progLabel.textContent === "0/0 квестов") {
-      progLabel.textContent = "Подождите ~30 сек при первом запуске";
+    const t = progLabel?.textContent || "";
+    if (progLabel && (t === "0/0 квестов" || t.startsWith("v6"))) {
+      progLabel.textContent = "Ожидание ответа сервера (~30 сек)…";
     }
   }, 4000);
 
   try {
     let initData = {};
     try {
+      if (_dbgLabel) _dbgLabel.textContent = "v6 | init…";
       const initRes = await fetchWithTimeout(`${API}/user/init`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1507,6 +1513,7 @@ async function init() {
           init_data: tg?.initData || "",
         }),
       }, 20000);
+      if (_dbgLabel) _dbgLabel.textContent = `v6 | init ${initRes.status}`;
       const parsed = await initRes.json();
       // Only use initData when the server confirmed success
       if (parsed.ok) {
@@ -1526,10 +1533,12 @@ async function init() {
     } catch (initErr) {
       // init endpoint timed out or failed — continue loading data anyway
       console.warn("user/init failed, continuing:", initErr);
+      if (_dbgLabel) _dbgLabel.textContent = `v6 | init err: ${String(initErr?.message||initErr).slice(0,60)}`;
     }
 
     const userId = state.userId || DEV_UID;
     state.userId = userId;
+    if (_dbgLabel) _dbgLabel.textContent = `v6 | загрузка данных uid=${userId}…`;
     const LOAD_TIMEOUT = 60000; // 60s to handle Render.com cold starts
     const [userRes, modulesRes, questsRes, metaRes, lbRes] = await Promise.all([
       fetchWithTimeout(`${API}/user/${userId}`, {}, LOAD_TIMEOUT),
@@ -1607,9 +1616,9 @@ async function init() {
     const isHttp    = e?.message?.startsWith("HTTP ");
     let msg;
     // Show raw error in progress label for debugging
-    if (!isTimeout && !isHttp) {
+    {
       const progLabel = document.getElementById("progressLabel");
-      if (progLabel) progLabel.textContent = String(e?.message || e).slice(0, 120);
+      if (progLabel) progLabel.textContent = `v6 ERR: ${String(e?.message || e).slice(0, 100)}`;
     }
     if (isTimeout) msg = "Сервер не отвечает. Нажми «Повторить» через 30 сек.";
     else if (isHttp) msg = `Ошибка сервера (${e.message}). Попробуй ещё раз.`;
