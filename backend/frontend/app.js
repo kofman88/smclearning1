@@ -1,3 +1,4 @@
+console.log("[CHM] app.js loaded, starting...");
 /* ═══════════════════════════════════════════════════════════════════════
    CHM Smart Money Academy — app.js v6.0
    72h Deadlines · SMC Levels · Streak · Penalty Flow · Countdown Timer
@@ -1489,6 +1490,7 @@ function showLoadingError(msg) {
 
 // ── INITIAL LOAD ──────────────────────────────────────────────────────────
 async function init() {
+  console.log("[CHM] init() called, userId will be:", getUserInfo()?.id);
   const info = getUserInfo();
   state.userId = info.id;
 
