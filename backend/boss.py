@@ -428,10 +428,17 @@ async def boss_submit(module_id: int, req: BossSubmitRequest):
     else:
         # Death → drop all module souls
         dropped = drop_souls(req.user_id)
+        # Enrage homunculus on boss death (x2 tap mult for 10 min)
+        try:
+            from progress import homunculus_enrage
+            homunculus_enrage(req.user_id)
+        except Exception as _he:
+            pass
         response.update({
             "dropped_souls":  dropped["dropped"],
             "can_retrieve":   dropped["can_retrieve"],
             "message":        f"Ликвидирован {boss['name']}. Рынок забрал {dropped['dropped']} ⚡.",
+            "homunculus_enraged": True,
         })
 
     return response

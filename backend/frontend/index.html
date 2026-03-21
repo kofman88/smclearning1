@@ -305,24 +305,14 @@
         </svg>
         Рейтинг
       </button>
-      <button class="tab" data-tab="pet" onclick="switchTab('pet')">
+      <button class="tab" data-tab="homunculus" onclick="switchTab('homunculus')">
         <svg class="tab-icon" viewBox="0 0 20 20" fill="none">
-          <!-- Cipher organism icon: bioluminescent cell -->
-          <ellipse cx="10" cy="10" rx="6.5" ry="7.5" stroke="currentColor" stroke-width="1.3" opacity="0.9"/>
-          <!-- Core nucleus -->
-          <circle cx="10" cy="10" r="2.2" stroke="currentColor" stroke-width="1.1"/>
-          <!-- Circuit veins -->
-          <line x1="10" y1="2.5" x2="10" y2="4.5" stroke="currentColor" stroke-width="1.0" opacity="0.7"/>
-          <line x1="10" y1="15.5" x2="10" y2="17.5" stroke="currentColor" stroke-width="1.0" opacity="0.7"/>
-          <line x1="3.5" y1="7" x2="5.5" y2="8.5" stroke="currentColor" stroke-width="1.0" opacity="0.7"/>
-          <line x1="14.5" y1="8.5" x2="16.5" y2="7" stroke="currentColor" stroke-width="1.0" opacity="0.7"/>
-          <!-- Synapse nodes -->
-          <circle cx="10" cy="2.5" r="0.9" fill="currentColor" opacity="0.8"/>
-          <circle cx="10" cy="17.5" r="0.9" fill="currentColor" opacity="0.8"/>
-          <circle cx="3" cy="6.5" r="0.9" fill="currentColor" opacity="0.8"/>
-          <circle cx="17" cy="6.5" r="0.9" fill="currentColor" opacity="0.8"/>
+          <!-- Alchemical flask icon -->
+          <path d="M7 3h6M8 3v5L4 15a2 2 0 001.8 2.9h8.4A2 2 0 0016 15L12 8V3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="8.5" cy="13" r="1" fill="currentColor" opacity="0.7"/>
+          <circle cx="11.5" cy="15" r="0.8" fill="currentColor" opacity="0.5"/>
         </svg>
-        Питомец
+        Алхимия
       </button>
     </nav>
 
@@ -343,317 +333,295 @@
       <div id="leaderboardList"></div>
     </div>
 
-    <!-- PET TAB -->
-    <div id="tab-pet" class="tab-content">
-      <div class="pet-screen">
+    <!-- HOMUNCULUS TAB -->
+    <div id="tab-homunculus" class="tab-content">
+      <div class="hom-screen">
 
-        <!-- Cipher stage -->
-        <div class="pet-stage" id="petStage">
+        <!-- Header: stage name + status badge -->
+        <div class="hom-header">
+          <div class="hom-header-left">
+            <span class="hom-stage-badge" id="homStageBadge">СТ.1</span>
+            <span class="hom-stage-name" id="homStageName">Реагент</span>
+          </div>
+          <span class="hom-status-badge" id="homStatusBadge">active</span>
+        </div>
 
-          <!-- HUD floats over top of Cipher -->
-          <div class="cipher-hud">
-            <div class="cipher-hud-left" id="evoBadge" onclick="showEvolutionInfo()">
-              <div class="cipher-name">
-                <span class="cipher-stage-badge" id="evoStage">СТ.1</span>
-                <span class="cipher-title" id="evoName">Cell Cipher</span>
-              </div>
-              <div class="btc-micro">
-                <span class="btc-dot" id="hbDot"></span>
-                BTC <span id="hbPrice">—</span><span id="hbChange" class="btc-change"></span>
-              </div>
-            </div>
-            <button class="oracle-btn" id="oracleEyeBtn" onclick="showOracle()">
-              <span class="oracle-eye">👁</span>
-              ОРАКУЛ
-            </button>
-          </div>
-          <!-- Ambient glow behind Cipher -->
-          <div class="cipher-glow-bg" aria-hidden="true"></div>
-          <!-- Lab background layers -->
-          <div class="pet-lab-bg" aria-hidden="true">
-            <div class="lab-bg-hexgrid"></div>
-            <div class="lab-bg-silhouettes"></div>
-            <div class="lab-bg-fog"></div>
-          </div>
-          <!-- Orbit ring -->
-          <div class="cipher-orbit-ring" aria-hidden="true">
-            <div class="orbit-dot" style="--i:0"></div>
-            <div class="orbit-dot" style="--i:1"></div>
-            <div class="orbit-dot" style="--i:2"></div>
-            <div class="orbit-dot" style="--i:3"></div>
-            <div class="orbit-dot" style="--i:4"></div>
-            <div class="orbit-dot" style="--i:5"></div>
-            <div class="orbit-dot" style="--i:6"></div>
-            <div class="orbit-dot" style="--i:7"></div>
-          </div>
-          <div class="pet-aura" id="petAura"></div>
-          <div class="pet-fox" id="petFox" onclick="onPetTap(event)">
-            <!-- CIPHER — Bioluminescent Crypto Organism -->
-            <svg class="cipher-svg" id="cipherSvg" viewBox="0 0 200 220" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <!-- Creature area -->
+        <div class="hom-creature-wrap" id="homCreatureWrap" onclick="onHomunculusTap(event)">
+          <div class="hom-aura" id="homAura"></div>
+          <div class="hom-creature" id="homCreature">
+
+            <!-- Stage 1: Реагент — glowing flask reagent -->
+            <svg class="hom-svg hom-stage-svg" id="homSvg1" viewBox="0 0 160 180" fill="none" xmlns="http://www.w3.org/2000/svg">
               <defs>
-                <!-- Body: translucent liquid glass -->
-                <radialGradient id="cxBody" cx="38%" cy="32%" r="62%">
-                  <stop offset="0%"   stop-color="rgba(140,230,255,0.38)"/>
-                  <stop offset="55%"  stop-color="rgba(0,180,255,0.16)"/>
-                  <stop offset="100%" stop-color="rgba(0,80,180,0.06)"/>
+                <radialGradient id="rg1Body" cx="40%" cy="35%" r="65%">
+                  <stop offset="0%" stop-color="#a0e8ff" stop-opacity="0.6"/>
+                  <stop offset="100%" stop-color="#0040a0" stop-opacity="0.1"/>
                 </radialGradient>
-                <!-- Pulsing core heart -->
-                <radialGradient id="cxCore" cx="50%" cy="50%" r="50%">
-                  <stop offset="0%"   stop-color="rgba(200,255,255,0.95)"/>
-                  <stop offset="40%"  stop-color="rgba(0,212,255,0.75)"/>
-                  <stop offset="100%" stop-color="rgba(0,80,200,0)"/>
-                </radialGradient>
-                <!-- Inner bright core -->
-                <radialGradient id="cxCoreInner" cx="40%" cy="35%" r="55%">
-                  <stop offset="0%"   stop-color="#e0ffff"/>
-                  <stop offset="100%" stop-color="rgba(0,200,255,0.6)"/>
-                </radialGradient>
-                <!-- Vein glow gradient -->
-                <linearGradient id="cxVeinH" x1="0%" y1="0%" x2="100%" y2="0%">
-                  <stop offset="0%"   stop-color="#00d4ff" stop-opacity="0"/>
-                  <stop offset="50%"  stop-color="#00d4ff" stop-opacity="1"/>
-                  <stop offset="100%" stop-color="#00d4ff" stop-opacity="0"/>
-                </linearGradient>
-                <linearGradient id="cxVeinV" x1="0%" y1="0%" x2="0%" y2="100%">
-                  <stop offset="0%"   stop-color="#00d4ff" stop-opacity="0"/>
-                  <stop offset="50%"  stop-color="#a855f7" stop-opacity="0.9"/>
-                  <stop offset="100%" stop-color="#00d4ff" stop-opacity="0"/>
-                </linearGradient>
-                <!-- Ground shadow -->
-                <radialGradient id="cxShadow" cx="50%" cy="50%" r="50%">
-                  <stop offset="0%"   stop-color="rgba(0,180,255,0.22)"/>
-                  <stop offset="100%" stop-color="rgba(0,0,0,0)"/>
-                </radialGradient>
-                <!-- Glow filter -->
-                <filter id="cxGlow" x="-40%" y="-40%" width="180%" height="180%">
-                  <feGaussianBlur stdDeviation="5" result="blur"/>
-                  <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
-                </filter>
-                <filter id="cxStrongGlow" x="-60%" y="-60%" width="220%" height="220%">
-                  <feGaussianBlur stdDeviation="9" result="blur"/>
-                  <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
-                </filter>
-                <filter id="cxOracleGlow" x="-60%" y="-60%" width="220%" height="220%">
-                  <feGaussianBlur stdDeviation="10" result="blur"/>
-                  <feColorMatrix type="matrix" values="0.5 0 0.5 0 0  0 0 0.8 0 0  0.5 0 1 0 0  0 0 0 1.2 0" in="blur" result="colored"/>
-                  <feMerge><feMergeNode in="colored"/><feMergeNode in="SourceGraphic"/></feMerge>
-                </filter>
-                <filter id="cxDistressFilter">
-                  <feColorMatrix type="saturate" values="0.2"/>
-                </filter>
+                <filter id="rg1Glow"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
               </defs>
-
-              <!-- Ground halo -->
-              <ellipse cx="100" cy="212" rx="48" ry="7" fill="url(#cxShadow)" class="cipher-shadow"/>
-
-              <!-- Outer body glow / aura rings -->
-              <ellipse cx="100" cy="105" rx="72" ry="78"
-                       fill="rgba(0,180,255,0.04)"
-                       stroke="rgba(0,212,255,0.08)" stroke-width="1"
-                       class="cipher-outer-ring"/>
-              <ellipse cx="100" cy="105" rx="62" ry="67"
-                       fill="rgba(0,180,255,0.06)"
-                       stroke="rgba(0,212,255,0.12)" stroke-width="1"
-                       class="cipher-outer-ring"/>
-
-              <!-- Main body — liquid glass blob -->
-              <path class="cipher-body"
-                    d="M100 38
-                       C128 38 155 58 160 88
-                       C165 118 150 148 130 163
-                       C118 171 109 176 100 176
-                       C91  176 82  171 70  163
-                       C50  148 35  118 40  88
-                       C45  58  72  38 100 38Z"
-                    fill="url(#cxBody)"
-                    stroke="rgba(0,212,255,0.25)" stroke-width="1.5"/>
-
-              <!-- Specular highlight (glassy shine) -->
-              <path d="M78 52 Q100 44 120 58 Q110 50 100 48 Q90 46 78 52Z"
-                    fill="rgba(200,240,255,0.25)" class="cipher-shine"/>
-
-              <!-- Circuit veins — main network -->
-              <g class="cipher-veins" filter="url(#cxGlow)">
-                <!-- Vertical spine -->
-                <line x1="100" y1="58"  x2="100" y2="168"
-                      stroke="url(#cxVeinV)" stroke-width="1.2"/>
-                <!-- Left branch top -->
-                <path d="M100 75 L82 85 L68 80 L58 95 L68 112 L82 117"
-                      stroke="rgba(0,212,255,0.75)" stroke-width="1.1" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-                <!-- Right branch top -->
-                <path d="M100 75 L118 85 L132 80 L142 95 L132 112 L118 117"
-                      stroke="rgba(0,212,255,0.75)" stroke-width="1.1" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-                <!-- Left branch lower -->
-                <path d="M82 117 L70 132 L76 150"
-                      stroke="rgba(168,85,247,0.6)" stroke-width="0.9" fill="none" stroke-linecap="round"/>
-                <!-- Right branch lower -->
-                <path d="M118 117 L130 132 L124 150"
-                      stroke="rgba(168,85,247,0.6)" stroke-width="0.9" fill="none" stroke-linecap="round"/>
-                <!-- Horizontal connectors -->
-                <line x1="68" y1="95"  x2="132" y2="95"
-                      stroke="rgba(0,212,255,0.3)" stroke-width="0.8"/>
-                <line x1="68" y1="112" x2="132" y2="112"
-                      stroke="rgba(0,212,255,0.25)" stroke-width="0.8"/>
-                <!-- Circuit nodes (synapses) -->
-                <circle cx="82"  cy="85"  r="2.5" fill="#00d4ff" opacity="0.9"  class="cipher-node"/>
-                <circle cx="118" cy="85"  r="2.5" fill="#00d4ff" opacity="0.9"  class="cipher-node"/>
-                <circle cx="68"  cy="95"  r="2"   fill="#00d4ff" opacity="0.8"  class="cipher-node"/>
-                <circle cx="132" cy="95"  r="2"   fill="#00d4ff" opacity="0.8"  class="cipher-node"/>
-                <circle cx="68"  cy="112" r="2"   fill="#00d4ff" opacity="0.75" class="cipher-node"/>
-                <circle cx="132" cy="112" r="2"   fill="#00d4ff" opacity="0.75" class="cipher-node"/>
-                <circle cx="82"  cy="117" r="2.5" fill="#a855f7" opacity="0.8"  class="cipher-node"/>
-                <circle cx="118" cy="117" r="2.5" fill="#a855f7" opacity="0.8"  class="cipher-node"/>
-                <circle cx="100" cy="148" r="2"   fill="#a855f7" opacity="0.7"  class="cipher-node"/>
-              </g>
-
-              <!-- Beating heart / core -->
-              <circle cx="100" cy="100" r="24"
-                      fill="url(#cxCore)"
-                      filter="url(#cxStrongGlow)"
-                      class="cipher-core"/>
-              <circle cx="100" cy="100" r="13"
-                      fill="url(#cxCoreInner)"
-                      filter="url(#cxGlow)"
-                      class="cipher-core-inner"/>
-
-
-              <!-- Quantum aperture eyes — normal -->
-              <g class="cipher-eyes fox-eyes" id="foxEyesNormal">
-                <!-- Left -->
-                <ellipse cx="81"  cy="87" rx="7.5" ry="8.5" fill="rgba(0,5,18,0.85)"/>
-                <circle  cx="81"  cy="87" r="4.5"  fill="#00d4ff" opacity="0.55"/>
-                <circle  cx="81"  cy="87" r="2.2"  fill="#e8ffff" opacity="0.9"/>
-                <circle  cx="82.5" cy="85.5" r="1.2" fill="#fff"/>
-                <!-- Right -->
-                <ellipse cx="119" cy="87" rx="7.5" ry="8.5" fill="rgba(0,5,18,0.85)"/>
-                <circle  cx="119" cy="87" r="4.5"  fill="#00d4ff" opacity="0.55"/>
-                <circle  cx="119" cy="87" r="2.2"  fill="#e8ffff" opacity="0.9"/>
-                <circle  cx="120.5" cy="85.5" r="1.2" fill="#fff"/>
-              </g>
-
-              <!-- Eyes — resonating / happy -->
-              <g class="cipher-eyes-happy fox-eyes-happy" id="foxEyesHappy" style="display:none">
-                <path d="M74 88 Q81 82 88 88" stroke="#00d4ff" stroke-width="2.8" stroke-linecap="round" fill="none"/>
-                <path d="M112 88 Q119 82 126 88" stroke="#00d4ff" stroke-width="2.8" stroke-linecap="round" fill="none"/>
-                <circle cx="81"  cy="87" r="2.5" fill="#00d4ff" opacity="0.45"/>
-                <circle cx="119" cy="87" r="2.5" fill="#00d4ff" opacity="0.45"/>
-                <!-- Sparkle nodes -->
-                <circle cx="88"  cy="80" r="1.5" fill="#00d4ff" opacity="0.7"/>
-                <circle cx="112" cy="80" r="1.5" fill="#00d4ff" opacity="0.7"/>
-              </g>
-
-              <!-- Eyes — blink (scanning) -->
-              <g class="cipher-eyes-blink fox-eyes-blink" id="foxEyesBlink" style="display:none">
-                <path d="M74 87 Q81 84 88 87" stroke="#00d4ff" stroke-width="2" stroke-linecap="round" fill="none"/>
-                <path d="M112 87 Q119 84 126 87" stroke="#00d4ff" stroke-width="2" stroke-linecap="round" fill="none"/>
-              </g>
-
-              <!-- Eyes — Oracle mode (purple third eye) -->
-              <g class="cipher-eyes-oracle fox-eyes-oracle" id="foxEyesOracle" style="display:none" filter="url(#cxOracleGlow)">
-                <ellipse cx="81"  cy="87" rx="7.5" ry="8.5" fill="#7c3aed" opacity="0.92"/>
-                <circle  cx="81"  cy="87" r="3.5"  fill="#0d001a"/>
-                <circle  cx="82.5" cy="85.5" r="1.8" fill="#fff" opacity="0.85"/>
-                <ellipse cx="119" cy="87" rx="7.5" ry="8.5" fill="#7c3aed" opacity="0.92"/>
-                <circle  cx="119" cy="87" r="3.5"  fill="#0d001a"/>
-                <circle  cx="120.5" cy="85.5" r="1.8" fill="#fff" opacity="0.85"/>
-                <!-- Geometric third eye -->
-                <path d="M96 65 L100 56 L104 65 L100 62Z" fill="#a855f7"/>
-                <circle cx="100" cy="61" r="3.5" fill="#a855f7" filter="url(#cxStrongGlow)"/>
-                <circle cx="100" cy="61" r="1.8" fill="#e0ccff" opacity="0.9"/>
-              </g>
-
-              <!-- Eyes — distressed (cellular breakdown) -->
-              <g class="cipher-eyes-sick fox-eyes-sick fox-sick-overlay" id="foxEyesSick" style="display:none">
-                <path d="M75 84 L87 91 M87 84 L75 91" stroke="#00d4ff" stroke-width="2.2" stroke-linecap="round" opacity="0.35"/>
-                <path d="M113 84 L125 91 M125 84 L113 91" stroke="#00d4ff" stroke-width="2.2" stroke-linecap="round" opacity="0.35"/>
-              </g>
-
-              <!-- Jellyfish tendrils (float below body) -->
-              <g class="cipher-tendrils" opacity="0.45">
-                <path d="M72  168 Q65 183 70 200" stroke="#00d4ff" stroke-width="1.1" fill="none" stroke-linecap="round"/>
-                <path d="M86  174 Q82 190 85 207" stroke="#00d4ff" stroke-width="0.9" fill="none" stroke-linecap="round"/>
-                <path d="M100 176 Q100 193 100 210" stroke="#00d4ff" stroke-width="1.2" fill="none" stroke-linecap="round"/>
-                <path d="M114 174 Q118 190 115 207" stroke="#00d4ff" stroke-width="0.9" fill="none" stroke-linecap="round"/>
-                <path d="M128 168 Q135 183 130 200" stroke="#00d4ff" stroke-width="1.1" fill="none" stroke-linecap="round"/>
-                <!-- Tendril glow tips -->
-                <circle cx="70"  cy="200" r="1.5" fill="#00d4ff" opacity="0.5"/>
-                <circle cx="85"  cy="207" r="1.2" fill="#00d4ff" opacity="0.4"/>
-                <circle cx="100" cy="210" r="1.5" fill="#a855f7" opacity="0.5"/>
-                <circle cx="115" cy="207" r="1.2" fill="#00d4ff" opacity="0.4"/>
-                <circle cx="130" cy="200" r="1.5" fill="#00d4ff" opacity="0.5"/>
-              </g>
-
-              <!-- Bioluminescent ambient particles -->
-              <g class="cipher-ambient-particles">
-                <circle cx="55"  cy="72"  r="1.8" fill="#00d4ff" opacity="0.55" class="cipher-particle-float"/>
-                <circle cx="148" cy="78"  r="1.5" fill="#00d4ff" opacity="0.45" class="cipher-particle-float"/>
-                <circle cx="48"  cy="118" r="1.2" fill="#a855f7" opacity="0.5"  class="cipher-particle-float"/>
-                <circle cx="155" cy="122" r="1.5" fill="#00d4ff" opacity="0.5"  class="cipher-particle-float"/>
-                <circle cx="60"  cy="148" r="1.2" fill="#00d4ff" opacity="0.35" class="cipher-particle-float"/>
-                <circle cx="145" cy="145" r="1.5" fill="#a855f7" opacity="0.45" class="cipher-particle-float"/>
-                <circle cx="88"  cy="44"  r="1.2" fill="#00d4ff" opacity="0.4"  class="cipher-particle-float"/>
-                <circle cx="115" cy="44"  r="1"   fill="#00d4ff" opacity="0.35" class="cipher-particle-float"/>
-              </g>
+              <ellipse cx="80" cy="170" rx="36" ry="7" fill="rgba(0,180,255,0.15)"/>
+              <!-- Flask body -->
+              <path d="M58 60 L42 130 Q38 155 80 158 Q122 155 118 130 L102 60 Z" fill="url(#rg1Body)" stroke="rgba(0,200,255,0.4)" stroke-width="1.5"/>
+              <!-- Flask neck -->
+              <rect x="62" y="28" width="36" height="34" rx="4" fill="rgba(0,160,220,0.2)" stroke="rgba(0,200,255,0.35)" stroke-width="1.2"/>
+              <!-- Flask top -->
+              <rect x="54" y="22" width="52" height="10" rx="3" fill="rgba(0,160,220,0.3)" stroke="rgba(0,200,255,0.4)" stroke-width="1"/>
+              <!-- Bubbles in flask -->
+              <circle cx="68" cy="120" r="6" fill="rgba(0,212,255,0.25)" filter="url(#rg1Glow)" class="hom-bubble"/>
+              <circle cx="90" cy="135" r="4" fill="rgba(168,85,247,0.3)" filter="url(#rg1Glow)" class="hom-bubble" style="animation-delay:0.4s"/>
+              <circle cx="78" cy="108" r="3" fill="rgba(0,212,255,0.2)" class="hom-bubble" style="animation-delay:0.8s"/>
+              <!-- Glow core -->
+              <ellipse cx="80" cy="115" rx="22" ry="28" fill="rgba(0,212,255,0.08)" filter="url(#rg1Glow)"/>
             </svg>
-            <!-- Floating tap rewards & effects -->
-            <div class="pet-float-rewards" id="petFloatRewards"></div>
+
+            <!-- Stage 2: Зародыш — embryonic blob -->
+            <svg class="hom-svg hom-stage-svg" id="homSvg2" viewBox="0 0 160 180" fill="none" style="display:none">
+              <defs>
+                <radialGradient id="rg2Body" cx="38%" cy="32%" r="62%">
+                  <stop offset="0%" stop-color="rgba(180,255,200,0.5)"/>
+                  <stop offset="100%" stop-color="rgba(0,120,80,0.05)"/>
+                </radialGradient>
+                <filter id="rg2Glow"><feGaussianBlur stdDeviation="5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+              </defs>
+              <ellipse cx="80" cy="172" rx="30" ry="6" fill="rgba(0,200,120,0.15)"/>
+              <path d="M80 40 C106 40 128 62 128 95 C128 130 108 155 80 155 C52 155 32 130 32 95 C32 62 54 40 80 40Z"
+                    fill="url(#rg2Body)" stroke="rgba(0,220,130,0.35)" stroke-width="1.5" class="hom-breathe"/>
+              <!-- Veins -->
+              <path d="M80 65 L80 130 M65 90 L95 100 M65 110 L95 105" stroke="rgba(0,200,120,0.4)" stroke-width="0.9" fill="none"/>
+              <!-- Eye buds -->
+              <circle cx="68" cy="88" r="7" fill="rgba(0,10,5,0.8)"/>
+              <circle cx="68" cy="88" r="3.5" fill="#00dc82" opacity="0.7" filter="url(#rg2Glow)"/>
+              <circle cx="92" cy="88" r="7" fill="rgba(0,10,5,0.8)"/>
+              <circle cx="92" cy="88" r="3.5" fill="#00dc82" opacity="0.7" filter="url(#rg2Glow)"/>
+              <circle cx="69.5" cy="86.5" r="1.5" fill="#fff"/>
+              <circle cx="93.5" cy="86.5" r="1.5" fill="#fff"/>
+            </svg>
+
+            <!-- Stage 3: Гомункул — small humanoid figure -->
+            <svg class="hom-svg hom-stage-svg" id="homSvg3" viewBox="0 0 160 200" fill="none" style="display:none">
+              <defs>
+                <radialGradient id="rg3Skin" cx="40%" cy="30%" r="60%">
+                  <stop offset="0%" stop-color="rgba(255,210,160,0.7)"/>
+                  <stop offset="100%" stop-color="rgba(200,120,60,0.2)"/>
+                </radialGradient>
+                <filter id="rg3Glow"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+              </defs>
+              <ellipse cx="80" cy="192" rx="28" ry="6" fill="rgba(200,120,60,0.15)"/>
+              <!-- Body -->
+              <path d="M62 100 Q80 92 98 100 L104 150 Q80 160 56 150 Z" fill="url(#rg3Skin)" stroke="rgba(220,150,80,0.4)" stroke-width="1.2"/>
+              <!-- Head -->
+              <circle cx="80" cy="68" r="26" fill="url(#rg3Skin)" stroke="rgba(220,150,80,0.4)" stroke-width="1.2"/>
+              <!-- Eyes -->
+              <ellipse cx="71" cy="66" rx="5" ry="6" fill="rgba(0,0,0,0.8)"/>
+              <circle cx="71" cy="66" r="3" fill="#f59e0b" opacity="0.8" filter="url(#rg3Glow)"/>
+              <ellipse cx="89" cy="66" rx="5" ry="6" fill="rgba(0,0,0,0.8)"/>
+              <circle cx="89" cy="66" r="3" fill="#f59e0b" opacity="0.8" filter="url(#rg3Glow)"/>
+              <circle cx="72" cy="64.5" r="1.3" fill="#fff"/>
+              <circle cx="90" cy="64.5" r="1.3" fill="#fff"/>
+              <!-- Arms -->
+              <path d="M62 108 L44 130 M98 108 L116 130" stroke="rgba(220,150,80,0.6)" stroke-width="8" stroke-linecap="round"/>
+              <!-- Legs -->
+              <path d="M68 150 L62 178 M92 150 L98 178" stroke="rgba(220,150,80,0.6)" stroke-width="8" stroke-linecap="round"/>
+              <!-- Alchemical glow -->
+              <ellipse cx="80" cy="120" rx="18" ry="22" fill="rgba(245,158,11,0.05)" filter="url(#rg3Glow)"/>
+            </svg>
+
+            <!-- Stage 4: Фамильяр — mystical companion -->
+            <svg class="hom-svg hom-stage-svg" id="homSvg4" viewBox="0 0 160 200" fill="none" style="display:none">
+              <defs>
+                <radialGradient id="rg4Body" cx="38%" cy="30%" r="65%">
+                  <stop offset="0%" stop-color="rgba(200,160,255,0.6)"/>
+                  <stop offset="100%" stop-color="rgba(80,0,180,0.1)"/>
+                </radialGradient>
+                <filter id="rg4Glow"><feGaussianBlur stdDeviation="5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+              </defs>
+              <ellipse cx="80" cy="190" rx="32" ry="7" fill="rgba(168,85,247,0.2)"/>
+              <!-- Body -->
+              <path d="M55 105 Q80 95 105 105 L112 158 Q80 170 48 158 Z" fill="url(#rg4Body)" stroke="rgba(168,85,247,0.4)" stroke-width="1.5" class="hom-breathe"/>
+              <!-- Head -->
+              <ellipse cx="80" cy="70" rx="28" ry="30" fill="url(#rg4Body)" stroke="rgba(168,85,247,0.4)" stroke-width="1.5"/>
+              <!-- Horns -->
+              <path d="M66 46 L58 22 L70 38 M94 46 L102 22 L90 38" stroke="rgba(168,85,247,0.7)" stroke-width="2.5" stroke-linecap="round" fill="none"/>
+              <!-- Eyes -->
+              <ellipse cx="69" cy="68" rx="7" ry="8" fill="rgba(0,0,0,0.85)"/>
+              <circle cx="69" cy="68" r="4" fill="#a855f7" opacity="0.9" filter="url(#rg4Glow)"/>
+              <ellipse cx="91" cy="68" rx="7" ry="8" fill="rgba(0,0,0,0.85)"/>
+              <circle cx="91" cy="68" r="4" fill="#a855f7" opacity="0.9" filter="url(#rg4Glow)"/>
+              <circle cx="70.5" cy="66.5" r="1.5" fill="#fff"/>
+              <circle cx="92.5" cy="66.5" r="1.5" fill="#fff"/>
+              <!-- Wings -->
+              <path d="M55 118 Q28 100 20 125 Q30 140 55 130" fill="rgba(168,85,247,0.15)" stroke="rgba(168,85,247,0.4)" stroke-width="1"/>
+              <path d="M105 118 Q132 100 140 125 Q130 140 105 130" fill="rgba(168,85,247,0.15)" stroke="rgba(168,85,247,0.4)" stroke-width="1"/>
+              <!-- Legs -->
+              <path d="M66 158 L60 185 M94 158 L100 185" stroke="rgba(168,85,247,0.5)" stroke-width="7" stroke-linecap="round"/>
+            </svg>
+
+            <!-- Stage 5: Элементаль — elemental spirit -->
+            <svg class="hom-svg hom-stage-svg" id="homSvg5" viewBox="0 0 160 200" fill="none" style="display:none">
+              <defs>
+                <radialGradient id="rg5Core" cx="50%" cy="50%" r="50%">
+                  <stop offset="0%" stop-color="#fff" stop-opacity="0.95"/>
+                  <stop offset="40%" stop-color="#f97316" stop-opacity="0.8"/>
+                  <stop offset="100%" stop-color="#dc2626" stop-opacity="0"/>
+                </radialGradient>
+                <filter id="rg5Glow"><feGaussianBlur stdDeviation="7" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+              </defs>
+              <ellipse cx="80" cy="185" rx="35" ry="8" fill="rgba(249,115,22,0.2)"/>
+              <!-- Flame body -->
+              <path d="M80 40 C95 60 115 70 110 100 C105 130 95 155 80 165 C65 155 55 130 50 100 C45 70 65 60 80 40Z"
+                    fill="rgba(249,115,22,0.3)" stroke="rgba(249,115,22,0.5)" stroke-width="1.5" filter="url(#rg5Glow)" class="hom-breathe"/>
+              <path d="M80 60 C90 75 105 85 100 108 C97 125 88 145 80 155 C72 145 63 125 60 108 C55 85 70 75 80 60Z"
+                    fill="rgba(251,146,60,0.4)" filter="url(#rg5Glow)"/>
+              <!-- Bright core -->
+              <ellipse cx="80" cy="105" rx="18" ry="22" fill="url(#rg5Core)" filter="url(#rg5Glow)"/>
+              <!-- Eyes — intense fire -->
+              <ellipse cx="70" cy="100" rx="7" ry="8" fill="rgba(0,0,0,0.9)"/>
+              <circle cx="70" cy="100" r="4" fill="#f97316" opacity="0.95" filter="url(#rg5Glow)"/>
+              <ellipse cx="90" cy="100" rx="7" ry="8" fill="rgba(0,0,0,0.9)"/>
+              <circle cx="90" cy="100" r="4" fill="#f97316" opacity="0.95" filter="url(#rg5Glow)"/>
+              <circle cx="71.5" cy="98.5" r="2" fill="#fff"/>
+              <circle cx="91.5" cy="98.5" r="2" fill="#fff"/>
+              <!-- Flame wisps -->
+              <path d="M60 80 Q50 65 55 50 Q58 65 65 75" fill="rgba(249,115,22,0.3)" filter="url(#rg5Glow)"/>
+              <path d="M100 80 Q110 65 105 50 Q102 65 95 75" fill="rgba(249,115,22,0.3)" filter="url(#rg5Glow)"/>
+            </svg>
+
+            <!-- Stage 6: Архонт — dark ruler -->
+            <svg class="hom-svg hom-stage-svg" id="homSvg6" viewBox="0 0 160 210" fill="none" style="display:none">
+              <defs>
+                <radialGradient id="rg6Dark" cx="40%" cy="30%" r="65%">
+                  <stop offset="0%" stop-color="rgba(100,80,200,0.5)"/>
+                  <stop offset="100%" stop-color="rgba(10,0,30,0.8)"/>
+                </radialGradient>
+                <filter id="rg6Glow"><feGaussianBlur stdDeviation="6" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+              </defs>
+              <ellipse cx="80" cy="200" rx="38" ry="8" fill="rgba(80,0,180,0.25)"/>
+              <!-- Robe -->
+              <path d="M52 108 Q80 96 108 108 L120 190 Q80 202 40 190 Z" fill="url(#rg6Dark)" stroke="rgba(120,80,255,0.4)" stroke-width="1.5"/>
+              <!-- Body -->
+              <path d="M62 108 Q80 100 98 108 L102 145 Q80 152 58 145 Z" fill="url(#rg6Dark)" stroke="rgba(120,80,255,0.3)" stroke-width="1"/>
+              <!-- Head -->
+              <ellipse cx="80" cy="68" rx="26" ry="28" fill="url(#rg6Dark)" stroke="rgba(120,80,255,0.45)" stroke-width="1.5"/>
+              <!-- Crown -->
+              <path d="M58 48 L62 30 L70 44 L80 26 L90 44 L98 30 L102 48" stroke="rgba(255,200,60,0.8)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none" filter="url(#rg6Glow)"/>
+              <!-- Eyes — glowing purple -->
+              <ellipse cx="69" cy="66" rx="7" ry="8" fill="rgba(0,0,0,0.9)"/>
+              <circle cx="69" cy="66" r="4.5" fill="#7c3aed" opacity="0.9" filter="url(#rg6Glow)"/>
+              <ellipse cx="91" cy="66" rx="7" ry="8" fill="rgba(0,0,0,0.9)"/>
+              <circle cx="91" cy="66" r="4.5" fill="#7c3aed" opacity="0.9" filter="url(#rg6Glow)"/>
+              <circle cx="70.5" cy="64.5" r="2" fill="#fff" opacity="0.9"/>
+              <circle cx="92.5" cy="64.5" r="2" fill="#fff" opacity="0.9"/>
+              <!-- Spectral wings -->
+              <path d="M52 115 Q18 95 10 130 Q25 155 52 138" fill="rgba(80,0,180,0.2)" stroke="rgba(120,80,255,0.3)" stroke-width="1" filter="url(#rg6Glow)"/>
+              <path d="M108 115 Q142 95 150 130 Q135 155 108 138" fill="rgba(80,0,180,0.2)" stroke="rgba(120,80,255,0.3)" stroke-width="1" filter="url(#rg6Glow)"/>
+              <!-- Aura rings -->
+              <ellipse cx="80" cy="130" rx="50" ry="55" fill="none" stroke="rgba(120,80,255,0.12)" stroke-width="1"/>
+              <ellipse cx="80" cy="130" rx="42" ry="46" fill="none" stroke="rgba(120,80,255,0.18)" stroke-width="1"/>
+            </svg>
+
+            <!-- Stage 7: Философский Камень — Philosopher's Stone -->
+            <svg class="hom-svg hom-stage-svg" id="homSvg7" viewBox="0 0 160 180" fill="none" style="display:none">
+              <defs>
+                <radialGradient id="rg7Stone" cx="50%" cy="50%" r="50%">
+                  <stop offset="0%" stop-color="#fff" stop-opacity="0.95"/>
+                  <stop offset="30%" stop-color="#fcd34d" stop-opacity="0.9"/>
+                  <stop offset="70%" stop-color="#f59e0b" stop-opacity="0.6"/>
+                  <stop offset="100%" stop-color="#b45309" stop-opacity="0"/>
+                </radialGradient>
+                <filter id="rg7Glow"><feGaussianBlur stdDeviation="8" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+                <filter id="rg7StrongGlow"><feGaussianBlur stdDeviation="14" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+              </defs>
+              <ellipse cx="80" cy="172" rx="40" ry="8" fill="rgba(245,158,11,0.3)"/>
+              <!-- Outer rings -->
+              <ellipse cx="80" cy="88" rx="68" ry="70" fill="none" stroke="rgba(245,158,11,0.12)" stroke-width="1" class="hom-spin-slow"/>
+              <ellipse cx="80" cy="88" rx="56" ry="58" fill="none" stroke="rgba(245,158,11,0.2)" stroke-width="1" class="hom-spin-reverse"/>
+              <!-- Octahedron facets -->
+              <path d="M80 18 L130 88 L80 158 L30 88 Z" fill="rgba(245,158,11,0.12)" stroke="rgba(245,158,11,0.4)" stroke-width="1.5" filter="url(#rg7Glow)"/>
+              <path d="M80 30 L122 88 L80 146 L38 88 Z" fill="rgba(252,211,77,0.12)" stroke="rgba(252,211,77,0.35)" stroke-width="1"/>
+              <!-- Core -->
+              <circle cx="80" cy="88" r="32" fill="url(#rg7Stone)" filter="url(#rg7StrongGlow)"/>
+              <circle cx="80" cy="88" r="18" fill="rgba(255,255,255,0.9)" filter="url(#rg7Glow)"/>
+              <!-- Rune lines -->
+              <path d="M60 88 L100 88 M80 68 L80 108 M65 73 L95 103 M95 73 L65 103"
+                    stroke="rgba(180,83,9,0.5)" stroke-width="1" filter="url(#rg7Glow)"/>
+              <!-- Floating particles -->
+              <circle cx="38" cy="55" r="2.5" fill="#fcd34d" opacity="0.7" filter="url(#rg7Glow)" class="hom-particle-float"/>
+              <circle cx="125" cy="62" r="2" fill="#fcd34d" opacity="0.6" filter="url(#rg7Glow)" class="hom-particle-float" style="animation-delay:0.5s"/>
+              <circle cx="35" cy="122" r="1.8" fill="#fcd34d" opacity="0.55" class="hom-particle-float" style="animation-delay:1s"/>
+              <circle cx="128" cy="118" r="2.2" fill="#fcd34d" opacity="0.65" filter="url(#rg7Glow)" class="hom-particle-float" style="animation-delay:1.5s"/>
+              <circle cx="62" cy="28" r="1.5" fill="#fff" opacity="0.8" class="hom-particle-float" style="animation-delay:0.3s"/>
+              <circle cx="105" cy="25" r="1.5" fill="#fff" opacity="0.7" class="hom-particle-float" style="animation-delay:0.8s"/>
+            </svg>
+
+            <!-- Dead overlay -->
+            <div class="hom-dead-overlay" id="homDeadOverlay" style="display:none">
+              <div class="hom-skull">💀</div>
+              <div class="hom-dead-text">Гомункул погиб</div>
+            </div>
+
           </div>
+          <!-- Tap float rewards -->
+          <div class="hom-float-rewards" id="homFloatRewards"></div>
           <!-- Combo badge -->
-          <div class="pet-combo" id="petCombo" style="display:none">
-            <span id="petComboText">x2 COMBO!</span>
+          <div class="hom-combo" id="homCombo" style="display:none">
+            <span id="homComboText">x10 COMBO!</span>
           </div>
         </div>
 
-        <!-- Cipher stat bars -->
-        <div class="pet-stats">
-          <div class="pet-stat">
-            <div class="pet-stat-header">
-              <span class="pet-stat-icon">⚡</span>
-              <span class="pet-stat-label">Энергия</span>
-              <span class="pet-stat-val" id="petHunger">80</span>
-            </div>
-            <div class="pet-stat-bar"><div class="pet-stat-fill pet-stat-fill--hunger" id="petHungerBar" style="width:80%"></div></div>
+        <!-- Combo meter bar -->
+        <div class="hom-combo-bar-wrap">
+          <div class="hom-combo-bar" id="homComboBar" style="width:0%"></div>
+        </div>
+        <div class="hom-combo-label" id="homComboLabel">Комбо: 0</div>
+
+        <!-- Stats HUD -->
+        <div class="hom-hud">
+          <div class="hom-hud-item">
+            <div class="hom-hud-val" id="homMultVal">×1.0</div>
+            <div class="hom-hud-key">Множитель</div>
           </div>
-          <div class="pet-stat">
-            <div class="pet-stat-header">
-              <span class="pet-stat-icon">〜</span>
-              <span class="pet-stat-label">Резонанс</span>
-              <span class="pet-stat-val" id="petHappiness">80</span>
-            </div>
-            <div class="pet-stat-bar"><div class="pet-stat-fill pet-stat-fill--happiness" id="petHappinessBar" style="width:80%"></div></div>
+          <div class="hom-hud-item">
+            <div class="hom-hud-val" id="homTapsVal">0</div>
+            <div class="hom-hud-key">Тапов сегодня</div>
           </div>
-          <div class="pet-stat">
-            <div class="pet-stat-header">
-              <span class="pet-stat-icon">🔋</span>
-              <span class="pet-stat-label">Целостность</span>
-              <span class="pet-stat-val" id="petHealth">100</span>
-            </div>
-            <div class="pet-stat-bar"><div class="pet-stat-fill pet-stat-fill--health" id="petHealthBar" style="width:100%"></div></div>
+          <div class="hom-hud-item">
+            <div class="hom-hud-val" id="homComboMaxVal">0</div>
+            <div class="hom-hud-key">Лучшее комбо</div>
           </div>
         </div>
 
-        <!-- Cipher mutation points & DATA UNITS -->
-        <div class="pet-level-card">
-          <div class="pet-level-left">
-            <div class="pet-level-badge" id="petLevelBadge">Ст. 1</div>
-            <div class="pet-xp-info">
-              <span id="petXpCurrent">0</span> / <span id="petXpNext">50</span> MP
-            </div>
+        <!-- Evolution progress -->
+        <div class="hom-evo-section">
+          <div class="hom-evo-header">
+            <span class="hom-evo-label">Эволюция</span>
+            <span class="hom-evo-vals"><span id="homSoulsFed">0</span> / <span id="homSoulsReq">500</span> душ</span>
           </div>
-          <div class="pet-xp-bar-wrap">
-            <div class="pet-xp-bar"><div class="pet-xp-fill" id="petXpFill" style="width:0%"></div></div>
+          <div class="hom-evo-bar-wrap">
+            <div class="hom-evo-bar" id="homEvoBar" style="width:0%"></div>
           </div>
-          <div class="pet-coins-display">
-            <span class="pet-coin-icon cipher-data-icon">Ð</span>
-            <span id="petCoins">0</span>
-          </div>
+          <div class="hom-module-note" id="homModuleNote"></div>
         </div>
 
+        <!-- Revive section (dead state) -->
+        <div class="hom-revive-section" id="homReviveSection" style="display:none">
+          <div class="hom-revive-cost">Возрождение: 200 💀 душ</div>
+          <button class="hom-revive-btn" id="homReviveBtn" onclick="homunculusRevive()">
+            ⚗️ Воссоздать Гомункула
+          </button>
+          <div class="hom-revive-note">Стадия уменьшится на 1</div>
+        </div>
+
+        <!-- Enrage notice -->
+        <div class="hom-enrage-notice" id="homEnrageNotice" style="display:none">
+          🔥 ЯРОСТЬ АКТИВНА — Множитель ×2 на 10 мин
+        </div>
 
       </div>
     </div>
 
   </div>
+
 
   <!-- ══ LESSON MODAL ════════════════════════════════════════════════════ -->
   <div id="lessonModal" class="modal hidden">
