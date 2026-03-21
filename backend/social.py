@@ -642,6 +642,102 @@ async def api_leave_clan(req: ClanLeaveRequest):
         raise HTTPException(400, str(e))
 
 
+# ── CLAN RAID ─────────────────────────────────────────────────────────────────
+
+RAID_FILE = _data_dir / "raid_state.json"
+
+RAID_BOSSES = [
+    {"id": "rb_vol",  "name": "Босс Волатильности", "hp": 10000, "icon": "⚡",
+     "question": "Цена создала False Breakout выше Equal Highs и вернулась. Это...",
+     "answer": "Inducement + liquidity sweep. Ищи OB или FVG в зоне возврата для шорта.",
+     "souls_reward": 200, "xp_reward": 100},
+    {"id": "rb_flat", "name": "Босс Флета",          "hp":  8000, "icon": "❄️",
+     "question": "BTC 6 часов в диапазоне. Как определить куда пойдёт цена на выходе?",
+     "answer": "Смотри на сторону накопленной ликвидности (EQH или EQL) — туда и пойдёт sweep перед реальным движением.",
+     "souls_reward": 150, "xp_reward": 75},
+    {"id": "rb_bos",  "name": "Босс BOS",            "hp": 12000, "icon": "💀",
+     "question": "На H4 произошёл CHoCH вниз. Что делаешь дальше?",
+     "answer": "Ждёшь первый pullback на медвежий OB или FVG на H1/M15. Входишь шорт с SL выше CHoCH и целью на SSL.",
+     "souls_reward": 300, "xp_reward": 150},
+]
+
+
+def get_raid_status() -> dict:
+    return _load_json(RAID_FILE, {"active": False})
+
+
+def _save_raid(data: dict) -> None:
+    _save_json(RAID_FILE, data)
+
+
+def start_weekly_raid(boss_id: str = None) -> dict:
+    """Запустить еженедельный рейд."""
+    import random
+    import datetime as _dtime
+    boss = next((b for b in RAID_BOSSES if b["id"] == boss_id), None) if boss_id else random.choice(RAID_BOSSES)
+    now = _now_utc()
+    raid = {
+        "active": True,
+        "boss": boss,
+        "hp_current": boss["hp"],
+        "hp_max": boss["hp"],
+        "started_at": now.isoformat(),
+        "ends_at": (now + _dtime.timedelta(days=7)).isoformat(),
+        "participants": {},
+        "top_clans": {},
+    }
+    _save_raid(raid)
+    return raid
+
+
+def raid_attack(user_id: int, user_level: int, clan_id: str, is_correct: bool) -> dict:
+    """Атака рейд-босса."""
+    import datetime as _dtime
+    raid = get_raid_status()
+    if not raid.get("active"):
+        return {"ok": False, "error": "no_active_raid"}
+
+    try:
+        ends = _dtime.datetime.fromisoformat(raid["ends_at"]).replace(tzinfo=None)
+        if _dtime.datetime.utcnow() > ends:
+            return {"ok": False, "error": "raid_expired"}
+    except Exception:
+        pass
+
+    uid_str = str(user_id)
+    if raid.get("participants", {}).get(uid_str, {}).get("answered"):
+        return {"ok": False, "error": "already_answered"}
+
+    damage = user_level * 10 if is_correct else user_level * 2
+    raid["hp_current"] = max(0, raid["hp_current"] - damage)
+    raid.setdefault("participants", {})[uid_str] = {
+        "clan_id": clan_id, "damage": damage, "answered": True,
+        "is_correct": is_correct, "at": _now_utc().isoformat(),
+    }
+
+    if clan_id:
+        raid.setdefault("top_clans", {})[clan_id] = raid["top_clans"].get(clan_id, 0) + damage
+
+    boss_defeated = raid["hp_current"] <= 0
+    if boss_defeated:
+        raid["active"] = False
+        raid["defeated_at"] = _now_utc().isoformat()
+
+    _save_raid(raid)
+
+    return {
+        "ok": True,
+        "damage": damage,
+        "is_correct": is_correct,
+        "hp_current": raid["hp_current"],
+        "hp_max": raid["hp_max"],
+        "hp_pct": round(raid["hp_current"] / raid["hp_max"] * 100) if raid["hp_max"] > 0 else 0,
+        "boss_defeated": boss_defeated,
+        "souls_reward": raid["boss"]["souls_reward"] if is_correct else 0,
+        "xp_reward": raid["boss"]["xp_reward"] if is_correct else 0,
+    }
+
+
 @router.post("/clans/contribute")
 async def api_contribute_souls(req: ClanContributeRequest):
     from progress import spend_souls

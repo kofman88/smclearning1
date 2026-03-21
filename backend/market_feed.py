@@ -236,3 +236,46 @@ async def start_market_feed_loop():
         except Exception as e:
             logger.error(f"Market feed loop error: {e}")
         await asyncio.sleep(60)
+
+
+# ── LIVE SIGNAL ───────────────────────────────────────────────────────────────
+
+LIVE_SIGNAL_PATTERNS = {
+    "crash":    {"lesson": "liquidity",        "concept": "Sweep ликвидности",    "module": 1},
+    "dump":     {"lesson": "market_structure", "concept": "Break of Structure",   "module": 0},
+    "pump":     {"lesson": "order_blocks",     "concept": "Ордер-блоки на лонг",  "module": 2},
+    "rally":    {"lesson": "fvg",              "concept": "Fair Value Gap",        "module": 3},
+    "volatile": {"lesson": "inducement",       "concept": "Inducement + sweep",   "module": 4},
+    "flat":     {"lesson": "killzones",        "concept": "Kill Zones + AMD",     "module": 6},
+    "neutral":  {"lesson": "premium_discount", "concept": "Premium/Discount зоны","module": 6},
+}
+
+_last_signal_state: str = ""
+
+
+def detect_live_signal(pulse: dict) -> "dict | None":
+    """Если состояние рынка изменилось — вернуть Live Signal. Иначе None."""
+    import datetime as _dtime
+    global _last_signal_state
+    state = pulse.get("market_state", "neutral")
+    if state == _last_signal_state:
+        return None
+    _last_signal_state = state
+
+    pattern = LIVE_SIGNAL_PATTERNS.get(state, LIVE_SIGNAL_PATTERNS["neutral"])
+    btc = pulse.get("btc_price", 0)
+    change = pulse.get("price_change_1h", 0)
+    mood_label = pulse.get("pet_mood", {}).get("label", "")
+
+    return {
+        "active": True,
+        "market_state": state,
+        "mood_label": mood_label,
+        "btc_price": btc,
+        "price_change_1h": change,
+        "lesson_key": pattern["lesson"],
+        "concept": pattern["concept"],
+        "module_required": pattern["module"],
+        "message": f"Рынок сейчас: {mood_label}. Это {pattern['concept']}. Открой урок.",
+        "created_at": _dtime.datetime.utcnow().isoformat(),
+    }

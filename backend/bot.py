@@ -45,6 +45,50 @@ def make_main_keyboard():
 @bot.message_handler(commands=["start"])
 def cmd_start(message: types.Message):
     user = message.from_user
+    user_id = user.id
+    args = message.text.split()
+    ref_code = args[1] if len(args) > 1 else None
+
+    # Referral handling
+    if ref_code and ref_code.startswith("ref_"):
+        try:
+            inviter_id = int(ref_code.split("_")[1])
+            if inviter_id != user_id:
+                from progress import user_progress, save_progress, get_user_state
+                st = get_user_state(user_id)
+                if not st.get("referred_by"):
+                    st["referred_by"] = inviter_id
+                    st["souls"] = round(st.get("souls", 0) + 50, 1)
+
+                    inv_st = get_user_state(inviter_id)
+                    inv_st["souls"] = round(inv_st.get("souls", 0) + 100, 1)
+                    inv_st["referral_souls_earned"] = inv_st.get("referral_souls_earned", 0) + 100
+                    refs = inv_st.setdefault("referrals", [])
+                    if user_id not in refs:
+                        refs.append(user_id)
+                        inv_st["total_referrals"] = len(refs)
+
+                    save_progress()
+
+                    try:
+                        bot.send_message(inviter_id,
+                            f"🧪 <b>Новый ученик!</b>\n\n"
+                            f"По твоей ссылке пришёл новый трейдер.\n+100 Душ тебе!\n"
+                            f"Всего приглашено: {len(refs)}",
+                            parse_mode="HTML")
+                    except Exception:
+                        pass
+
+                    bot.reply_to(message,
+                        "⚗️ <b>Добро пожаловать в CHM Academy!</b>\n\n"
+                        "Ты пришёл по реферальной ссылке. +50 Душ тебе!\n"
+                        "Нажми кнопку ниже чтобы начать обучение:",
+                        parse_mode="HTML",
+                        reply_markup=make_main_keyboard())
+                    return
+        except (ValueError, Exception):
+            pass
+
     bot.reply_to(
         message,
         f"👋 Привет, *{user.first_name}*!\n\n"
