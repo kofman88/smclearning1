@@ -1557,6 +1557,35 @@ function showLoadingError(msg) {
 }
 
 // ══════════════════════════════════════════════════════════════════════
+// ── ACTIONS POOL ─────────────────────────────────────────────────────
+
+async function loadActionsPool() {
+  try {
+    const d = await fetch(`${API}/actions/${state.userId}`).then(r => r.json());
+    state.actionsPool = d;
+    renderActionsHUD(d);
+  } catch(e) {}
+}
+
+function renderActionsHUD(d) {
+  const el = document.getElementById("actionsHUD");
+  if (!el) return;
+
+  const left  = d.left ?? 0;
+  const total = d.daily_total ?? 1;
+  const chance = d.catalyst_chance_pct ?? 0;
+
+  // Кружочки-действия (● = доступно, ○ = потрачено)
+  const dots = Array.from({length: total}, (_, i) =>
+    `<span class="action-dot ${i < left ? 'action-dot-ready' : 'action-dot-used'}"></span>`
+  ).join('');
+
+  el.innerHTML = `
+    <div class="actions-dots">${dots}</div>
+    <div class="actions-label">${left}/${total} действий</div>
+    ${chance > 0 ? `<div class="cat-chance-hint">⚗️ Катализатор: ${chance}%</div>` : ''}`;
+}
+
 // ── CATALYST UI ──────────────────────────────────────────────────────
 // ══════════════════════════════════════════════════════════════════════
 
@@ -1584,6 +1613,11 @@ function renderCatalyst(cat, my) {
   const atkMax = my?.max_attempts ?? 1;
 
   if (!cat.active) {
+    const pool = state.actionsPool || {};
+    const chance = pool.catalyst_chance_pct || 0;
+    const hasActions = (pool.left || 0) > 0;
+    const chanceCap = (state.userState?.level || 1) * 15;
+
     wrap.innerHTML = `
     <div class="cat-card cat-idle">
       <div class="cat-card-header">
@@ -1598,6 +1632,23 @@ function renderCatalyst(cat, my) {
         </div>
       </div>
       <div id="catRecordsZone"></div>
+      <div class="cat-roll-section">
+        <div class="cat-roll-chance">
+          <span>⚗️ Твой шанс стать Катализатором</span>
+          <span class="cat-roll-pct">${chance}%</span>
+        </div>
+        <div class="cat-roll-bar-bg">
+          <div class="cat-roll-bar" style="width:${Math.min(100, chance / chanceCap * 100)}%"></div>
+        </div>
+        <button class="cat-roll-btn ${!hasActions ? 'cat-roll-disabled' : ''}"
+          ${!hasActions ? 'disabled' : ''}
+          onclick="doCatalystRoll()">
+          ${hasActions
+            ? `🎲 Бросить кости (+10% к шансу) — 1 действие`
+            : `❌ Нет действий`}
+        </button>
+        <p class="cat-roll-hint">Шанс копится между днями. Максимум: ${chanceCap}%</p>
+      </div>
       <div class="cat-hint">Получи Нестабильный Изотоп: победи Босса или войди в топ-3 ежедневного вызова</div>
     </div>`;
     _loadCatRecords();
@@ -1680,6 +1731,37 @@ async function _loadCatRecords() {
         </div>`).join("");
   } catch(e) {}
 }
+
+async function doCatalystRoll() {
+  if (!state.actionsPool?.left) {
+    showToast("Нет действий", "error"); return;
+  }
+  try {
+    const d = await fetch(`${API}/catalyst/roll`, {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({user_id: state.userId}),
+    }).then(r => r.json());
+
+    if (!d.ok) { showToast(d.message || "Нет действий", "error"); return; }
+
+    playSound(d.became_catalyst ? "catalyst_on" : "tap");
+    if (tg?.HapticFeedback) tg.HapticFeedback.impactOccurred(d.became_catalyst ? "heavy" : "light");
+    showToast(d.message, d.became_catalyst ? "success" : "info");
+
+    if (state.actionsPool) {
+      state.actionsPool.left = d.actions_left;
+      state.actionsPool.catalyst_chance_pct = d.chance_pct;
+    }
+    renderActionsHUD(state.actionsPool || {});
+    if (d.became_catalyst) {
+      setTimeout(loadCatalyst, 500);
+    } else {
+      loadCatalyst();
+    }
+  } catch(e) { showToast("Ошибка", "error"); }
+}
+window.doCatalystRoll = doCatalystRoll;
 
 async function doActivateCatalyst() {
   const my = await fetch(`${API}/catalyst/my/${state.userId}`).then(r=>r.json());
@@ -1876,6 +1958,8 @@ async function init() {
     // Catalyst
     loadCatalyst();
     setInterval(loadCatalyst, 90000); // каждые 1.5 минуты
+    loadActionsPool();
+    setInterval(loadActionsPool, 30000); // каждые 30 сек
 
     console.log("[CHM] init complete. userId=", state.userId, "modules=", modulesData?.modules?.length);
 
@@ -1996,9 +2080,20 @@ function renderHomunculus(data) {
   }
 }
 
-function onHomunculusTap(e) {
-  if (!state.userId) return;
+let _tapInProgress = false;
 
+async function onHomunculusTap(e) {
+  if (!state.userId || _tapInProgress) return;
+
+  // Проверяем есть ли действия локально (без запроса)
+  if (state.actionsPool && state.actionsPool.left <= 0) {
+    _showNoActions();
+    return;
+  }
+
+  _tapInProgress = true;
+
+  // Combo tracking
   const now = Date.now();
   if (now - _homLastTapTime < 300) {
     _homComboCount++;
@@ -2006,12 +2101,9 @@ function onHomunculusTap(e) {
     _homComboCount = 1;
   }
   _homLastTapTime = now;
-  if (_homComboCount > _homMaxCombo) _homMaxCombo = _homComboCount;
-
   _updateHomComboBar(_homComboCount);
 
-  _homTapBatch++;
-
+  // Анимация
   const creature = document.getElementById("homCreature");
   if (creature) {
     creature.classList.remove("hom-squish");
@@ -2019,44 +2111,72 @@ function onHomunculusTap(e) {
     creature.classList.add("hom-squish");
     setTimeout(() => creature.classList.remove("hom-squish"), 200);
   }
-
   _spawnHomFloat(e, "✦");
   playSound("tap");
-
   if (tg?.HapticFeedback) tg.HapticFeedback.impactOccurred("light");
 
-  clearTimeout(_homBatchTimer);
-  _homBatchTimer = setTimeout(_flushHomTaps, 2000);
+  // Немедленный запрос (не батч!)
+  try {
+    const res = await fetch(`${API}/homunculus/tap`, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({
+        user_id: state.userId, tap_count: 1, max_combo: _homComboCount,
+        session_token: state.sessionToken
+      }),
+    });
+    const data = await res.json();
+
+    if (data.error === "no_actions") {
+      _showNoActions(data.message);
+      _tapInProgress = false;
+      return;
+    }
+
+    if (data.ok !== false) {
+      if (data.souls_earned != null) {
+        state.souls = (state.souls || 0) + data.souls_earned;
+        _updateSoulsDisplay(state.souls);
+        if (data.souls_earned > 0) {
+          _spawnHomFloat(e, `+${data.souls_earned.toFixed ? data.souls_earned.toFixed(2) : data.souls_earned}`);
+          playSound("soulsgain");
+        }
+      }
+      // Обновить пул действий
+      if (data.actions_left != null) {
+        if (!state.actionsPool) state.actionsPool = {};
+        state.actionsPool.left = data.actions_left;
+        state.actionsPool.daily_total = data.actions_total;
+        renderActionsHUD(state.actionsPool);
+      }
+      renderHomunculus(data);
+      if (data.evolved) {
+        playSound("evolution");
+        _triggerHomunculusEvolution(data.stage, data.stage_name);
+      }
+    } else {
+      console.warn("hom tap:", data.error);
+    }
+  } catch(err) {
+    console.error("tap error:", err);
+  }
+
+  _tapInProgress = false;
 }
 window.onHomunculusTap = onHomunculusTap;
 
-async function _flushHomTaps() {
-  if (_homTapBatch === 0 || !state.userId) return;
-  const taps     = _homTapBatch;
-  const maxCombo = _homMaxCombo;
-  _homTapBatch = 0;
-  _homMaxCombo = 0;
-  try {
-    const res = await fetch(`${API}/homunculus/tap`, {
-      method:  "POST",
-      headers: {"Content-Type": "application/json"},
-      body:    JSON.stringify({user_id: state.userId, tap_count: taps, max_combo: maxCombo, session_token: state.sessionToken}),
-    });
-    const data = await res.json();
-    if (data.ok === false) { console.warn("hom tap:", data.error); return; }
-
-    if (data.souls_earned != null) {
-      state.souls = (state.souls || 0) + data.souls_earned;
-      _updateSoulsDisplay(state.souls);
-      if (data.souls_earned > 0) playSound("soulsgain");
-    }
-    renderHomunculus(data);
-
-    if (data.evolved) {
-      playSound("evolution");
-      _triggerHomunculusEvolution(data.stage, data.stage_name);
-    }
-  } catch(e) { console.error("flushHomTaps:", e); }
+function _showNoActions(msg) {
+  showToast(msg || "Действий не осталось. Сброс в 00:00 UTC.", "info");
+  const timer = document.getElementById("actionsResetTimer");
+  if (timer) {
+    timer.style.display = "block";
+    const now = new Date();
+    const midnight = new Date();
+    midnight.setUTCHours(24, 0, 0, 0);
+    const h = Math.floor((midnight - now) / 3600000);
+    const m = Math.floor(((midnight - now) % 3600000) / 60000);
+    timer.textContent = `⏰ Новые действия через ${h}ч ${m}м`;
+  }
 }
 
 function _updateHomComboBar(combo) {

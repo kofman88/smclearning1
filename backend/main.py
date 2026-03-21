@@ -1418,17 +1418,25 @@ async def get_homunculus_api(user_id: int):
 
 @app.post("/api/homunculus/tap")
 async def homunculus_tap_api(req: HomunculusTapRequest):
-    """Process a batch of taps. Returns souls_earned, evolution flag, new_stage."""
-    # ── Session check ──────────────────────────────────────────────────────
+    """Process a single tap. Each tap costs 1 action from the daily pool."""
     if not _check_session(req.user_id, req.session_token):
         raise HTTPException(status_code=403, detail="Invalid session")
-    # ── Rate limiting: max 10 tap-batches per 5 seconds per user ──────────
     if not _rate_limit(req.user_id, window_seconds=5, max_calls=10):
         raise HTTPException(status_code=429, detail="Too many requests")
-    # ── Server-side anti-cheat: cap tap_count and max_combo ───────────────
-    tap_count = max(1, min(req.tap_count, MAX_TAP_BATCH))
-    max_combo  = max(0, min(req.max_combo, MAX_COMBO_ALLOWED))
-    result = homunculus_process_taps(req.user_id, tap_count, max_combo)
+
+    # ── Единый пул действий ──────────────────────────────────────────────
+    from progress import spend_action
+    action_result = spend_action(req.user_id, "tap", user_progress)
+    if not action_result["ok"]:
+        return action_result  # {ok:False, error:"no_actions", message:..., actions_left:0}
+
+    # Каждый тап = 1 действие (tap_count игнорируется — всегда 1)
+    max_combo = max(0, min(req.max_combo, MAX_COMBO_ALLOWED))
+    result = homunculus_process_taps(req.user_id, 1, max_combo)
+    result["actions_left"]  = action_result["actions_left"]
+    result["actions_total"] = action_result["actions_total"]
+    save_progress()
+
     if result.get("evolution"):
         stage_name = result["stage_name"]
         uid = req.user_id
@@ -1598,7 +1606,13 @@ class RouletteAnswerRequest(BaseModel):
 
 @app.post("/api/roulette/spin")
 async def roulette_spin(req: RouletteSpinRequest):
-    """Spend souls to spin the roulette. Returns topic + question. Answer via /roulette/answer."""
+    """Spend 1 action + souls to spin the roulette."""
+    # ── Тратим 1 действие ───────────────────────────────────────────────
+    from progress import spend_action
+    action_result = spend_action(req.user_id, "roulette", user_progress)
+    if not action_result["ok"]:
+        return action_result
+
     VALID_BETS = {10, 25, 50, 100}
     if req.bet not in VALID_BETS:
         raise HTTPException(status_code=400, detail=f"Ставка должна быть одной из: {sorted(VALID_BETS)}")
@@ -1640,6 +1654,8 @@ async def roulette_spin(req: RouletteSpinRequest):
         "bet": req.bet,
         "potential_win": req.bet * 3,
         "souls_remaining": result.get("total", 0),
+        "actions_left": action_result["actions_left"],
+        "actions_total": action_result["actions_total"],
     }
 
 
@@ -2220,6 +2236,15 @@ async def _deadline_check_loop():
 class CatReq(BaseModel):
     user_id: int
 
+class CatalystRollRequest(BaseModel):
+    user_id: int
+
+@app.get("/api/actions/{user_id}")
+async def get_actions(user_id: int):
+    """Текущий пул действий пользователя."""
+    from progress import get_actions_pool
+    return get_actions_pool(user_id, user_progress)
+
 @app.get("/api/catalyst/status")
 async def catalyst_status():
     return cat_get_status()
@@ -2247,9 +2272,17 @@ async def catalyst_activate_api(req: CatReq):
 
 @app.post("/api/catalyst/attack")
 async def catalyst_attack_api(req: CatReq):
+    # ── Тратим действие из общего пула ──────────────────────────────────
+    from progress import spend_action
+    action_result = spend_action(req.user_id, "attack_catalyst", user_progress)
+    if not action_result["ok"]:
+        return action_result
+
     st = get_user_state(req.user_id)
     result = cat_attack(req.user_id, st.get("name", str(req.user_id)),
                         st.get("level", 1), user_progress)
+    result["actions_left"]  = action_result["actions_left"]
+    result["actions_total"] = action_result["actions_total"]
     save_progress()
     if result.get("slain"):
         username = st.get("name", str(req.user_id))
@@ -2263,6 +2296,54 @@ async def catalyst_attack_api(req: CatReq):
                 except Exception:
                     pass
         asyncio.create_task(_notify_slain())
+    return result
+
+@app.post("/api/catalyst/roll")
+async def catalyst_roll(req: CatalystRollRequest):
+    """
+    Потратить 1 действие на бросок шанса стать Катализатором.
+    Шанс +10% за каждый бросок, копится между днями.
+    Максимум накопить = уровень × 15%.
+    """
+    from progress import spend_action
+    action_result = spend_action(req.user_id, "catalyst_roll", user_progress)
+    if not action_result["ok"]:
+        return action_result
+
+    roll_info = action_result.get("catalyst_roll", {})
+    became = roll_info.get("became_catalyst", False)
+
+    result = {
+        "ok": True,
+        "became_catalyst": became,
+        "chance_pct": roll_info.get("chance_pct", 0),
+        "roll": roll_info.get("roll", 0),
+        "message": roll_info.get("message", ""),
+        "actions_left": action_result["actions_left"],
+        "actions_total": action_result["actions_total"],
+    }
+
+    if became:
+        st = get_user_state(req.user_id)
+        cat_result = cat_activate(
+            req.user_id, st.get("name", str(req.user_id)),
+            st.get("level", 1), user_progress
+        )
+        result["catalyst"] = cat_result
+        result["message"] = f"🎲 {roll_info.get('message', '')} → Ты стал Катализатором!"
+        username = st.get("name", str(req.user_id))
+        async def _notify():
+            for uid in list(user_progress.keys()):
+                try:
+                    await asyncio.get_running_loop().run_in_executor(None,
+                        lambda u=int(uid): telegram_bot.send_message(u,
+                            f"⚗️ <b>ЦЕПНАЯ РЕАКЦИЯ!</b>\n\n<b>{username}</b> стал Катализатором!\nВкладка Алхимия → Нейтрализовать",
+                            parse_mode="HTML"))
+                except Exception:
+                    pass
+        asyncio.create_task(_notify())
+
+    save_progress()
     return result
 
 @app.get("/api/catalyst/my/{user_id}")
