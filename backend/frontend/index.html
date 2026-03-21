@@ -1,0 +1,1407 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+  <title>CHM Smart Money Academy</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="/static/style.css?v=6"/>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body>
+  <!-- LAB BACKGROUND LAYERS -->
+  <div class="lab-orb lab-orb-1"></div>
+  <div class="lab-orb lab-orb-2"></div>
+  <div class="lab-orb lab-orb-3"></div>
+  <div class="scanlines"></div>
+
+  <!-- ══ DEADLINE EXPIRED OVERLAY ══════════════════════════════════════════ -->
+  <div id="deadlineExpiredOverlay" class="deadline-expired-overlay hidden">
+    <div class="ded-content">
+      <div class="ded-glow"></div>
+      <div class="ded-icon-wrap">
+        <div class="ded-red-circle">
+          <svg viewBox="0 0 60 60" width="60" height="60" fill="none">
+            <circle cx="30" cy="30" r="28" stroke="#ff4d6d" stroke-width="2.5" opacity="0.8"/>
+            <path d="M30 10V32" stroke="#ff4d6d" stroke-width="3" stroke-linecap="round"/>
+            <circle cx="30" cy="42" r="3" fill="#ff4d6d"/>
+          </svg>
+        </div>
+      </div>
+      <div class="ded-label">ВРЕМЯ ВЫШЛО</div>
+      <div class="ded-title">Рынок закрылся</div>
+      <div class="ded-subtitle">Ты не успел. Модуль заблокирован.</div>
+      <div class="ded-quote">
+        «Именно так рынок закрывает позиции у тех, кто медлит.»
+      </div>
+
+      <div class="ded-options">
+        <!-- Primary: Penalty payment -->
+        <div class="ded-option ded-option--primary" id="penaltyOption">
+          <div class="ded-option-icon">⚡</div>
+          <div class="ded-option-body">
+            <div class="ded-option-title">Оплатить штраф</div>
+            <div class="ded-option-desc">«Биржевая комиссия за промедление»</div>
+            <div class="ded-option-price" id="penaltyAmountText">$5</div>
+            <div class="ded-option-detail">48 часов дополнительного времени</div>
+          </div>
+          <button id="payPenaltyBtn" class="btn-penalty">Оплатить и продолжить →</button>
+        </div>
+
+        <!-- Secondary: Full repurchase (shown after 1 extension) -->
+        <div class="ded-option ded-option--secondary hidden" id="repurchaseOption">
+          <div class="ded-option-icon">🔄</div>
+          <div class="ded-option-body">
+            <div class="ded-option-title">Перекупить модуль</div>
+            <div class="ded-option-desc">Полный сброс и новый дедлайн</div>
+            <div class="ded-option-price" id="repurchaseAmountText">$15</div>
+          </div>
+          <button id="repurchaseBtn" class="btn-repurchase">Перекупить доступ →</button>
+        </div>
+      </div>
+
+      <div class="ded-rhetoric">
+        Каждый час промедления — потерянный сетап на реальном рынке.
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ ONBOARDING OVERLAY ══════════════════════════════════════════════ -->
+  <!-- ══ SYNTHESIS RITUAL ONBOARDING ════════════════════════════════════ -->
+  <div id="synthRitual" class="synth-ritual hidden">
+
+    <!-- Phase: darkness + text 1 -->
+    <div class="synth-phase" id="srPhase1">
+      <p class="synth-text" id="srText1"></p>
+    </div>
+
+    <!-- Phase: warning text -->
+    <div class="synth-phase" id="srPhase2" style="display:none">
+      <p class="synth-text synth-text--dim" id="srText1b"></p>
+      <p class="synth-text synth-text--warning" id="srText2"></p>
+    </div>
+
+    <!-- Phase: flask appears + tap prompt -->
+    <div class="synth-phase" id="srPhase3" style="display:none">
+      <!-- Alchemical symbols ring (rotate 60s) -->
+      <div class="synth-symbols" aria-hidden="true">
+        <span style="--a:0deg">☿</span>
+        <span style="--a:51.4deg">♄</span>
+        <span style="--a:102.8deg">♃</span>
+        <span style="--a:154.2deg">♂</span>
+        <span style="--a:205.7deg">☉</span>
+        <span style="--a:257.1deg">♀</span>
+        <span style="--a:308.5deg">☽</span>
+      </div>
+      <!-- The Flask -->
+      <div class="synth-flask-wrap" id="srFlask" onclick="onRitualFlaskTap()">
+        <div class="synth-flask-glow"></div>
+        <svg class="synth-flask-svg" viewBox="0 0 120 160" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <radialGradient id="sfBody" cx="40%" cy="35%" r="65%">
+              <stop offset="0%" stop-color="rgba(80,255,130,0.45)"/>
+              <stop offset="100%" stop-color="rgba(0,80,30,0.08)"/>
+            </radialGradient>
+            <radialGradient id="sfLiquid" cx="50%" cy="70%" r="55%">
+              <stop offset="0%" stop-color="rgba(0,255,100,0.6)"/>
+              <stop offset="100%" stop-color="rgba(0,120,40,0.2)"/>
+            </radialGradient>
+            <filter id="sfGlow"><feGaussianBlur stdDeviation="5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+          </defs>
+          <!-- Flask body -->
+          <path d="M38 58 L20 120 Q15 148 60 152 Q105 148 100 120 L82 58 Z"
+                fill="url(#sfBody)" stroke="rgba(0,220,100,0.35)" stroke-width="1.5"/>
+          <!-- Liquid fill -->
+          <path d="M28 110 Q20 140 60 148 Q100 140 92 110 L80 80 L40 80 Z"
+                fill="url(#sfLiquid)" class="synth-liquid"/>
+          <!-- Bubbles -->
+          <circle cx="45" cy="118" r="5" fill="rgba(0,255,120,0.3)" class="synth-bubble"/>
+          <circle cx="68" cy="130" r="3.5" fill="rgba(0,255,120,0.25)" class="synth-bubble" style="animation-delay:0.5s"/>
+          <circle cx="55" cy="105" r="2.5" fill="rgba(0,255,120,0.2)" class="synth-bubble" style="animation-delay:1s"/>
+          <!-- Flask neck -->
+          <rect x="43" y="26" width="34" height="34" rx="4"
+                fill="rgba(0,180,70,0.15)" stroke="rgba(0,220,100,0.3)" stroke-width="1.2"/>
+          <!-- Flask mouth -->
+          <rect x="35" y="18" width="50" height="12" rx="3"
+                fill="rgba(0,180,70,0.2)" stroke="rgba(0,220,100,0.35)" stroke-width="1"/>
+          <!-- Cork stopper -->
+          <rect x="45" y="10" width="30" height="10" rx="5"
+                fill="rgba(200,160,80,0.6)" stroke="rgba(200,160,80,0.4)" stroke-width="1"/>
+          <!-- Shine -->
+          <path d="M48 36 Q60 30 72 40 Q65 34 60 32 Q55 30 48 36Z"
+                fill="rgba(200,255,220,0.3)"/>
+          <!-- Glow aura -->
+          <ellipse cx="60" cy="115" rx="26" ry="30"
+                   fill="rgba(0,255,100,0.06)" filter="url(#sfGlow)"/>
+        </svg>
+      </div>
+      <p class="synth-tap-hint">Тапни, чтобы начать синтез</p>
+    </div>
+
+    <!-- Phase: synthesis animation (after tap) -->
+    <div class="synth-phase" id="srPhase4" style="display:none">
+      <div class="synth-flask-wrap synth-flask--shaking" id="srFlaskShaking">
+        <div class="synth-flask-glow synth-flask-glow--burst"></div>
+        <svg class="synth-flask-svg" viewBox="0 0 120 160" fill="none">
+          <defs>
+            <radialGradient id="sfBody2" cx="40%" cy="35%" r="65%">
+              <stop offset="0%" stop-color="rgba(120,255,160,0.6)"/>
+              <stop offset="100%" stop-color="rgba(0,120,50,0.15)"/>
+            </radialGradient>
+          </defs>
+          <path d="M38 58 L20 120 Q15 148 60 152 Q105 148 100 120 L82 58 Z"
+                fill="url(#sfBody2)" stroke="rgba(0,255,120,0.5)" stroke-width="2"/>
+          <path d="M22 105 Q15 145 60 150 Q105 145 98 105 L82 70 L38 70 Z"
+                fill="rgba(0,255,100,0.5)" class="synth-liquid--burst"/>
+          <circle cx="40" cy="110" r="7" fill="rgba(0,255,120,0.4)" class="synth-bubble"/>
+          <circle cx="70" cy="125" r="5" fill="rgba(0,255,120,0.3)" class="synth-bubble" style="animation-delay:0.3s"/>
+          <circle cx="52" cy="98" r="4" fill="rgba(0,255,120,0.35)" class="synth-bubble" style="animation-delay:0.6s"/>
+          <circle cx="78" cy="105" r="3" fill="rgba(0,255,120,0.25)" class="synth-bubble" style="animation-delay:0.9s"/>
+          <rect x="43" y="26" width="34" height="34" rx="4" fill="rgba(0,200,80,0.2)" stroke="rgba(0,255,120,0.4)" stroke-width="1.5"/>
+          <rect x="35" y="18" width="50" height="12" rx="3" fill="rgba(0,200,80,0.25)" stroke="rgba(0,255,120,0.45)" stroke-width="1.2"/>
+        </svg>
+      </div>
+      <!-- Light flash overlay -->
+      <div class="synth-flash" id="srFlash"></div>
+    </div>
+
+    <!-- Phase: birth — Homunculus appears -->
+    <div class="synth-phase" id="srPhase5" style="display:none">
+      <div class="synth-birth-glow"></div>
+      <!-- Stage 1 Homunculus silhouette (Реагент flask) -->
+      <div class="synth-creature-born" id="srCreature">
+        <svg viewBox="0 0 120 150" fill="none" width="160" height="200">
+          <defs>
+            <radialGradient id="sbBody" cx="40%" cy="35%" r="65%">
+              <stop offset="0%" stop-color="rgba(168,85,247,0.7)"/>
+              <stop offset="100%" stop-color="rgba(60,0,140,0.15)"/>
+            </radialGradient>
+            <filter id="sbGlow"><feGaussianBlur stdDeviation="6" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+          </defs>
+          <ellipse cx="60" cy="145" rx="30" ry="6" fill="rgba(168,85,247,0.15)"/>
+          <path d="M30 48 L15 108 Q11 132 60 135 Q109 132 105 108 L90 48 Z"
+                fill="url(#sbBody)" stroke="rgba(168,85,247,0.4)" stroke-width="1.5" filter="url(#sbGlow)"/>
+          <rect x="36" y="20" width="48" height="30" rx="4"
+                fill="rgba(120,60,200,0.25)" stroke="rgba(168,85,247,0.35)" stroke-width="1.2"/>
+          <rect x="28" y="12" width="64" height="12" rx="3"
+                fill="rgba(120,60,200,0.3)" stroke="rgba(168,85,247,0.4)" stroke-width="1"/>
+          <!-- Eyes emerging -->
+          <ellipse cx="46" cy="88" rx="7" ry="8" fill="rgba(0,0,0,0.8)"/>
+          <circle cx="46" cy="88" r="4" fill="#c084fc" opacity="0.9" filter="url(#sbGlow)"/>
+          <ellipse cx="74" cy="88" rx="7" ry="8" fill="rgba(0,0,0,0.8)"/>
+          <circle cx="74" cy="88" r="4" fill="#c084fc" opacity="0.9" filter="url(#sbGlow)"/>
+          <circle cx="47.5" cy="86.5" r="1.5" fill="#fff"/>
+          <circle cx="75.5" cy="86.5" r="1.5" fill="#fff"/>
+        </svg>
+      </div>
+      <div class="synth-birth-text">
+        <p class="synth-born-title">Твой Гомункул рождён.</p>
+        <p class="synth-born-sub">Он будет расти вместе с тобой.<br/>Или умрёт вместе с тобой.</p>
+      </div>
+      <!-- Souls counter animating -->
+      <div class="synth-souls-award" id="srSoulsAward">
+        <span class="synth-souls-num" id="srSoulsNum">0</span>
+        <span class="synth-souls-label">душ</span>
+      </div>
+    </div>
+
+    <!-- Phase: transition tooltip -->
+    <div class="synth-phase" id="srPhase6" style="display:none">
+      <div class="synth-tooltip" id="srTooltip1">
+        <p>⚗️ Тапай Гомункула, чтобы фармить <b>души</b>. Души — твоя валюта.</p>
+        <button class="synth-tooltip-btn" onclick="onRitualTooltip1()">Понял →</button>
+      </div>
+      <div class="synth-tooltip" id="srTooltip2" style="display:none">
+        <p>📚 Начни обучение, чтобы открыть первого босса.</p>
+        <button class="synth-tooltip-btn" onclick="onRitualComplete()">Начать путь ⚗️</button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ══ LEVEL UP OVERLAY ════════════════════════════════════════════════ -->
+  <div id="levelUpOverlay" class="levelup-overlay hidden">
+    <div class="levelup-content">
+      <div class="levelup-particles" id="levelupParticles"></div>
+      <div class="levelup-ring"></div>
+      <div class="levelup-ring levelup-ring--2"></div>
+      <div class="levelup-icon-wrap">
+        <div id="levelupRankIcon" class="levelup-rank-svg"></div>
+      </div>
+      <div class="levelup-label">УРОВЕНЬ ПОВЫШЕН</div>
+      <div class="levelup-level" id="levelupNum">2</div>
+      <div class="levelup-rank-name" id="levelupRankName">Охотник за ликвидностью</div>
+      <div class="levelup-quote" id="levelupQuote"></div>
+      <button class="levelup-btn" id="levelupCloseBtn">🔥 Продолжить охоту</button>
+    </div>
+  </div>
+
+  <!-- CONFETTI LAYER -->
+  <div id="confettiLayer" class="confetti-layer"></div>
+
+  <!-- XP FLOATS LAYER -->
+  <div id="xpFloatLayer" class="xp-float-layer"></div>
+
+  <div id="app">
+
+    <!-- HEADER -->
+    <header class="header">
+      <div class="header-left">
+        <div class="rank-icon-wrap" id="rankIconWrap"></div>
+        <div class="header-user-info">
+          <span id="userName" class="header-username">CHM Academy</span>
+          <span id="userTitle" class="header-title souls-title">Ликвидность</span>
+          <div class="streak-badge hidden" id="streakBadge">
+            <svg width="10" height="10" viewBox="0 0 10 10"><path d="M5 0C5 0 7 3 7 5C7 6.7 6.1 7.5 5 7.5C3.9 7.5 3 6.7 3 5C3 3 5 0 5 0Z" fill="#f97316"/></svg>
+            <span id="streakCount">0</span>
+          </div>
+        </div>
+      </div>
+      <div class="header-right">
+        <!-- SOULS HUD -->
+        <div class="souls-hud" id="soulsHud" title="Твои Души">
+          <span class="souls-icon">⚡</span>
+          <span id="soulsCount" class="souls-count">0</span>
+        </div>
+        <!-- ESTUS FLASKS -->
+        <div class="estus-hud" id="estusHud" title="Фласки подсказок">
+          <span class="estus-flask active" id="flask0">🔶</span>
+          <span class="estus-flask active" id="flask1">🔶</span>
+          <span class="estus-flask active" id="flask2">🔶</span>
+        </div>
+        <div class="xp-badge">
+          <svg width="12" height="12" viewBox="0 0 12 12"><polygon points="6,1 7.5,4.5 11,5 8.5,7.5 9,11 6,9.5 3,11 3.5,7.5 1,5 4.5,4.5" fill="#fbbf24"/></svg>
+          <span id="userXP">0</span> XP
+        </div>
+        <div class="lvl-badge">Lvl <span id="userLvl">1</span></div>
+      </div>
+    </header>
+
+    <!-- PROGRESS SECTION -->
+    <div class="progress-section">
+      <div class="progress-info">
+        <span id="moduleName">Загрузка...</span>
+        <span id="moduleSubtitle" class="module-subtitle"></span>
+      </div>
+
+      <!-- DEADLINE COUNTDOWN -->
+      <div id="deadlineCountdown" class="deadline-countdown hidden">
+        <div class="dc-left">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <circle cx="7" cy="7" r="6" stroke="currentColor" stroke-width="1.5"/>
+            <path d="M7 3.5V7L9.5 9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+          <span class="dc-label">Дедлайн:</span>
+        </div>
+        <div id="countdownTimer" class="dc-timer">00:00:00</div>
+      </div>
+
+      <div class="progress-bar-wrap">
+        <div class="progress-bar" id="progressBar">
+          <div class="progress-shine"></div>
+        </div>
+        <div class="progress-glow" id="progressGlow"></div>
+      </div>
+      <div class="progress-stats">
+        <span id="progressLabel" class="progress-stat-text">0/0 квестов</span>
+        <span class="progress-stat-pct" id="progressPct">0%</span>
+      </div>
+      <button id="btn-start" class="btn-start">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+          <circle cx="9" cy="9" r="8" stroke="white" stroke-width="1.5" opacity="0.4"/>
+          <path d="M7 5.5L13 9L7 12.5V5.5Z" fill="white"/>
+        </svg>
+        Начать обучение
+      </button>
+    </div>
+
+    <!-- SOCIAL QUICK-ACCESS BAR -->
+    <div class="social-bar">
+      <button class="social-bar-btn" id="dailyBtn" onclick="openDaily()">
+        <span class="social-bar-icon">⚔️</span>
+        <span class="social-bar-label">Вызов</span>
+        <span class="social-bar-badge hidden" id="dailyBadge">!</span>
+      </button>
+      <button class="social-bar-btn" onclick="openClanPanel()">
+        <span class="social-bar-icon">🛡️</span>
+        <span class="social-bar-label">Клан</span>
+      </button>
+    </div>
+
+    <!-- TABS -->
+    <nav class="tabs tabs--4">
+      <button class="tab active" data-tab="lessons" onclick="switchTab('lessons')">
+        <svg class="tab-icon" viewBox="0 0 20 20" fill="none">
+          <rect x="3" y="4" width="14" height="12" rx="2" stroke="currentColor" stroke-width="1.5"/>
+          <line x1="6" y1="8" x2="14" y2="8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          <line x1="6" y1="11" x2="11" y2="11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+        Уроки
+      </button>
+      <button class="tab" data-tab="quests" onclick="switchTab('quests')">
+        <svg class="tab-icon" viewBox="0 0 20 20" fill="none">
+          <path d="M10 3L12.5 8H18L13.5 11L15.5 16.5L10 13.5L4.5 16.5L6.5 11L2 8H7.5L10 3Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+        </svg>
+        Квесты
+      </button>
+      <button class="tab" data-tab="leaderboard" onclick="switchTab('leaderboard')">
+        <svg class="tab-icon" viewBox="0 0 20 20" fill="none">
+          <rect x="2" y="10" width="4" height="8" rx="1" stroke="currentColor" stroke-width="1.5"/>
+          <rect x="8" y="6" width="4" height="12" rx="1" stroke="currentColor" stroke-width="1.5"/>
+          <rect x="14" y="2" width="4" height="16" rx="1" stroke="currentColor" stroke-width="1.5"/>
+        </svg>
+        Рейтинг
+      </button>
+      <button class="tab" data-tab="homunculus" onclick="switchTab('homunculus')">
+        <svg class="tab-icon" viewBox="0 0 20 20" fill="none">
+          <!-- Alchemical flask icon -->
+          <path d="M7 3h6M8 3v5L4 15a2 2 0 001.8 2.9h8.4A2 2 0 0016 15L12 8V3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="8.5" cy="13" r="1" fill="currentColor" opacity="0.7"/>
+          <circle cx="11.5" cy="15" r="0.8" fill="currentColor" opacity="0.5"/>
+        </svg>
+        Алхимия
+      </button>
+    </nav>
+
+    <!-- LESSONS TAB -->
+    <div id="tab-lessons" class="tab-content active">
+      <div id="modulesList"></div>
+    </div>
+
+    <!-- QUESTS TAB -->
+    <div id="tab-quests" class="tab-content">
+      <div id="questsHeader" class="quests-header"></div>
+      <div id="questsList"></div>
+    </div>
+
+    <!-- LEADERBOARD TAB -->
+    <div id="tab-leaderboard" class="tab-content">
+      <div id="leaderboardPodium" class="lb-podium"></div>
+      <div id="leaderboardList"></div>
+    </div>
+
+    <!-- HOMUNCULUS TAB -->
+    <div id="tab-homunculus" class="tab-content">
+      <div class="hom-screen">
+
+        <!-- Header: stage name + status badge -->
+        <div class="hom-header">
+          <div class="hom-header-left">
+            <span class="hom-stage-badge" id="homStageBadge">СТ.1</span>
+            <span class="hom-stage-name" id="homStageName">Реагент</span>
+          </div>
+          <span class="hom-status-badge" id="homStatusBadge">active</span>
+        </div>
+
+        <!-- Creature area -->
+        <div class="hom-creature-wrap" id="homCreatureWrap" onclick="onHomunculusTap(event)">
+          <div class="hom-aura" id="homAura"></div>
+          <div class="hom-creature" id="homCreature">
+
+            <!-- Stage 1: Реагент — glowing flask reagent -->
+            <svg class="hom-svg hom-stage-svg" id="homSvg1" viewBox="0 0 160 180" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <radialGradient id="rg1Body" cx="40%" cy="35%" r="65%">
+                  <stop offset="0%" stop-color="#a0e8ff" stop-opacity="0.6"/>
+                  <stop offset="100%" stop-color="#0040a0" stop-opacity="0.1"/>
+                </radialGradient>
+                <filter id="rg1Glow"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+              </defs>
+              <ellipse cx="80" cy="170" rx="36" ry="7" fill="rgba(0,180,255,0.15)"/>
+              <!-- Flask body -->
+              <path d="M58 60 L42 130 Q38 155 80 158 Q122 155 118 130 L102 60 Z" fill="url(#rg1Body)" stroke="rgba(0,200,255,0.4)" stroke-width="1.5"/>
+              <!-- Flask neck -->
+              <rect x="62" y="28" width="36" height="34" rx="4" fill="rgba(0,160,220,0.2)" stroke="rgba(0,200,255,0.35)" stroke-width="1.2"/>
+              <!-- Flask top -->
+              <rect x="54" y="22" width="52" height="10" rx="3" fill="rgba(0,160,220,0.3)" stroke="rgba(0,200,255,0.4)" stroke-width="1"/>
+              <!-- Bubbles in flask -->
+              <circle cx="68" cy="120" r="6" fill="rgba(0,212,255,0.25)" filter="url(#rg1Glow)" class="hom-bubble"/>
+              <circle cx="90" cy="135" r="4" fill="rgba(168,85,247,0.3)" filter="url(#rg1Glow)" class="hom-bubble" style="animation-delay:0.4s"/>
+              <circle cx="78" cy="108" r="3" fill="rgba(0,212,255,0.2)" class="hom-bubble" style="animation-delay:0.8s"/>
+              <!-- Glow core -->
+              <ellipse cx="80" cy="115" rx="22" ry="28" fill="rgba(0,212,255,0.08)" filter="url(#rg1Glow)"/>
+            </svg>
+
+            <!-- Stage 2: Зародыш — embryonic blob -->
+            <svg class="hom-svg hom-stage-svg" id="homSvg2" viewBox="0 0 160 180" fill="none" style="display:none">
+              <defs>
+                <radialGradient id="rg2Body" cx="38%" cy="32%" r="62%">
+                  <stop offset="0%" stop-color="rgba(180,255,200,0.5)"/>
+                  <stop offset="100%" stop-color="rgba(0,120,80,0.05)"/>
+                </radialGradient>
+                <filter id="rg2Glow"><feGaussianBlur stdDeviation="5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+              </defs>
+              <ellipse cx="80" cy="172" rx="30" ry="6" fill="rgba(0,200,120,0.15)"/>
+              <path d="M80 40 C106 40 128 62 128 95 C128 130 108 155 80 155 C52 155 32 130 32 95 C32 62 54 40 80 40Z"
+                    fill="url(#rg2Body)" stroke="rgba(0,220,130,0.35)" stroke-width="1.5" class="hom-breathe"/>
+              <!-- Veins -->
+              <path d="M80 65 L80 130 M65 90 L95 100 M65 110 L95 105" stroke="rgba(0,200,120,0.4)" stroke-width="0.9" fill="none"/>
+              <!-- Eye buds -->
+              <circle cx="68" cy="88" r="7" fill="rgba(0,10,5,0.8)"/>
+              <circle cx="68" cy="88" r="3.5" fill="#00dc82" opacity="0.7" filter="url(#rg2Glow)"/>
+              <circle cx="92" cy="88" r="7" fill="rgba(0,10,5,0.8)"/>
+              <circle cx="92" cy="88" r="3.5" fill="#00dc82" opacity="0.7" filter="url(#rg2Glow)"/>
+              <circle cx="69.5" cy="86.5" r="1.5" fill="#fff"/>
+              <circle cx="93.5" cy="86.5" r="1.5" fill="#fff"/>
+            </svg>
+
+            <!-- Stage 3: Гомункул — small humanoid figure -->
+            <svg class="hom-svg hom-stage-svg" id="homSvg3" viewBox="0 0 160 200" fill="none" style="display:none">
+              <defs>
+                <radialGradient id="rg3Skin" cx="40%" cy="30%" r="60%">
+                  <stop offset="0%" stop-color="rgba(255,210,160,0.7)"/>
+                  <stop offset="100%" stop-color="rgba(200,120,60,0.2)"/>
+                </radialGradient>
+                <filter id="rg3Glow"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+              </defs>
+              <ellipse cx="80" cy="192" rx="28" ry="6" fill="rgba(200,120,60,0.15)"/>
+              <!-- Body -->
+              <path d="M62 100 Q80 92 98 100 L104 150 Q80 160 56 150 Z" fill="url(#rg3Skin)" stroke="rgba(220,150,80,0.4)" stroke-width="1.2"/>
+              <!-- Head -->
+              <circle cx="80" cy="68" r="26" fill="url(#rg3Skin)" stroke="rgba(220,150,80,0.4)" stroke-width="1.2"/>
+              <!-- Eyes -->
+              <ellipse cx="71" cy="66" rx="5" ry="6" fill="rgba(0,0,0,0.8)"/>
+              <circle cx="71" cy="66" r="3" fill="#f59e0b" opacity="0.8" filter="url(#rg3Glow)"/>
+              <ellipse cx="89" cy="66" rx="5" ry="6" fill="rgba(0,0,0,0.8)"/>
+              <circle cx="89" cy="66" r="3" fill="#f59e0b" opacity="0.8" filter="url(#rg3Glow)"/>
+              <circle cx="72" cy="64.5" r="1.3" fill="#fff"/>
+              <circle cx="90" cy="64.5" r="1.3" fill="#fff"/>
+              <!-- Arms -->
+              <path d="M62 108 L44 130 M98 108 L116 130" stroke="rgba(220,150,80,0.6)" stroke-width="8" stroke-linecap="round"/>
+              <!-- Legs -->
+              <path d="M68 150 L62 178 M92 150 L98 178" stroke="rgba(220,150,80,0.6)" stroke-width="8" stroke-linecap="round"/>
+              <!-- Alchemical glow -->
+              <ellipse cx="80" cy="120" rx="18" ry="22" fill="rgba(245,158,11,0.05)" filter="url(#rg3Glow)"/>
+            </svg>
+
+            <!-- Stage 4: Фамильяр — mystical companion -->
+            <svg class="hom-svg hom-stage-svg" id="homSvg4" viewBox="0 0 160 200" fill="none" style="display:none">
+              <defs>
+                <radialGradient id="rg4Body" cx="38%" cy="30%" r="65%">
+                  <stop offset="0%" stop-color="rgba(200,160,255,0.6)"/>
+                  <stop offset="100%" stop-color="rgba(80,0,180,0.1)"/>
+                </radialGradient>
+                <filter id="rg4Glow"><feGaussianBlur stdDeviation="5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+              </defs>
+              <ellipse cx="80" cy="190" rx="32" ry="7" fill="rgba(168,85,247,0.2)"/>
+              <!-- Body -->
+              <path d="M55 105 Q80 95 105 105 L112 158 Q80 170 48 158 Z" fill="url(#rg4Body)" stroke="rgba(168,85,247,0.4)" stroke-width="1.5" class="hom-breathe"/>
+              <!-- Head -->
+              <ellipse cx="80" cy="70" rx="28" ry="30" fill="url(#rg4Body)" stroke="rgba(168,85,247,0.4)" stroke-width="1.5"/>
+              <!-- Horns -->
+              <path d="M66 46 L58 22 L70 38 M94 46 L102 22 L90 38" stroke="rgba(168,85,247,0.7)" stroke-width="2.5" stroke-linecap="round" fill="none"/>
+              <!-- Eyes -->
+              <ellipse cx="69" cy="68" rx="7" ry="8" fill="rgba(0,0,0,0.85)"/>
+              <circle cx="69" cy="68" r="4" fill="#a855f7" opacity="0.9" filter="url(#rg4Glow)"/>
+              <ellipse cx="91" cy="68" rx="7" ry="8" fill="rgba(0,0,0,0.85)"/>
+              <circle cx="91" cy="68" r="4" fill="#a855f7" opacity="0.9" filter="url(#rg4Glow)"/>
+              <circle cx="70.5" cy="66.5" r="1.5" fill="#fff"/>
+              <circle cx="92.5" cy="66.5" r="1.5" fill="#fff"/>
+              <!-- Wings -->
+              <path d="M55 118 Q28 100 20 125 Q30 140 55 130" fill="rgba(168,85,247,0.15)" stroke="rgba(168,85,247,0.4)" stroke-width="1"/>
+              <path d="M105 118 Q132 100 140 125 Q130 140 105 130" fill="rgba(168,85,247,0.15)" stroke="rgba(168,85,247,0.4)" stroke-width="1"/>
+              <!-- Legs -->
+              <path d="M66 158 L60 185 M94 158 L100 185" stroke="rgba(168,85,247,0.5)" stroke-width="7" stroke-linecap="round"/>
+            </svg>
+
+            <!-- Stage 5: Элементаль — elemental spirit -->
+            <svg class="hom-svg hom-stage-svg" id="homSvg5" viewBox="0 0 160 200" fill="none" style="display:none">
+              <defs>
+                <radialGradient id="rg5Core" cx="50%" cy="50%" r="50%">
+                  <stop offset="0%" stop-color="#fff" stop-opacity="0.95"/>
+                  <stop offset="40%" stop-color="#f97316" stop-opacity="0.8"/>
+                  <stop offset="100%" stop-color="#dc2626" stop-opacity="0"/>
+                </radialGradient>
+                <filter id="rg5Glow"><feGaussianBlur stdDeviation="7" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+              </defs>
+              <ellipse cx="80" cy="185" rx="35" ry="8" fill="rgba(249,115,22,0.2)"/>
+              <!-- Flame body -->
+              <path d="M80 40 C95 60 115 70 110 100 C105 130 95 155 80 165 C65 155 55 130 50 100 C45 70 65 60 80 40Z"
+                    fill="rgba(249,115,22,0.3)" stroke="rgba(249,115,22,0.5)" stroke-width="1.5" filter="url(#rg5Glow)" class="hom-breathe"/>
+              <path d="M80 60 C90 75 105 85 100 108 C97 125 88 145 80 155 C72 145 63 125 60 108 C55 85 70 75 80 60Z"
+                    fill="rgba(251,146,60,0.4)" filter="url(#rg5Glow)"/>
+              <!-- Bright core -->
+              <ellipse cx="80" cy="105" rx="18" ry="22" fill="url(#rg5Core)" filter="url(#rg5Glow)"/>
+              <!-- Eyes — intense fire -->
+              <ellipse cx="70" cy="100" rx="7" ry="8" fill="rgba(0,0,0,0.9)"/>
+              <circle cx="70" cy="100" r="4" fill="#f97316" opacity="0.95" filter="url(#rg5Glow)"/>
+              <ellipse cx="90" cy="100" rx="7" ry="8" fill="rgba(0,0,0,0.9)"/>
+              <circle cx="90" cy="100" r="4" fill="#f97316" opacity="0.95" filter="url(#rg5Glow)"/>
+              <circle cx="71.5" cy="98.5" r="2" fill="#fff"/>
+              <circle cx="91.5" cy="98.5" r="2" fill="#fff"/>
+              <!-- Flame wisps -->
+              <path d="M60 80 Q50 65 55 50 Q58 65 65 75" fill="rgba(249,115,22,0.3)" filter="url(#rg5Glow)"/>
+              <path d="M100 80 Q110 65 105 50 Q102 65 95 75" fill="rgba(249,115,22,0.3)" filter="url(#rg5Glow)"/>
+            </svg>
+
+            <!-- Stage 6: Архонт — dark ruler -->
+            <svg class="hom-svg hom-stage-svg" id="homSvg6" viewBox="0 0 160 210" fill="none" style="display:none">
+              <defs>
+                <radialGradient id="rg6Dark" cx="40%" cy="30%" r="65%">
+                  <stop offset="0%" stop-color="rgba(100,80,200,0.5)"/>
+                  <stop offset="100%" stop-color="rgba(10,0,30,0.8)"/>
+                </radialGradient>
+                <filter id="rg6Glow"><feGaussianBlur stdDeviation="6" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+              </defs>
+              <ellipse cx="80" cy="200" rx="38" ry="8" fill="rgba(80,0,180,0.25)"/>
+              <!-- Robe -->
+              <path d="M52 108 Q80 96 108 108 L120 190 Q80 202 40 190 Z" fill="url(#rg6Dark)" stroke="rgba(120,80,255,0.4)" stroke-width="1.5"/>
+              <!-- Body -->
+              <path d="M62 108 Q80 100 98 108 L102 145 Q80 152 58 145 Z" fill="url(#rg6Dark)" stroke="rgba(120,80,255,0.3)" stroke-width="1"/>
+              <!-- Head -->
+              <ellipse cx="80" cy="68" rx="26" ry="28" fill="url(#rg6Dark)" stroke="rgba(120,80,255,0.45)" stroke-width="1.5"/>
+              <!-- Crown -->
+              <path d="M58 48 L62 30 L70 44 L80 26 L90 44 L98 30 L102 48" stroke="rgba(255,200,60,0.8)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none" filter="url(#rg6Glow)"/>
+              <!-- Eyes — glowing purple -->
+              <ellipse cx="69" cy="66" rx="7" ry="8" fill="rgba(0,0,0,0.9)"/>
+              <circle cx="69" cy="66" r="4.5" fill="#7c3aed" opacity="0.9" filter="url(#rg6Glow)"/>
+              <ellipse cx="91" cy="66" rx="7" ry="8" fill="rgba(0,0,0,0.9)"/>
+              <circle cx="91" cy="66" r="4.5" fill="#7c3aed" opacity="0.9" filter="url(#rg6Glow)"/>
+              <circle cx="70.5" cy="64.5" r="2" fill="#fff" opacity="0.9"/>
+              <circle cx="92.5" cy="64.5" r="2" fill="#fff" opacity="0.9"/>
+              <!-- Spectral wings -->
+              <path d="M52 115 Q18 95 10 130 Q25 155 52 138" fill="rgba(80,0,180,0.2)" stroke="rgba(120,80,255,0.3)" stroke-width="1" filter="url(#rg6Glow)"/>
+              <path d="M108 115 Q142 95 150 130 Q135 155 108 138" fill="rgba(80,0,180,0.2)" stroke="rgba(120,80,255,0.3)" stroke-width="1" filter="url(#rg6Glow)"/>
+              <!-- Aura rings -->
+              <ellipse cx="80" cy="130" rx="50" ry="55" fill="none" stroke="rgba(120,80,255,0.12)" stroke-width="1"/>
+              <ellipse cx="80" cy="130" rx="42" ry="46" fill="none" stroke="rgba(120,80,255,0.18)" stroke-width="1"/>
+            </svg>
+
+            <!-- Stage 7: Философский Камень — Philosopher's Stone -->
+            <svg class="hom-svg hom-stage-svg" id="homSvg7" viewBox="0 0 160 180" fill="none" style="display:none">
+              <defs>
+                <radialGradient id="rg7Stone" cx="50%" cy="50%" r="50%">
+                  <stop offset="0%" stop-color="#fff" stop-opacity="0.95"/>
+                  <stop offset="30%" stop-color="#fcd34d" stop-opacity="0.9"/>
+                  <stop offset="70%" stop-color="#f59e0b" stop-opacity="0.6"/>
+                  <stop offset="100%" stop-color="#b45309" stop-opacity="0"/>
+                </radialGradient>
+                <filter id="rg7Glow"><feGaussianBlur stdDeviation="8" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+                <filter id="rg7StrongGlow"><feGaussianBlur stdDeviation="14" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+              </defs>
+              <ellipse cx="80" cy="172" rx="40" ry="8" fill="rgba(245,158,11,0.3)"/>
+              <!-- Outer rings -->
+              <ellipse cx="80" cy="88" rx="68" ry="70" fill="none" stroke="rgba(245,158,11,0.12)" stroke-width="1" class="hom-spin-slow"/>
+              <ellipse cx="80" cy="88" rx="56" ry="58" fill="none" stroke="rgba(245,158,11,0.2)" stroke-width="1" class="hom-spin-reverse"/>
+              <!-- Octahedron facets -->
+              <path d="M80 18 L130 88 L80 158 L30 88 Z" fill="rgba(245,158,11,0.12)" stroke="rgba(245,158,11,0.4)" stroke-width="1.5" filter="url(#rg7Glow)"/>
+              <path d="M80 30 L122 88 L80 146 L38 88 Z" fill="rgba(252,211,77,0.12)" stroke="rgba(252,211,77,0.35)" stroke-width="1"/>
+              <!-- Core -->
+              <circle cx="80" cy="88" r="32" fill="url(#rg7Stone)" filter="url(#rg7StrongGlow)"/>
+              <circle cx="80" cy="88" r="18" fill="rgba(255,255,255,0.9)" filter="url(#rg7Glow)"/>
+              <!-- Rune lines -->
+              <path d="M60 88 L100 88 M80 68 L80 108 M65 73 L95 103 M95 73 L65 103"
+                    stroke="rgba(180,83,9,0.5)" stroke-width="1" filter="url(#rg7Glow)"/>
+              <!-- Floating particles -->
+              <circle cx="38" cy="55" r="2.5" fill="#fcd34d" opacity="0.7" filter="url(#rg7Glow)" class="hom-particle-float"/>
+              <circle cx="125" cy="62" r="2" fill="#fcd34d" opacity="0.6" filter="url(#rg7Glow)" class="hom-particle-float" style="animation-delay:0.5s"/>
+              <circle cx="35" cy="122" r="1.8" fill="#fcd34d" opacity="0.55" class="hom-particle-float" style="animation-delay:1s"/>
+              <circle cx="128" cy="118" r="2.2" fill="#fcd34d" opacity="0.65" filter="url(#rg7Glow)" class="hom-particle-float" style="animation-delay:1.5s"/>
+              <circle cx="62" cy="28" r="1.5" fill="#fff" opacity="0.8" class="hom-particle-float" style="animation-delay:0.3s"/>
+              <circle cx="105" cy="25" r="1.5" fill="#fff" opacity="0.7" class="hom-particle-float" style="animation-delay:0.8s"/>
+            </svg>
+
+            <!-- Dead overlay -->
+            <div class="hom-dead-overlay" id="homDeadOverlay" style="display:none">
+              <div class="hom-skull">💀</div>
+              <div class="hom-dead-text">Гомункул погиб</div>
+            </div>
+
+          </div>
+          <!-- Tap float rewards -->
+          <div class="hom-float-rewards" id="homFloatRewards"></div>
+          <!-- Combo badge -->
+          <div class="hom-combo" id="homCombo" style="display:none">
+            <span id="homComboText">x10 COMBO!</span>
+          </div>
+        </div>
+
+        <!-- Combo meter bar -->
+        <div class="hom-combo-bar-wrap">
+          <div class="hom-combo-bar" id="homComboBar" style="width:0%"></div>
+        </div>
+        <div class="hom-combo-label" id="homComboLabel">Комбо: 0</div>
+
+        <!-- Stats HUD -->
+        <div class="hom-hud">
+          <div class="hom-hud-item">
+            <div class="hom-hud-val" id="homMultVal">×1.0</div>
+            <div class="hom-hud-key">Множитель</div>
+          </div>
+          <div class="hom-hud-item">
+            <div class="hom-hud-val" id="homTapsVal">0</div>
+            <div class="hom-hud-key">Тапов сегодня</div>
+          </div>
+          <div class="hom-hud-item">
+            <div class="hom-hud-val" id="homComboMaxVal">0</div>
+            <div class="hom-hud-key">Лучшее комбо</div>
+          </div>
+        </div>
+
+        <!-- Evolution progress -->
+        <div class="hom-evo-section">
+          <div class="hom-evo-header">
+            <span class="hom-evo-label">Эволюция</span>
+            <span class="hom-evo-vals"><span id="homSoulsFed">0</span> / <span id="homSoulsReq">500</span> душ</span>
+          </div>
+          <div class="hom-evo-bar-wrap">
+            <div class="hom-evo-bar" id="homEvoBar" style="width:0%"></div>
+          </div>
+          <div class="hom-module-note" id="homModuleNote"></div>
+        </div>
+
+        <!-- Revive section (dead state) -->
+        <div class="hom-revive-section" id="homReviveSection" style="display:none">
+          <div class="hom-revive-cost">Возрождение: 200 💀 душ</div>
+          <button class="hom-revive-btn" id="homReviveBtn" onclick="homunculusRevive()">
+            ⚗️ Воссоздать Гомункула
+          </button>
+          <div class="hom-revive-note">Стадия уменьшится на 1</div>
+        </div>
+
+        <!-- Enrage notice -->
+        <div class="hom-enrage-notice" id="homEnrageNotice" style="display:none">
+          🔥 ЯРОСТЬ АКТИВНА — Множитель ×2 на 10 мин
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+
+
+  <!-- ══ LESSON MODAL ════════════════════════════════════════════════════ -->
+  <div id="lessonModal" class="modal hidden">
+    <div class="modal-backdrop" onclick="closeModal('lessonModal')"></div>
+    <div class="modal-content">
+      <button class="modal-close" onclick="closeModal('lessonModal')">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+          <path d="M1 1L13 13M13 1L1 13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </button>
+      <div class="modal-tag lesson-tag">🔬 RESEARCH PROTOCOL</div>
+      <h2 id="lessonTitle" class="modal-title"></h2>
+      <div id="lessonArticle" class="article-text"></div>
+      <div id="chartContainer" class="chart-container">
+        <div class="chart-loading">
+          <div class="spinner"></div>
+          <span>Генерирую график...</span>
+        </div>
+        <img id="chartImg" src="" alt="Chart" style="display:none; width:100%; border-radius:8px;"/>
+      </div>
+      <a id="lessonVideo" href="#" target="_blank" class="video-link">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+          <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5"/>
+          <path d="M6.5 5.5L11 8L6.5 10.5V5.5Z" fill="currentColor"/>
+        </svg>
+        Смотреть видео-объяснение
+      </a>
+    </div>
+  </div>
+
+  <!-- ══ QUIZ MODAL ══════════════════════════════════════════════════════ -->
+  <div id="quizModal" class="modal hidden">
+    <div class="modal-backdrop"></div>
+    <div class="modal-content">
+      <button class="modal-close" onclick="abortQuiz()">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+          <path d="M1 1L13 13M13 1L1 13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </button>
+      <div class="quiz-header">
+        <div class="quiz-streak" id="quizStreak">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="#f59e0b"><path d="M7 1C7 1 9 4 9 6.5C9 8.5 8 9.5 7 9.5C6 9.5 5 8.5 5 6.5C5 4 7 1 7 1Z"/></svg>
+          <span id="quizStreakNum">0</span>
+        </div>
+        <div id="quizProgress" class="quiz-progress-bar-wrap">
+          <div id="quizProgressBar" class="quiz-progress-bar"></div>
+        </div>
+        <div id="quizCounter" class="quiz-counter"></div>
+      </div>
+      <h3 id="quizQuestion" class="quiz-question"></h3>
+      <div id="quizOptions" class="quiz-options"></div>
+      <div id="quizFeedback" class="quiz-feedback hidden"></div>
+      <!-- Estus hint row -->
+      <div class="estus-hint-row" id="estusHintRow">
+        <button class="btn-estus-hint" id="estusHintBtn" onclick="useEstusHint()" title="Использовать фласку">
+          🔶 Подсказка (<span id="estusHintCount">3</span>)
+        </button>
+        <div class="estus-hint-text hidden" id="estusHintText"></div>
+      </div>
+      <button id="quizNext" class="btn-primary hidden" onclick="quizNextQuestion()">
+        Следующий вопрос →
+      </button>
+    </div>
+  </div>
+
+  <!-- ══ TASK MODAL ══════════════════════════════════════════════════════ -->
+  <div id="taskModal" class="modal hidden">
+    <div class="modal-backdrop" onclick="closeModal('taskModal')"></div>
+    <div class="modal-content">
+      <button class="modal-close" onclick="closeModal('taskModal')">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+          <path d="M1 1L13 13M13 1L1 13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </button>
+      <div class="task-header-illo">
+        <svg viewBox="0 0 80 80" fill="none" width="80" height="80">
+          <circle cx="40" cy="40" r="36" fill="#1a1f2e" stroke="#a78bfa" stroke-width="2"/>
+          <rect x="25" y="22" width="30" height="36" rx="4" fill="#252d45" stroke="#a78bfa" stroke-width="1.5"/>
+          <line x1="31" y1="32" x2="49" y2="32" stroke="#a78bfa" stroke-width="2" stroke-linecap="round"/>
+          <line x1="31" y1="40" x2="49" y2="40" stroke="#a78bfa" stroke-width="2" stroke-linecap="round" opacity="0.6"/>
+          <line x1="31" y1="48" x2="42" y2="48" stroke="#a78bfa" stroke-width="2" stroke-linecap="round" opacity="0.4"/>
+          <circle cx="53" cy="53" r="10" fill="#00e87a" opacity="0.2"/>
+          <path d="M48 53L51 56L58 49" stroke="#00e87a" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <div class="modal-tag" id="taskModalTag">📝 ЗАДАНИЕ</div>
+      <h2 id="taskTitle" class="modal-title"></h2>
+      <div class="task-xp-badge" id="taskXp"></div>
+      <div id="taskDesc" class="task-description"></div>
+      <div class="task-instructions">
+        <div class="task-step">
+          <span class="step-num">1</span>
+          <span>Выполни задание согласно описанию</span>
+        </div>
+        <div class="task-step">
+          <span class="step-num">2</span>
+          <span>Сделай скриншот графика с разметкой</span>
+        </div>
+        <div class="task-step">
+          <span class="step-num">3</span>
+          <span>Загрузи скриншот и пройди самопроверку</span>
+        </div>
+        <div class="task-step">
+          <span class="step-num">4</span>
+          <span>Преподаватель проверит в течение 24 часов</span>
+        </div>
+      </div>
+
+      <!-- Self-check checklist -->
+      <div class="self-check" id="taskSelfCheck">
+        <div class="self-check-title">✅ Самопроверка перед отправкой</div>
+        <label class="self-check-item" for="check1">
+          <input type="checkbox" id="check1"/>
+          <span>Я чётко вижу структуру на графике (BOS/CHoCH)</span>
+        </label>
+        <label class="self-check-item" for="check2">
+          <input type="checkbox" id="check2"/>
+          <span>Ордер-блок обозначен корректно</span>
+        </label>
+        <label class="self-check-item" for="check3">
+          <input type="checkbox" id="check3"/>
+          <span>Зона ликвидности видна и отмечена</span>
+        </label>
+        <label class="self-check-item" for="check4">
+          <input type="checkbox" id="check4"/>
+          <span>Таймфрейм и инструмент указаны на скриншоте</span>
+        </label>
+      </div>
+
+      <!-- Photo upload -->
+      <div id="taskPhotoUpload">
+        <label class="photo-upload-area" id="photoDropArea" for="hwPhotoInput">
+          <input type="file" id="hwPhotoInput" accept="image/jpeg,image/jpg,image/png,image/gif,image/webp" onchange="onPhotoSelected(this)"/>
+          <span class="photo-upload-icon">📷</span>
+          <div class="photo-upload-label">
+            <strong>Загрузить скриншот графика</strong><br/>
+            Нажми чтобы выбрать из галереи
+          </div>
+        </label>
+        <div class="photo-preview-wrap hidden" id="photoPreviewWrap">
+          <img id="photoPreviewImg" src="" alt=""/>
+          <button class="photo-preview-remove" onclick="removePhoto()" title="Удалить фото">✕</button>
+        </div>
+      </div>
+
+      <!-- Teacher comment (shown after rejection/revision) -->
+      <div class="teacher-comment hidden" id="teacherCommentBlock">
+        <div class="teacher-comment-label">💬 Комментарий преподавателя</div>
+        <div id="teacherCommentText"></div>
+      </div>
+
+      <div id="taskStatus" class="task-status hidden"></div>
+      <button id="taskSubmitBtn" class="btn-primary" onclick="submitCurrentTask()">
+        Отправить на проверку
+      </button>
+    </div>
+  </div>
+
+  <!-- ══ SEND PREVIEW MODAL ═════════════════════════════════════════════ -->
+  <div id="sendPreviewModal" class="modal hidden">
+    <div class="modal-backdrop" onclick="closeSendPreview()"></div>
+    <div class="modal-content send-preview-content">
+      <button class="modal-close" onclick="closeSendPreview()">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+          <path d="M1 1L13 13M13 1L1 13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </button>
+      <div class="modal-tag">📤 ОТПРАВКА</div>
+      <h2 class="modal-title">Подтверди отправку</h2>
+      <div class="spm-task-name" id="sendPreviewTitle"></div>
+      <div class="spm-img-wrap" id="sendPreviewImgWrap">
+        <img id="sendPreviewImg" src="" alt="" class="spm-img"/>
+        <div class="spm-no-photo hidden" id="sendPreviewNoPhoto">
+          <svg width="32" height="32" viewBox="0 0 32 32" fill="none" opacity="0.4">
+            <rect x="2" y="7" width="28" height="20" rx="3" stroke="currentColor" stroke-width="1.5"/>
+            <circle cx="16" cy="17" r="5" stroke="currentColor" stroke-width="1.5"/>
+            <path d="M12 7L14 4H18L20 7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+          <span>Скриншот не прикреплён</span>
+          <small>Преподаватель может отклонить без фото</small>
+        </div>
+      </div>
+      <div class="spm-meta" id="sendPreviewMeta"></div>
+      <div class="spm-actions">
+        <button class="spm-back-btn" onclick="closeSendPreview()">← Назад</button>
+        <button class="btn-primary spm-send-btn" id="sendPreviewConfirmBtn" onclick="doSubmitTask()">
+          📤 Отправить
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ RESULT MODAL ════════════════════════════════════════════════════ -->
+  <div id="resultModal" class="modal hidden">
+    <div class="modal-backdrop" onclick="closeModal('resultModal')"></div>
+    <div class="modal-content result-content">
+      <div class="result-illo" id="resultIllo"></div>
+      <div id="resultEmoji" class="result-emoji"></div>
+      <h2 id="resultTitle" class="result-title"></h2>
+      <p id="resultText" class="result-text"></p>
+      <div id="resultXp" class="result-xp hidden"></div>
+      <button class="btn-primary" onclick="onResultClose()">
+        Отлично, продолжаем!
+      </button>
+    </div>
+  </div>
+
+  <!-- ══ DAILY BONUS MODAL ═══════════════════════════════════════════════ -->
+  <div id="dailyBonusModal" class="modal hidden">
+    <div class="modal-backdrop" onclick="closeModal('dailyBonusModal')"></div>
+    <div class="modal-content result-content">
+      <div class="result-emoji">🔥</div>
+      <h2 class="result-title">Ежедневный вход!</h2>
+      <p class="result-text" id="dailyBonusText">+20 XP начислено</p>
+      <div id="dailyStreakDisplay" class="streak-display"></div>
+      <button class="btn-primary" onclick="closeModal('dailyBonusModal')">
+        Торговать!
+      </button>
+    </div>
+  </div>
+
+  <!-- ══ CHART LIGHTBOX ══════════════════════════════════════════════════ -->
+  <div id="chartLightbox" class="chart-lightbox hidden">
+    <div class="cl-viewport" id="clViewport">
+      <img id="clImg" class="cl-img" src="" alt="Chart"/>
+    </div>
+    <button class="cl-close" id="clCloseBtn" aria-label="Закрыть">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <path d="M1 1L15 15M15 1L1 15" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
+      </svg>
+    </button>
+    <div class="cl-hint">Щипок для масштаба · двойной тап для сброса</div>
+  </div>
+
+  <!-- ══ DREAM MODAL ════════════════════════════════════════════════════ -->
+  <div id="dreamModal" class="modal hidden">
+    <div class="modal-backdrop"></div>
+    <div class="modal-content dream-content">
+      <div class="dream-header">
+        <div class="dream-fox-icon">🧬⚡</div>
+        <div class="dream-tag">ПРОТОКОЛ СНОВИДЕНИЙ</div>
+      </div>
+      <div class="dream-setup" id="dreamSetup"></div>
+      <div class="dream-offline" id="dreamOfflineText"></div>
+      <div class="dream-question" id="dreamQuestion"></div>
+      <div class="dream-choices" id="dreamChoices"></div>
+      <div class="dream-result hidden" id="dreamResult"></div>
+    </div>
+  </div>
+
+  <!-- ══ ORACLE MODAL ════════════════════════════════════════════════════ -->
+  <div id="oracleModal" class="modal hidden">
+    <div class="modal-backdrop" onclick="closeModal('oracleModal')"></div>
+    <div class="modal-content oracle-content">
+      <div class="oracle-header">
+        <div class="oracle-eye-large" id="oracleEyeLarge">
+          <svg viewBox="0 0 80 60" fill="none" width="80" height="60">
+            <ellipse cx="40" cy="30" rx="38" ry="26" stroke="#a855f7" stroke-width="2.5"/>
+            <circle cx="40" cy="30" r="16" fill="#a855f7" opacity="0.9"/>
+            <circle cx="40" cy="30" r="9" fill="#1a0a2e"/>
+            <circle cx="43" cy="27" r="3.5" fill="#fff" opacity="0.9"/>
+          </svg>
+        </div>
+        <div class="oracle-title">Оракул открыл глаз</div>
+        <div class="oracle-subtitle">Cipher сканирует рыночные структуры</div>
+      </div>
+      <div class="oracle-concept-badge" id="oracleConceptBadge"></div>
+      <div class="oracle-text" id="oracleText">
+        <div class="oracle-loading">Cipher анализирует структуры рынка...</div>
+      </div>
+      <div class="oracle-price-line" id="oraclePriceLine"></div>
+      <div class="oracle-question hidden" id="oracleQuestion">
+        <div class="oracle-q-label">Проверь понимание:</div>
+        <div class="oracle-q-text" id="oracleQText"></div>
+        <div class="oracle-q-choices" id="oracleQChoices"></div>
+      </div>
+      <button class="btn-primary oracle-close-btn" onclick="closeModal('oracleModal')">
+        Понял, закрыть
+      </button>
+    </div>
+  </div>
+
+  <!-- ══ EVOLUTION MODAL ════════════════════════════════════════════════ -->
+  <div id="evolutionModal" class="modal hidden">
+    <div class="modal-backdrop" onclick="closeModal('evolutionModal')"></div>
+    <div class="modal-content evo-modal-content">
+      <div class="evo-particles" id="evoParticles"></div>
+      <div class="evo-emoji-big" id="evoEmojiBig">🧬</div>
+      <div class="evo-modal-title" id="evoModalTitle">Эволюция!</div>
+      <div class="evo-modal-name" id="evoModalName"></div>
+      <div class="evo-stages-list" id="evoStagesList"></div>
+      <button class="btn-primary" onclick="closeModal('evolutionModal')">
+        Потрясающе!
+      </button>
+    </div>
+  </div>
+
+  <!-- ══ BOSS INTRO ════════════════════════════════════════════════════ -->
+  <div id="bossIntroOverlay" class="boss-intro-overlay hidden">
+    <div class="boss-intro-bg"></div>
+    <div class="boss-intro-content">
+      <div class="boss-warning-text">ВНИМАНИЕ</div>
+      <div class="boss-intro-name" id="bossIntroName">Structure Breaker</div>
+      <div class="boss-intro-lore" id="bossIntroLore"></div>
+      <div class="boss-souls-stake">
+        <span class="bs-label">НА КОНУ:</span>
+        <span class="bs-amount" id="bossStakeAmount">0 ⚡</span>
+      </div>
+      <div class="boss-timer-preview">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+          <circle cx="7" cy="7" r="6" stroke="#c8a84e" stroke-width="1.5"/>
+          <path d="M7 3.5V7L9.5 9" stroke="#c8a84e" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+        <span id="bossTimerPreview">120 сек</span>
+      </div>
+      <button class="btn-boss-start" id="bossStartBtn" onclick="startBossFight()">
+        ⚔️ Принять вызов
+      </button>
+      <button class="btn-boss-cancel" onclick="closeBossIntro()">
+        Уйти (вернуться позже)
+      </button>
+      <div class="boss-intro-quote">«Prepare to trade.»</div>
+    </div>
+  </div>
+
+  <!-- ══ BOSS ARENA ══════════════════════════════════════════════════════ -->
+  <div id="bossArena" class="boss-arena hidden">
+    <div class="boss-arena-bg"></div>
+    <!-- HUD -->
+    <div class="boss-hud">
+      <div class="boss-hud-left">
+        <div class="boss-name-hud" id="bossArenaName">Structure Breaker</div>
+        <div class="boss-progress-bar-wrap">
+          <div class="boss-progress-bar" id="bossProgressBar"></div>
+        </div>
+      </div>
+      <div class="boss-hud-center">
+        <div class="boss-timer-ring" id="bossTimerRing">
+          <svg viewBox="0 0 60 60" width="60" height="60">
+            <circle cx="30" cy="30" r="26" fill="none" stroke="rgba(200,168,78,0.15)" stroke-width="4"/>
+            <circle cx="30" cy="30" r="26" fill="none" stroke="#c8a84e" stroke-width="4"
+              stroke-dasharray="163" stroke-dashoffset="0" id="bossTimerCircle"
+              stroke-linecap="round" transform="rotate(-90 30 30)"/>
+          </svg>
+          <div class="boss-timer-num" id="bossTimerNum">120</div>
+        </div>
+      </div>
+      <div class="boss-hud-right">
+        <div class="boss-souls-hud">⚡ <span id="bossArenaStake">0</span></div>
+        <div class="boss-accuracy-hud" id="bossAccuracyHud">0%</div>
+      </div>
+    </div>
+
+    <!-- Question area -->
+    <div class="boss-question-wrap" id="bossQuestionWrap">
+      <div class="boss-q-counter" id="bossQCounter">1/5</div>
+      <div class="boss-question-text" id="bossQuestionText"></div>
+      <div class="boss-options" id="bossOptions"></div>
+      <div class="boss-q-feedback hidden" id="bossQFeedback"></div>
+    </div>
+  </div>
+
+  <!-- ══ BOSS DEATH SCREEN ═══════════════════════════════════════════════ -->
+  <div id="bossDeathScreen" class="boss-death-screen hidden">
+    <div class="death-crack-overlay"></div>
+    <div class="death-vignette"></div>
+    <div class="death-content">
+      <div class="death-big-text">YOU DIED</div>
+      <div class="death-sub-text">ЛИКВИДИРОВАН</div>
+      <div class="death-souls-info">
+        <div class="death-souls-dropped" id="deathSoulsDropped">
+          <span class="ds-icon">💀</span>
+          <span class="ds-amount" id="deathDroppedAmount">0 ⚡</span>
+          <span class="ds-label">упало на землю</span>
+        </div>
+      </div>
+      <div class="death-lore-text">
+        Рынок забрал твои души.<br>
+        Вернись — и у тебя будет <strong>один шанс</strong> их забрать.
+      </div>
+      <button class="btn-death-retry" onclick="retryBoss()">
+        ⚔️ Попробовать снова
+      </button>
+      <button class="btn-death-leave" onclick="leaveBossArena()">
+        Уйти (души будут ждать)
+      </button>
+    </div>
+  </div>
+
+  <!-- ══ BOSS VICTORY SCREEN ════════════════════════════════════════════ -->
+  <div id="bossVictoryScreen" class="boss-victory-screen hidden">
+    <div class="victory-particles-layer" id="victoryParticles"></div>
+    <div class="victory-content">
+      <div class="victory-title">BOSS DEFEATED</div>
+      <div class="victory-boss-name" id="victoryBossName">Structure Breaker</div>
+      <div class="victory-stats" id="victoryStats"></div>
+      <div class="victory-souls-earned" id="victorySoulsEarned"></div>
+      <div class="victory-souls-retrieved hidden" id="victorySoulsRetrieved"></div>
+      <button class="btn-victory-continue" onclick="afterBossVictory()">
+        🔥 К бонфайру
+      </button>
+    </div>
+  </div>
+
+  <!-- ══ BONFIRE SCREEN ═════════════════════════════════════════════════ -->
+  <div id="bonfireScreen" class="bonfire-screen hidden">
+    <div class="bonfire-bg"></div>
+    <div class="bonfire-content">
+      <div class="bonfire-fire-wrap">
+        <div class="bonfire-fire" id="bonfireFire">
+          <div class="fire-layer f1"></div>
+          <div class="fire-layer f2"></div>
+          <div class="fire-layer f3"></div>
+          <div class="fire-sparks" id="fireSparks"></div>
+        </div>
+        <div class="bonfire-base">⚔</div>
+      </div>
+      <div class="bonfire-title">BONFIRE LIT</div>
+      <div class="bonfire-module-name" id="bonfireModuleName">Модуль пройден</div>
+      <div class="bonfire-stats" id="bonfireStats"></div>
+      <div class="bonfire-next-boss" id="bonfireNextBoss"></div>
+      <div class="bonfire-actions">
+        <button class="btn-bonfire-continue" onclick="closeBonfire()">
+          Идти дальше →
+        </button>
+      </div>
+      <!-- Phase 4 activities at bonfire -->
+      <div class="phase4-nav" style="margin-top:12px;">
+        <button class="phase4-btn" onclick="openRoulette()">🎰 Рулетка</button>
+        <button class="phase4-btn" onclick="openPvP()">⚔️ PvP</button>
+        <button class="phase4-btn" onclick="openClanPanel()">🛡 Клан</button>
+      </div>
+      <div class="bonfire-quote">«Ты разжёг огонь. Следующий мир ждёт.»</div>
+    </div>
+  </div>
+
+  <!-- ══ HOLLOW OVERLAY ═════════════════════════════════════════════════ -->
+  <div id="hollowOverlay" class="hollow-overlay hidden">
+    <div class="hollow-content">
+      <div class="hollow-vignette"></div>
+      <div class="hollow-text-wrap">
+        <div class="hollow-status-text">ПОЛЫЙ</div>
+        <div class="hollow-title">Ты стал Hollow</div>
+        <div class="hollow-desc">
+          Ты не заходил слишком долго.<br>
+          Рынок продолжал движение без тебя.<br>
+          Множитель душ: <strong>×0.5</strong>
+        </div>
+        <div class="hollow-cost">Стоимость выхода: <span class="souls-gold">100 ⚡</span></div>
+        <button class="btn-hollow-exit" id="hollowExitBtn" onclick="exitHollow()">
+          Вернуться к огню — 100 ⚡
+        </button>
+        <div class="hollow-quote">«Рынок не прощает. Мы тоже.»</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ SOULS DROP OVERLAY ══════════════════════════════════════════════ -->
+  <div id="soulsDropOverlay" class="souls-drop-overlay hidden">
+    <div class="souls-drop-content">
+      <div class="souls-drop-title">ЛИКВИДИРОВАН</div>
+      <div class="souls-drop-amount" id="soulsDropAmount">0 ⚡</div>
+      <div class="souls-drop-desc">
+        Рынок забрал твои души.<br>
+        У тебя <strong>один шанс</strong> — победи босса и верни их.<br>
+        Провалишься снова — они сгорят <em>навсегда.</em>
+      </div>
+      <button class="btn-primary btn-souls-retry" onclick="closeSoulsDrop()">
+        Попробовать снова
+      </button>
+    </div>
+  </div>
+
+  <!-- ══ SOULS FLOAT LAYER ════════════════════════════════════════════════ -->
+  <div id="soulsFloatLayer" class="souls-float-layer"></div>
+
+  <!-- ══════════════════ PHASE 3: SOCIAL ══════════════════════════════════ -->
+
+  <!-- ══ PHANTOM MESSAGES OVERLAY ═══════════════════════════════════════════ -->
+  <div id="phantomOverlay" class="phantom-overlay hidden">
+    <div class="phantom-panel">
+      <div class="phantom-header">
+        <span class="phantom-icon">👻</span>
+        <span class="phantom-title">Послания Призраков</span>
+        <button class="phantom-close" onclick="closePhantoms()">✕</button>
+      </div>
+      <div class="phantom-subtitle">Советы павших трейдеров перед этим заданием</div>
+      <div class="phantom-list" id="phantomList">
+        <div class="phantom-loading">Призываем призраков…</div>
+      </div>
+      <div class="phantom-write-wrap">
+        <textarea id="phantomInput" class="phantom-input"
+          placeholder="Оставь совет следующему…" maxlength="200" rows="3"></textarea>
+        <div class="phantom-input-footer">
+          <span class="phantom-char-count" id="phantomCharCount">0/200</span>
+          <button class="btn-phantom-send" onclick="sendPhantom()">Оставить послание 👻</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ DAILY CHALLENGE OVERLAY ════════════════════════════════════════════ -->
+  <div id="dailyOverlay" class="daily-overlay hidden">
+    <div class="daily-panel">
+      <div class="daily-header">
+        <div class="daily-streak-badge" id="dailyStreakBadge">🔥 0 дней</div>
+        <div class="daily-title">ЕЖЕДНЕВНЫЙ ВЫЗОВ</div>
+        <div class="daily-date" id="dailyDate"></div>
+      </div>
+      <div class="daily-reward-row">
+        <span class="daily-reward-label">Награда:</span>
+        <span class="daily-reward-souls" id="dailyRewardSouls">500 ⚡</span>
+      </div>
+      <div class="daily-question" id="dailyQuestion">Загрузка…</div>
+      <div class="daily-options" id="dailyOptions"></div>
+      <!-- Result state (shown after answer) -->
+      <div class="daily-result hidden" id="dailyResult">
+        <div class="daily-result-icon" id="dailyResultIcon"></div>
+        <div class="daily-result-text" id="dailyResultText"></div>
+        <div class="daily-souls-won" id="dailySoulsWon"></div>
+        <div class="daily-streak-update" id="dailyStreakUpdate"></div>
+        <button class="btn-daily-close" onclick="closeDaily()">Закрыть</button>
+      </div>
+      <!-- Completed state -->
+      <div class="daily-completed hidden" id="dailyCompleted">
+        <div class="daily-done-icon">✅</div>
+        <div class="daily-done-text">Вызов принят! Возвращайся завтра.</div>
+        <div class="daily-streak-display" id="dailyStreakDisplay"></div>
+        <button class="btn-daily-close" onclick="closeDaily()">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ CLAN PANEL ══════════════════════════════════════════════════════════ -->
+  <div id="clanPanel" class="clan-panel hidden">
+    <div class="clan-panel-header">
+      <span class="clan-title">⚔️ Кланы</span>
+      <button class="clan-close" onclick="closeClanPanel()">✕</button>
+    </div>
+
+    <!-- No clan state -->
+    <div id="clanNone" class="clan-none">
+      <div class="clan-none-text">Ты одинокий трейдер.<br>Объединись с другими для силы.</div>
+      <div class="clan-actions-row">
+        <button class="btn-clan-action" onclick="showClanCreate()">Создать клан</button>
+        <button class="btn-clan-action" onclick="showClanJoin()">Вступить в клан</button>
+      </div>
+      <div class="clan-create-form hidden" id="clanCreateForm">
+        <input id="clanNameInput" class="clan-input" type="text" placeholder="Название клана (макс 30)" maxlength="30">
+        <input id="clanTagInput" class="clan-input" type="text" placeholder="Тег [макс 5 букв]" maxlength="5">
+        <button class="btn-clan-submit" onclick="createClan()">Создать ⚔️</button>
+      </div>
+      <div class="clan-join-form hidden" id="clanJoinForm">
+        <input id="clanTagJoinInput" class="clan-input" type="text" placeholder="Тег клана" maxlength="5">
+        <button class="btn-clan-submit" onclick="joinClan()">Вступить →</button>
+      </div>
+    </div>
+
+    <!-- My clan state -->
+    <div id="clanMine" class="clan-mine hidden">
+      <div class="clan-mine-header">
+        <span class="clan-mine-tag" id="clanMineTag">[SMC]</span>
+        <span class="clan-mine-name" id="clanMineName">Smart Money Clan</span>
+      </div>
+      <div class="clan-progress-wrap">
+        <div class="clan-progress-label">
+          Недельный пул: <span id="clanWeeklySouls">0</span> / <span id="clanWeeklyTarget">1000</span> ⚡
+        </div>
+        <div class="clan-progress-bar-outer">
+          <div class="clan-progress-bar-inner" id="clanProgressBar" style="width:0%"></div>
+        </div>
+      </div>
+      <div class="clan-members-list" id="clanMembersList"></div>
+      <div class="clan-hollow-warning hidden" id="clanHollowWarning">
+        ⚠️ <span id="clanHollowCount">0</span> члена клана в Hollow режиме — клан теряет <strong>200 ⚡</strong> за каждого
+      </div>
+      <div class="clan-mine-actions">
+        <button class="btn-clan-contribute" onclick="showContributeModal()">💎 Пожертвовать души</button>
+        <button class="btn-clan-leave" onclick="leaveClan()">Покинуть клан</button>
+      </div>
+    </div>
+
+    <!-- Leaderboard -->
+    <div class="clan-lb-title">Топ кланов</div>
+    <div class="clan-leaderboard" id="clanLeaderboard">
+      <div class="clan-lb-loading">Загрузка…</div>
+    </div>
+  </div>
+
+  <!-- ══ CLAN CONTRIBUTE MODAL ══════════════════════════════════════════════ -->
+  <div id="contributeModal" class="contribute-modal hidden">
+    <div class="contribute-content">
+      <div class="contribute-title">Пожертвовать клану</div>
+      <div class="contribute-souls-avail">У тебя: <span id="contributeSoulsAvail">0</span> ⚡</div>
+      <input id="contributeAmount" class="contribute-input" type="number" min="10" placeholder="Количество душ">
+      <div class="contribute-actions">
+        <button class="btn-contribute-confirm" onclick="confirmContribute()">Пожертвовать ⚡</button>
+        <button class="btn-contribute-cancel" onclick="closeContributeModal()">Отмена</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ KNOWLEDGE ROULETTE MODAL ══════════════════════════════════════════ -->
+  <div id="rouletteModal" class="roulette-modal hidden">
+    <div class="roulette-backdrop" onclick="closeRoulette()"></div>
+    <div class="roulette-content">
+      <div class="roulette-header">
+        <div class="roulette-title">⚡ Рулетка Знаний</div>
+        <div class="roulette-subtitle">Ставь души. Крути. Получи x3 или потеряй всё.</div>
+      </div>
+
+      <!-- Wheel -->
+      <div class="roulette-wheel-wrap" id="rouletteWheelWrap">
+        <div class="roulette-wheel" id="rouletteWheel">
+          <div class="roulette-needle"></div>
+          <canvas id="rouletteCanvas" width="280" height="280"></canvas>
+        </div>
+      </div>
+
+      <!-- Bet selector (shown before spin) -->
+      <div class="roulette-bet-section" id="rouletteBetSection">
+        <div class="roulette-bet-label">Выбери ставку:</div>
+        <div class="roulette-bets">
+          <button class="roulette-bet-btn" data-bet="10" onclick="selectBet(10)">10 ⚡</button>
+          <button class="roulette-bet-btn" data-bet="25" onclick="selectBet(25)">25 ⚡</button>
+          <button class="roulette-bet-btn" data-bet="50" onclick="selectBet(50)">50 ⚡</button>
+          <button class="roulette-bet-btn" data-bet="100" onclick="selectBet(100)">100 ⚡</button>
+        </div>
+        <div class="roulette-souls-balance">Баланс: <span id="rouletteSoulsBalance">0</span> ⚡</div>
+        <button class="roulette-spin-btn" id="rouletteSpinBtn" onclick="spinRoulette()" disabled>
+          🎰 Крутить
+        </button>
+      </div>
+
+      <!-- Question (shown after spin) -->
+      <div class="roulette-question-section hidden" id="rouletteQuestionSection">
+        <div class="roulette-topic-label" id="rouletteTopicLabel">Структура рынка</div>
+        <div class="roulette-question" id="rouletteQuestion">Вопрос загружается...</div>
+        <div class="roulette-answer-reveal hidden" id="rouletteAnswerReveal">
+          <div class="roulette-answer-label">Правильный ответ:</div>
+          <div class="roulette-answer-text" id="rouletteAnswerText"></div>
+          <div class="roulette-self-grade">
+            <div class="roulette-self-grade-label">Ты ответил правильно?</div>
+            <div class="roulette-self-btns">
+              <button class="roulette-yes-btn" onclick="submitRouletteAnswer(true)">✅ Да! (+<span id="roulettePotential">0</span> ⚡)</button>
+              <button class="roulette-no-btn" onclick="submitRouletteAnswer(false)">❌ Нет (потеря ставки)</button>
+            </div>
+          </div>
+        </div>
+        <button class="roulette-reveal-btn" id="rouletteRevealBtn" onclick="revealRouletteAnswer()">
+          Показать ответ
+        </button>
+      </div>
+
+      <button class="roulette-close-btn" onclick="closeRoulette()">✕ Закрыть</button>
+    </div>
+  </div>
+
+  <!-- ══ INVASION MODAL ═════════════════════════════════════════════════════ -->
+  <div id="invasionModal" class="invasion-modal hidden">
+    <div class="invasion-content">
+      <div class="invasion-header">
+        <div class="invasion-skull">⚔️</div>
+        <div class="invasion-title">ВТОРЖЕНИЕ!</div>
+        <div class="invasion-timer-wrap">
+          <div class="invasion-timer-label">Осталось:</div>
+          <div class="invasion-timer" id="invasionTimer">30:00</div>
+        </div>
+      </div>
+      <div class="invasion-question" id="invasionQuestion">Загрузка задачи...</div>
+      <div class="invasion-reward">Награда: <span id="invasionReward">50</span> ⚡ + ачивка</div>
+      <textarea class="invasion-answer-input" id="invasionAnswerInput"
+        placeholder="Введи свой анализ здесь..." rows="5"></textarea>
+      <div class="invasion-actions">
+        <button class="invasion-submit-btn" onclick="submitInvasion()">⚔️ Ответить</button>
+        <button class="invasion-skip-btn" onclick="closeInvasion()">Закрыть (streak -1)</button>
+      </div>
+      <div class="invasion-result hidden" id="invasionResult"></div>
+    </div>
+  </div>
+
+  <!-- ══ PvP MODAL ══════════════════════════════════════════════════════════ -->
+  <div id="pvpModal" class="pvp-modal hidden">
+    <div class="pvp-content">
+      <!-- Matchmaking screen -->
+      <div id="pvpMatchmaking" class="pvp-screen">
+        <div class="pvp-title">⚔️ Битва Разметок</div>
+        <div class="pvp-desc">Ты и соперник получите один график. Размечайте независимо. Точнее — победил.</div>
+        <div class="pvp-waiting hidden" id="pvpWaiting">
+          <div class="pvp-spinner"></div>
+          <div class="pvp-wait-text">Ищем соперника...</div>
+          <div class="pvp-wait-sec">Ожидание: <span id="pvpWaitSec">0</span>с</div>
+        </div>
+        <div class="pvp-actions" id="pvpFindActions">
+          <button class="pvp-find-btn" onclick="pvpFindMatch()">⚔️ Найти соперника</button>
+          <button class="pvp-close-btn" onclick="closePvP()">✕ Закрыть</button>
+        </div>
+      </div>
+
+      <!-- Battle screen (after match found) -->
+      <div id="pvpBattle" class="pvp-screen hidden">
+        <div class="pvp-battle-header">
+          <div class="pvp-battle-title">БИТВА НАЧАТА</div>
+          <div class="pvp-battle-timer" id="pvpBattleTimer">3:00</div>
+          <div class="pvp-battle-chart-info">Тема: <span id="pvpChartTopic">-</span></div>
+        </div>
+        <div class="pvp-chart-area">
+          <div class="pvp-chart-placeholder">
+            <div class="pvp-chart-icon">📊</div>
+            <div class="pvp-chart-instruction">Разметь этот сетап на реальном графике в своём приложении и оцени свою точность:</div>
+          </div>
+        </div>
+        <div class="pvp-score-section">
+          <div class="pvp-score-label">Твоя точность разметки (0-100):</div>
+          <input type="range" class="pvp-score-slider" id="pvpScoreSlider" min="0" max="100" value="50">
+          <div class="pvp-score-value"><span id="pvpScoreValue">50</span>%</div>
+        </div>
+        <button class="pvp-submit-btn" onclick="submitPvP()">Отправить разметку</button>
+      </div>
+
+      <!-- Result screen -->
+      <div id="pvpResult" class="pvp-screen hidden">
+        <div class="pvp-result-icon" id="pvpResultIcon">🏆</div>
+        <div class="pvp-result-title" id="pvpResultTitle">ПОБЕДА!</div>
+        <div class="pvp-result-scores" id="pvpResultScores"></div>
+        <div class="pvp-result-souls" id="pvpResultSouls"></div>
+        <button class="pvp-close-btn" onclick="closePvP()">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/app.js?v=6"></script>
+</body>
+</html>
