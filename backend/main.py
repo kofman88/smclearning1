@@ -233,6 +233,17 @@ app.include_router(social_router)
 
 # ── Static frontend ───────────────────────────────────────────────────────────
 FRONTEND_DIR = Path(__file__).parent / "frontend"
+
+_NO_CACHE = {"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache", "Expires": "0"}
+
+@app.get("/static/app.js")
+async def serve_app_js():
+    return FileResponse(str(FRONTEND_DIR / "app.js"), media_type="application/javascript", headers=_NO_CACHE)
+
+@app.get("/static/style.css")
+async def serve_style_css():
+    return FileResponse(str(FRONTEND_DIR / "style.css"), media_type="text/css", headers=_NO_CACHE)
+
 if FRONTEND_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")
     logger.info(f"Frontend: {FRONTEND_DIR}")
@@ -418,7 +429,7 @@ async def root():
     """Serve frontend index or return API info."""
     index = FRONTEND_DIR / "index.html"
     if index.exists():
-        return FileResponse(str(index))
+        return FileResponse(str(index), headers=_NO_CACHE)
     return {"status": "CHM Smart Money Academy API v4.0", "docs": "/docs"}
 
 
