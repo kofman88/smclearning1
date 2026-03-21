@@ -35,21 +35,32 @@ logger = logging.getLogger(__name__)
 def validate_telegram_init_data(init_data: str) -> Optional[dict]:
     """
     Validate Telegram Mini App initData HMAC signature.
-    Returns parsed user dict on success, None on failure.
+    Returns parsed user dict on success, None on HMAC failure (spoofing attempt).
+    Returns empty dict {} when BOT_TOKEN is not configured (skip validation).
     Reference: https://core.telegram.org/bots/webapps#validating-data-received-via-the-mini-app
     """
     bot_token = os.getenv("BOT_TOKEN", "").strip()
-    if not bot_token or not init_data:
+    if not bot_token:
+        logger.warning("BOT_TOKEN not set — skipping initData HMAC validation")
+        # Parse user info from initData without verifying signature
+        try:
+            import json as _json
+            params = dict(parse_qsl(init_data, keep_blank_values=True))
+            user_raw = params.get("user", "{}")
+            return _json.loads(unquote(user_raw)) if user_raw else {}
+        except Exception:
+            return {}
+    if not init_data:
         return None
     try:
         params = dict(parse_qsl(init_data, keep_blank_values=True))
         received_hash = params.pop("hash", None)
         if not received_hash:
             return None
-        # Check auth_date freshness (1 hour window)
+        # Check auth_date freshness (24 hour window — Telegram may cache initData)
         auth_date = int(params.get("auth_date", 0))
-        if time.time() - auth_date > 3600:
-            logger.warning("initData expired: auth_date=%d", auth_date)
+        if time.time() - auth_date > 86400:
+            logger.warning("initData expired: auth_date=%d (>24h old)", auth_date)
             return None
         # Build check string: sorted key=value pairs joined by \n
         data_check_string = "\n".join(f"{k}={v}" for k, v in sorted(params.items()))
@@ -421,7 +432,11 @@ async def user_init(req: UserInitRequest):
     if req.init_data:
         tg_user = validate_telegram_init_data(req.init_data)
         if tg_user is None:
+            # Hard rejection only for HMAC mismatches (actual spoofing attempt).
+            # None means validation ran with a BOT_TOKEN and the signature was wrong.
+            logger.warning("Rejecting user_id=%d: initData HMAC validation failed", user_id)
             raise HTTPException(status_code=403, detail="Invalid Telegram initData")
+        # tg_user is a dict (possibly empty if BOT_TOKEN not set — soft validation)
         # Override user_id with the validated one — prevents spoofing
         user_id = tg_user.get("id", user_id)
         # Trust names from validated initData
