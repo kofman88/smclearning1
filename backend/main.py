@@ -56,39 +56,50 @@ from social import router as social_router, get_daily_challenge, _msk_now
 
 @asynccontextmanager
 async def lifespan(application: FastAPI):
-    """Application lifespan: load data on startup."""
+    """Unified application lifespan — runs on startup, tears down on shutdown."""
+    # ── Load persisted data ────────────────────────────────────────────────
     load_progress()
     logger.info("Progress loaded: %d users", len(user_progress))
 
-    # ── Log critical env vars at startup for debugging ──────────────────
-    _raw_channel = os.getenv("ADMIN_CHANNEL_ID", "NOT SET")
-    _raw_admins  = os.getenv("ADMIN_ID", "NOT SET")
-    _raw_token   = os.getenv("BOT_TOKEN", "")
-    logger.info("ADMIN_CHANNEL_ID = %r  (negative = group/channel, positive = user DM)", _raw_channel)
-    # Validate ADMIN_CHANNEL_ID format
+    # ── Log & validate critical env vars ──────────────────────────────────
+    _raw_channel = os.getenv("ADMIN_CHANNEL_ID", "NOT SET").strip()
+    _raw_admins  = os.getenv("ADMIN_ID", "NOT SET").strip()
+    _raw_token   = os.getenv("BOT_TOKEN", "").strip()
+    _raw_webhook = os.getenv("WEBHOOK_URL", "").strip().rstrip("/")
+    logger.info("ADMIN_CHANNEL_ID = %r", _raw_channel)
     try:
         _ch_int = int(_raw_channel) if _raw_channel not in ("NOT SET", "") else None
         if _ch_int is not None and _ch_int > 0:
-            logger.error("⚠️  ADMIN_CHANNEL_ID is POSITIVE (%d) — group/channel ids must be NEGATIVE! Fix in env vars.", _ch_int)
+            logger.error("⚠️  ADMIN_CHANNEL_ID is POSITIVE (%d) — must be NEGATIVE for groups!", _ch_int)
         elif _ch_int is not None and _ch_int < 0:
-            logger.info("✅ ADMIN_CHANNEL_ID is negative (looks correct): %d", _ch_int)
+            logger.info("✅ ADMIN_CHANNEL_ID is negative (correct): %d", _ch_int)
         else:
-            logger.warning("⚠️  ADMIN_CHANNEL_ID is not set — homework will only go to individual admin DMs")
+            logger.warning("⚠️  ADMIN_CHANNEL_ID not set — HW notifications go to individual admin DMs only")
     except ValueError:
         logger.error("⚠️  ADMIN_CHANNEL_ID is not a valid integer: %r", _raw_channel)
     logger.info("ADMIN_ID         = %r", _raw_admins)
-    logger.info("BOT_TOKEN        = %s", "SET (len=%d)" % len(_raw_token) if _raw_token else "NOT SET ⚠️")
+    logger.info("BOT_TOKEN        = %s", f"SET (len={len(_raw_token)})" if _raw_token else "NOT SET ⚠️")
+    logger.info("WEBHOOK_URL      = %r", _raw_webhook)
 
-    if os.getenv("WEBHOOK_URL"):
-        setup_webhook()
+    # ── Setup Telegram webhook (non-blocking) ──────────────────────────────
+    if _raw_webhook:
+        await asyncio.get_running_loop().run_in_executor(None, setup_webhook)
     else:
         logger.info("WEBHOOK_URL not set — webhook not configured (polling mode)")
 
-    # Start daily-challenge push loop
+    # ── Start background tasks ─────────────────────────────────────────────
+    asyncio.create_task(start_market_feed_loop())
+    logger.info("Market feed background task started")
     asyncio.create_task(_daily_challenge_loop())
     logger.info("Daily challenge loop started")
+    asyncio.create_task(_invasion_weekly_loop())
+    logger.info("Invasion weekly loop started")
+    if _raw_webhook:
+        asyncio.create_task(_keep_alive_loop(_raw_webhook))
+        logger.info("Keep-alive loop started")
 
     yield
+    # (shutdown cleanup goes here if needed)
 
 app = FastAPI(title="CHM Smart Money Academy API", version="4.0.0", lifespan=lifespan)
 
@@ -1756,26 +1767,7 @@ async def pvp_stats(user_id: int):
     return {"ok": True, "stats": stats}
 
 
-@app.on_event("startup")
-async def on_startup():
-    load_progress()
-    logger.info(f"Progress loaded: {len(user_progress)} users")
-    webhook_url = os.getenv("WEBHOOK_URL", "")
-    if webhook_url:
-        # Run blocking setup_webhook in executor so it doesn't block event loop
-        await asyncio.get_running_loop().run_in_executor(None, setup_webhook)
-    else:
-        logger.info("WEBHOOK_URL not set — webhook not configured (polling mode)")
-    # Start live market feed in background
-    asyncio.create_task(start_market_feed_loop())
-    logger.info("Market feed background task started")
-    # Phase 4: Start invasion weekly cron
-    asyncio.create_task(_invasion_weekly_loop())
-    logger.info("Invasion weekly loop started")
-    # Keep-alive: prevents Render free tier from sleeping (pings /health every 10 min)
-    if webhook_url:
-        asyncio.create_task(_keep_alive_loop(webhook_url))
-        logger.info("Keep-alive loop started")
+# Startup is handled entirely by the lifespan context manager above.
 
 
 async def _keep_alive_loop(base_url: str):
