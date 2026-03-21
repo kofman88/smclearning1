@@ -11,6 +11,7 @@ const DEV_UID = 445677777;
 // ── GLOBAL STATE ──────────────────────────────────────────────────────────
 const state = {
   userId: null,
+  sessionToken: null,   // set after /api/user/init; sent with write requests
   userState: null,
   quizData: null,
   currentQuestId: null,
@@ -996,7 +997,7 @@ async function onQuizAnswer(chosen, correctIdx, clickedBtn) {
     const res = await fetch(`${API}/quiz/answer`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ user_id: state.userId, quest_id: questId, question_index: current, is_correct: isCorrect }),
+      body: JSON.stringify({ user_id: state.userId, quest_id: questId, question_index: current, is_correct: isCorrect, session_token: state.sessionToken }),
     });
     const data = await res.json();
 
@@ -1211,8 +1212,9 @@ async function doSubmitTask() {
 
   try {
     const body = {
-      user_id:  state.userId,
-      quest_id: state.currentQuestId,
+      user_id:       state.userId,
+      quest_id:      state.currentQuestId,
+      session_token: state.sessionToken,
     };
     if (_hwPhotoBase64) body.photo = _hwPhotoBase64;
 
@@ -1451,9 +1453,22 @@ async function init() {
     const initRes = await fetch(`${API}/user/init`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ user_id: info.id, username: info.username, first_name: info.first_name, last_name: info.last_name }),
+      body: JSON.stringify({
+        user_id: info.id,
+        username: info.username,
+        first_name: info.first_name,
+        last_name: info.last_name,
+        init_data: tg?.initData || "",
+      }),
     });
     const initData = await initRes.json();
+    // Store validated user_id (may differ from initDataUnsafe if spoofed)
+    if (initData.user_id) state.userId = initData.user_id;
+    // Store session token for subsequent authenticated requests
+    if (initData.session_token) {
+      state.sessionToken = initData.session_token;
+      localStorage.setItem(`smc_session_${state.userId}`, initData.session_token);
+    }
 
     // Show Synthesis Ritual onboarding if user hasn't completed it
     initOnboarding(initData.onboarding_complete || false);
@@ -1668,7 +1683,7 @@ async function _flushHomTaps() {
     const res = await fetch(`${API}/homunculus/tap`, {
       method:  "POST",
       headers: {"Content-Type": "application/json"},
-      body:    JSON.stringify({user_id: state.userId, tap_count: taps, max_combo: maxCombo}),
+      body:    JSON.stringify({user_id: state.userId, tap_count: taps, max_combo: maxCombo, session_token: state.sessionToken}),
     });
     const data = await res.json();
     if (data.ok === false) { console.warn("hom tap:", data.error); return; }
