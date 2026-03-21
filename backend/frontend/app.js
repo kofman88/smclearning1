@@ -382,7 +382,7 @@ function switchTab(name) {
   document.querySelectorAll(".tab-content").forEach(c => c.classList.toggle("active", c.id === `tab-${name}`));
   if (name === "quests")       loadQuests();
   if (name === "leaderboard")  loadLeaderboard();
-  if (name === "pet")          loadPet();
+  if (name === "homunculus")   loadHomunculus();
   if (tg?.HapticFeedback) tg.HapticFeedback.selectionChanged();
 }
 window.switchTab = switchTab;
@@ -917,16 +917,15 @@ function onQuizFinished(data) {
     }
     loadQuests();
     refreshHeader();
-    // Cipher stat reaction: notify user and refresh pet stats
+    // Refresh homunculus stats after quiz completion
     setTimeout(() => {
-      showToast("⚡ Cipher получил энергию! Резонанс ↑", "success");
-      loadPet();
+      showToast("⚗️ Гомункул впитывает знания!", "success");
+      loadHomunculus();
     }, 2200);
   } else {
     showResult("⚠️", "ГИПОТЕЗА НЕ ПОДТВЕРЖДЕНА", `Результат: ${data.correct}/${data.total} (${data.score}%)\nНужно набрать ${data.required}%`, null);
     if (tg?.HapticFeedback) tg.HapticFeedback.notificationOccurred("error");
-    // Cipher distress reaction
-    setTimeout(() => showToast("⚠️ Cipher теряет стабильность... пройди протокол заново", "error"), 1200);
+    setTimeout(() => showToast("⚠️ Нужно пройти протокол заново", "error"), 1200);
   }
 }
 
@@ -1412,267 +1411,227 @@ async function init() {
   }
 }
 
-// ── PET SYSTEM ────────────────────────────────────────────────────────────
+// ── HOMUNCULUS SYSTEM ────────────────────────────────────────────────────────
 
-const PET_HINT_BY_STATE = {
-  idle:    "Активируй Cipher — тапай для резонанса 🧬",
-  happy:   "Cipher резонирует! Проходи протоколы для восстановления энергии ⚡",
-  excited: "CRITICAL RESONANCE! Cipher в состоянии возбуждения! 💠",
-  hungry:  "ALERT: Энергетический субстрат критически низкий 😢 Пройди урок!",
-  sick:    "ALERT: Клеточная целостность нарушена 😷 Срочно пройди квиз!",
-};
+let _homTapBatch    = 0;
+let _homMaxCombo    = 0;
+let _homBatchTimer  = null;
+let _homComboTimer  = null;
+let _homLastTapTime = 0;
+let _homComboCount  = 0;
 
-let _petTapCooldown = false;
-let _petComboTimer  = null;
-
-async function loadPet() {
+async function loadHomunculus() {
   if (!state.userId) return;
   try {
-    const [petRes, evoRes] = await Promise.all([
-      fetch(`${API}/pet/${state.userId}`),
-      fetch(`${API}/pet/evolution/${state.userId}`),
-    ]);
-    const [petData, evoData] = await Promise.all([petRes.json(), evoRes.json()]);
-    if (petData.ok) renderPet(petData);
-    if (evoData.ok) renderEvolution(evoData);
-  } catch (e) { console.error("loadPet:", e); }
+    const res  = await fetch(`${API}/homunculus/${state.userId}`);
+    const data = await res.json();
+    if (data.ok !== false) renderHomunculus(data);
+  } catch (e) { console.error("loadHomunculus:", e); }
 }
 
-function renderPet(data) {
-  // Stats
-  _setPetStat("Hunger",    data.hunger,    data.hunger);
-  _setPetStat("Happiness", data.happiness, data.happiness);
-  _setPetStat("Health",    data.health,    data.health);
+function renderHomunculus(data) {
+  const stage  = data.stage || 1;
+  const status = data.status || "active";
 
-  // Level & XP
-  const lvl  = data.pet_level  || 1;
-  const xpC  = data.pet_xp     || 0;
-  const xpCL = data.current_level_xp || 0;
-  const xpNL = data.next_level_xp;
-  const pct  = xpNL ? Math.min(100, Math.round(((xpC - xpCL) / (xpNL - xpCL)) * 100)) : 100;
+  const stageBadge = document.getElementById("homStageBadge");
+  if (stageBadge) stageBadge.textContent = `СТ.${stage}`;
 
-  const lvlBadge = document.getElementById("petLevelBadge");
-  if (lvlBadge) lvlBadge.textContent = `Ст. ${lvl}`;
-  const xpCurEl = document.getElementById("petXpCurrent");
-  if (xpCurEl) xpCurEl.textContent = xpC;
-  const xpNxtEl = document.getElementById("petXpNext");
-  if (xpNxtEl) xpNxtEl.textContent = xpNL ?? "MAX";
-  const xpFill = document.getElementById("petXpFill");
-  if (xpFill) xpFill.style.width = pct + "%";
+  const stageName = document.getElementById("homStageName");
+  if (stageName) stageName.textContent = data.stage_name || "Реагент";
 
-  // Coins
-  const coinsEl = document.getElementById("petCoins");
-  if (coinsEl) coinsEl.textContent = data.coins || 0;
-
-  // Fox visual state
-  const fox = document.getElementById("petFox");
-  if (fox) {
-    ["idle","happy","excited","hungry","sick"].forEach(s => fox.classList.remove(`pet-fox--${s}`));
-    fox.classList.add(`pet-fox--${data.visual_state || "idle"}`);
+  const statusBadge = document.getElementById("homStatusBadge");
+  if (statusBadge) {
+    const statusMap = { active:"Активен", hungry:"Голоден", dying:"Умирает", dead:"Мёртв", enraged:"Ярость!" };
+    statusBadge.textContent = statusMap[status] || status;
+    statusBadge.className   = `hom-status-badge hom-status--${status}`;
   }
 
-  // State-change toast (show once on transition, not every render)
-  const newState = data.visual_state || "idle";
-  if (newState !== (renderPet._lastState || "idle")) {
-    if (newState === "excited") showToast("Критический резонанс!", "success", "⚡");
-    else if (newState === "hungry") showToast("Энергия критически низкая", "error", "⚠️", "Пройди урок");
-    else if (newState === "sick")   showToast("Клеточная целостность нарушена", "error", "🧬", "Пройди квиз");
-    renderPet._lastState = newState;
+  // Show correct stage SVG
+  for (let i = 1; i <= 7; i++) {
+    const svg = document.getElementById(`homSvg${i}`);
+    if (svg) svg.style.display = (i === stage) ? "" : "none";
   }
 
-  // Aura color based on state
-  const aura = document.getElementById("petAura");
+  const deadOverlay = document.getElementById("homDeadOverlay");
+  if (deadOverlay) deadOverlay.style.display = status === "dead" ? "flex" : "none";
+
+  const creature = document.getElementById("homCreature");
+  if (creature) {
+    creature.className = "hom-creature";
+    if (status === "enraged") creature.classList.add("hom-creature--enraged");
+    else if (status === "dying")  creature.classList.add("hom-creature--dying");
+    else if (status === "hungry") creature.classList.add("hom-creature--hungry");
+    else if (status === "dead")   creature.classList.add("hom-creature--dead");
+  }
+
+  const aura = document.getElementById("homAura");
   if (aura) {
-    const auraColors = {
-      idle:    "rgba(0,212,255,0.18)",
-      happy:   "rgba(0,255,200,0.22)",
-      excited: "rgba(0,255,255,0.32)",
-      hungry:  "rgba(239,68,68,0.20)",
-      sick:    "rgba(100,120,140,0.18)",
-    };
-    const c = auraColors[data.visual_state] || auraColors.idle;
-    aura.style.background = `radial-gradient(circle, ${c} 0%, transparent 70%)`;
+    const auraColors = { active:"#a855f7", hungry:"#f59e0b", dying:"#ef4444", dead:"#6b7280", enraged:"#dc2626" };
+    aura.style.background = `radial-gradient(circle, ${(auraColors[status]||"#a855f7")}30 0%, transparent 70%)`;
   }
 
-  // Low-stat screen vignette
-  const critLow = data.health < 20 || data.hunger < 20;
-  let vignette = document.getElementById("statVignette");
-  if (critLow && !vignette) {
-    vignette = document.createElement("div");
-    vignette.id = "statVignette";
-    vignette.className = "screen-vignette-red";
-    document.body.appendChild(vignette);
-  } else if (!critLow && vignette) {
-    vignette.remove();
+  const enrageNotice = document.getElementById("homEnrageNotice");
+  if (enrageNotice) enrageNotice.style.display = status === "enraged" ? "block" : "none";
+
+  const reviveSection = document.getElementById("homReviveSection");
+  if (reviveSection) reviveSection.style.display = status === "dead" ? "block" : "none";
+
+  const multVal = document.getElementById("homMultVal");
+  if (multVal) multVal.textContent = `×${(data.total_mult || 1).toFixed(1)}`;
+
+  const tapsVal = document.getElementById("homTapsVal");
+  if (tapsVal) tapsVal.textContent = data.taps_today || 0;
+
+  const comboMaxVal = document.getElementById("homComboMaxVal");
+  if (comboMaxVal) comboMaxVal.textContent = data.combo_best || 0;
+
+  const soulsFed = document.getElementById("homSoulsFed");
+  if (soulsFed) soulsFed.textContent = data.souls_fed || 0;
+
+  const soulsReq   = document.getElementById("homSoulsReq");
+  const evoBar     = document.getElementById("homEvoBar");
+  const moduleNote = document.getElementById("homModuleNote");
+
+  if (data.next_stage) {
+    const req = data.next_stage.souls_req || 0;
+    if (soulsReq) soulsReq.textContent = req;
+    if (evoBar) evoBar.style.width = (req > 0 ? Math.min(100, ((data.souls_fed||0)/req)*100) : 100) + "%";
+    if (moduleNote && data.next_stage.modules_req != null) {
+      const curMod = data.module_index || 0;
+      const reqMod = data.next_stage.modules_req;
+      moduleNote.textContent = curMod >= reqMod
+        ? "✅ Модулей достаточно"
+        : `📚 Нужно пройти ещё ${reqMod - curMod} модул(ей)`;
+    }
+  } else {
+    if (soulsReq) soulsReq.textContent = "MAX";
+    if (evoBar) evoBar.style.width = "100%";
+    if (moduleNote) moduleNote.textContent = "🏆 Максимальная стадия!";
   }
 }
 
-function _setPetStat(statName, value, rawVal) {
-  const pct = Math.max(0, Math.min(100, Math.round(rawVal)));
-  const valEl  = document.getElementById(`pet${statName}`);
-  const fillEl = document.getElementById(`pet${statName}Bar`);
-  if (valEl)  valEl.textContent = pct;
-  if (fillEl) {
-    fillEl.style.width = pct + "%";
-    fillEl.classList.toggle("pet-stat-fill--low", pct < 25);
+function onHomunculusTap(e) {
+  if (!state.userId) return;
+
+  const now = Date.now();
+  if (now - _homLastTapTime < 300) {
+    _homComboCount++;
+  } else {
+    _homComboCount = 1;
   }
-}
+  _homLastTapTime = now;
+  if (_homComboCount > _homMaxCombo) _homMaxCombo = _homComboCount;
 
-async function onPetTap(e) {
-  if (_petTapCooldown) return;
-  _petTapCooldown = true;
-  setTimeout(() => { _petTapCooldown = false; }, 200);
+  _updateHomComboBar(_homComboCount);
 
-  // Haptic
+  _homTapBatch++;
+
+  const creature = document.getElementById("homCreature");
+  if (creature) {
+    creature.classList.remove("hom-squish");
+    void creature.offsetWidth;
+    creature.classList.add("hom-squish");
+    setTimeout(() => creature.classList.remove("hom-squish"), 200);
+  }
+
+  _spawnHomFloat(e, "✦");
+
   if (tg?.HapticFeedback) tg.HapticFeedback.impactOccurred("light");
 
-  // Tap squish animation
-  const fox = document.getElementById("petFox");
-  if (fox) {
-    fox.classList.remove("pet-fox--tapping");
-    void fox.offsetWidth; // reflow to restart
-    fox.classList.add("pet-fox--tapping");
-    setTimeout(() => fox.classList.remove("pet-fox--tapping"), 320);
-  }
+  clearTimeout(_homBatchTimer);
+  _homBatchTimer = setTimeout(_flushHomTaps, 2000);
+}
+window.onHomunculusTap = onHomunculusTap;
 
-  // Compute tap position for floating reward
-  const stage = document.getElementById("petStage");
-  let tapX = 50, tapY = 40;
-  if (e && stage) {
-    const rect = stage.getBoundingClientRect();
-    tapX = ((e.clientX - rect.left) / rect.width  * 100);
-    tapY = ((e.clientY - rect.top)  / rect.height * 100);
-  }
-
+async function _flushHomTaps() {
+  if (_homTapBatch === 0 || !state.userId) return;
+  const taps     = _homTapBatch;
+  const maxCombo = _homMaxCombo;
+  _homTapBatch = 0;
+  _homMaxCombo = 0;
   try {
-    const res  = await fetch(`${API}/pet/tap`, {
-      method: "POST",
-      headers: {"Content-Type":"application/json"},
-      body: JSON.stringify({ user_id: state.userId }),
+    const res = await fetch(`${API}/homunculus/tap`, {
+      method:  "POST",
+      headers: {"Content-Type": "application/json"},
+      body:    JSON.stringify({user_id: state.userId, tap_count: taps, max_combo: maxCombo}),
     });
     const data = await res.json();
-    if (!data.ok) return;
+    if (data.ok === false) { console.warn("hom tap:", data.error); return; }
 
-    // Floating DATA reward
-    _spawnFloatReward(`+${data.data_awarded || 2} Ð`, tapX, tapY,
-      data.combo > 2 ? "float-reward--combo" : "float-reward--data");
-
-    // Combo badge
-    if (data.combo > 1) _showComboBadge(data.combo);
-
-    // ── Souls system: show souls gained and update HUD ───────────────────
-    if (data.souls_earned > 0) {
-      spawnSoulParticle(`+${data.souls_earned} ⚡`, true);
-      const soulsEl = document.getElementById("soulsCount");
-      if (soulsEl) {
-        soulsEl.textContent = data.total_souls;
-        soulsEl.classList.remove("souls-gaining");
-        void soulsEl.offsetWidth;
-        soulsEl.classList.add("souls-gaining");
-      }
+    if (data.souls_earned != null) {
+      state.souls = (state.souls || 0) + data.souls_earned;
+      _updateSoulsDisplay(state.souls);
     }
+    renderHomunculus(data);
 
-    // Update DATA counter with bump animation
-    const coinsEl = document.getElementById("petCoins");
-    if (coinsEl) {
-      coinsEl.textContent = data.total_data ?? data.coins ?? 0;
-      coinsEl.classList.remove("data-counter", "bump");
-      void coinsEl.offsetWidth;
-      coinsEl.classList.add("data-counter", "bump");
+    if (data.evolved) {
+      _triggerHomunculusEvolution(data.stage, data.stage_name);
     }
-
-    // Coins milestone bonus
-    if (data.coins_earned > 0) {
-      _spawnCoinBurst(data.coins_earned);
-      showToast(`Milestone! +${data.coins_earned} Ð bonus`, "success", "🏆");
-    }
-
-    // Level up
-    if (data.level_up) {
-      _triggerPetLevelUp(data.pet_level);
-    }
-
-    // Update UI incrementally
-    _setPetStat("Hunger",    data.hunger,    data.hunger);
-    _setPetStat("Happiness", data.happiness, data.happiness);
-    _setPetStat("Health",    data.health,    data.health);
-
-    const lvlBadge = document.getElementById("petLevelBadge");
-    if (lvlBadge) lvlBadge.textContent = `Ст. ${data.pet_level}`;
-
-    const xpCurEl = document.getElementById("petXpCurrent");
-    if (xpCurEl) xpCurEl.textContent = data.pet_xp;
-
-    const xpNL = data.next_level_xp;
-    const xpCL = data.current_level_xp || 0;
-    const xpC  = data.pet_xp;
-    const pct  = xpNL ? Math.min(100, Math.round(((xpC - xpCL) / (xpNL - xpCL)) * 100)) : 100;
-    const xpFill = document.getElementById("petXpFill");
-    if (xpFill) xpFill.style.width = pct + "%";
-
-    // Visual state
-    if (fox) {
-      ["idle","happy","excited","hungry","sick"].forEach(s => fox.classList.remove(`pet-fox--${s}`));
-      fox.classList.add(`pet-fox--${data.visual_state || "idle"}`);
-    }
-
-  } catch (err) { console.error("pet tap:", err); }
-}
-window.onPetTap = onPetTap;
-
-function _spawnFloatReward(text, pctX, pctY, extraClass) {
-  const container = document.getElementById("petFloatRewards");
-  if (!container) return;
-  const el = document.createElement("div");
-  el.className = "float-reward" + (extraClass ? " " + extraClass : "");
-  el.textContent = text;
-  el.style.left   = (pctX - 10) + "%";
-  el.style.top    = pctY + "%";
-  container.appendChild(el);
-  setTimeout(() => el.remove(), 950);
+  } catch(e) { console.error("flushHomTaps:", e); }
 }
 
-function _showComboBadge(combo) {
-  const el = document.getElementById("petCombo");
-  const tx = document.getElementById("petComboText");
-  if (!el || !tx) return;
-  tx.textContent = `x${combo} РЕЗОНАНС!`;
-  el.style.display = "block";
-  clearTimeout(_petComboTimer);
-  _petComboTimer = setTimeout(() => { if (el) el.style.display = "none"; }, 1800);
-}
+function _updateHomComboBar(combo) {
+  const bar   = document.getElementById("homComboBar");
+  const label = document.getElementById("homComboLabel");
+  const badge = document.getElementById("homCombo");
+  const text  = document.getElementById("homComboText");
 
-function _triggerPetLevelUp(newLevel) {
-  if (tg?.HapticFeedback) tg.HapticFeedback.notificationOccurred("success");
-  showToast(`Cipher эволюционировал! Стадия ${newLevel}`, "success", "🧬");
-  const flash = document.createElement("div");
-  flash.className = "pet-level-up-flash";
-  document.body.appendChild(flash);
-  setTimeout(() => flash.remove(), 850);
-}
+  if (bar)   bar.style.width = Math.min(100, (combo / 100) * 100) + "%";
+  if (label) label.textContent = `Комбо: ${combo}`;
 
-function _spawnCoinBurst(count) {
-  const fox = document.getElementById("petFox");
-  if (!fox) return;
-  const rect = fox.getBoundingClientRect();
-  const cx = rect.left + rect.width / 2;
-  const cy = rect.top  + rect.height / 2;
-  const num = Math.min(count, 8);
-  for (let i = 0; i < num; i++) {
-    const el = document.createElement("div");
-    el.className = "coin-particle";
-    el.textContent = "Ð";
-    el.style.left = cx + "px";
-    el.style.top  = cy + "px";
-    const angle = (360 / num) * i;
-    const dist  = 60 + Math.random() * 40;
-    const tx = Math.cos(angle * Math.PI / 180) * dist;
-    const ty = Math.sin(angle * Math.PI / 180) * dist - 40;
-    el.style.setProperty("--tx", `translate(${tx}px,${ty}px)`);
-    document.body.appendChild(el);
-    setTimeout(() => el.remove(), 950);
+  const threshold = combo >= 100 ? 100 : combo >= 50 ? 50 : combo >= 25 ? 25 : combo >= 10 ? 10 : 0;
+  if (threshold > 0 && badge && text) {
+    text.textContent = `×${threshold} COMBO!`;
+    badge.style.display = "block";
+    clearTimeout(_homComboTimer);
+    _homComboTimer = setTimeout(() => { if (badge) badge.style.display = "none"; }, 1500);
   }
 }
+
+function _spawnHomFloat(e, text) {
+  const wrap = document.getElementById("homFloatRewards");
+  if (!wrap) return;
+  const el = document.createElement("div");
+  el.className = "hom-float-reward";
+  el.textContent = text;
+  if (e && e.clientX) {
+    const rect = wrap.getBoundingClientRect();
+    el.style.left = (e.clientX - rect.left) + "px";
+    el.style.top  = (e.clientY - rect.top) + "px";
+  } else {
+    el.style.left = "50%";
+    el.style.top  = "40%";
+  }
+  wrap.appendChild(el);
+  setTimeout(() => el.remove(), 900);
+}
+
+function _triggerHomunculusEvolution(stage, stageName) {
+  if (tg?.HapticFeedback) tg.HapticFeedback.notificationOccurred("success");
+  showToast(`⚗️ Гомункул эволюционировал! ${stageName} (Ст.${stage})`, "success");
+  const flash = document.createElement("div");
+  flash.className = "hom-evolution-flash";
+  document.body.appendChild(flash);
+  setTimeout(() => flash.remove(), 900);
+}
+
+async function homunculusRevive() {
+  if (!state.userId) return;
+  if (tg?.HapticFeedback) tg.HapticFeedback.impactOccurred("heavy");
+  try {
+    const res  = await fetch(`${API}/homunculus/revive`, {
+      method:  "POST",
+      headers: {"Content-Type": "application/json"},
+      body:    JSON.stringify({user_id: state.userId}),
+    });
+    const data = await res.json();
+    if (data.ok === false) { showToast(data.error || "Недостаточно душ", "error"); return; }
+    showToast("⚗️ Гомункул возрождён!", "success");
+    renderHomunculus(data);
+  } catch(e) { console.error("homunculusRevive:", e); }
+}
+window.homunculusRevive = homunculusRevive;
+
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ── FEVER / FRENZY TAP SYSTEM ─────────────────────────────────────────────
@@ -1806,19 +1765,19 @@ function _stopCoinRain() {
   document.getElementById("frenzyCanvas")?.remove();
 }
 
-// Hook fever/frenzy + ripple + flash into existing onPetTap
-const _origOnPetTap = onPetTap;
-window.onPetTap = async function(e) {
+// Hook fever/frenzy + ripple + flash into existing onHomunculusTap
+const _origOnHomunculusTap = onHomunculusTap;
+window.onHomunculusTap = function(e) {
   _trackTapVelocity();
-  _spawnTapRipple(e, document.getElementById("petStage"));
+  _spawnTapRipple(e, document.getElementById("homCreatureWrap"));
   _spawnScreenFlash();
-  await _origOnPetTap(e);
+  _origOnHomunculusTap(e);
 };
 
 // Override float reward to use combo color
 const _origSpawnFloat = _spawnFloatReward;
 function _spawnFloatRewardColored(text, px, py, combo) {
-  const container = document.getElementById("petFloatRewards");
+  const container = document.getElementById("homFloatRewards");
   if (!container) return;
   const el = document.createElement("div");
   const color = _tapComboColor(combo || 1);
@@ -1864,56 +1823,13 @@ async function _fetchMarketPulse() {
 
 function _applyMarketMood(data) {
   const mood = data.pet_mood || {};
-
-  // Price label
-  const priceEl = document.getElementById("hbPrice");
-  if (priceEl && data.btc_price) {
-    priceEl.textContent = `$${data.btc_price.toLocaleString("en-US", {maximumFractionDigits: 0})}`;
-  }
-
-  // Change badge
-  const chEl = document.getElementById("hbChange");
-  if (chEl && data.price_change_1h != null) {
-    const ch = data.price_change_1h;
-    chEl.textContent = (ch >= 0 ? "+" : "") + ch.toFixed(2) + "%";
-    chEl.className = "btc-change " + (ch >= 0 ? "up" : "down");
-  }
-
-  // State label removed — market state shown visually through Cipher color
-
-  // Dot color
-  const dot = document.getElementById("hbDot");
-  if (dot) dot.style.background = mood.aura || "#10b981";
-
   // Pulse speed (volatility → speed)
   _pulseSpeed = mood.pulse_speed || 1.0;
-
-  // Update fox visual state based on market if pet tab active
-  const fox = document.getElementById("petFox");
-  if (fox && document.getElementById("tab-pet")?.classList.contains("active")) {
-    const mv = mood.visual || "idle";
-    // Only override if market state is stronger than current
-    if (["sick","excited"].includes(mv)) {
-      ["idle","happy","excited","hungry","sick"].forEach(s => fox.classList.remove(`pet-fox--${s}`));
-      fox.classList.add(`pet-fox--${mv}`);
-    }
-  }
-
-  // Update aura color
-  const aura = document.getElementById("petAura");
-  if (aura && mood.aura) {
-    aura.style.background = `radial-gradient(circle, ${mood.aura}30 0%, transparent 70%)`;
-  }
-
-  // BTC market color theme on Cipher — visual-only, no text label
-  const petFox = document.getElementById("petFox");
-  if (petFox && data.price_change_1h != null) {
-    const ch = data.price_change_1h;
-    petFox.classList.remove("cipher-bull-market", "cipher-bear-market");
-    if (ch >= 2) {
-      petFox.classList.add("cipher-bull-market");
-    } else if (ch <= -2) {
-      petFox.classList.add("cipher-bear-market");
+  // Update homunculus aura color based on market if tab active
+  if (document.getElementById("tab-homunculus")?.classList.contains("active")) {
+    const aura = document.getElementById("homAura");
+    if (aura && mood.aura) {
+      aura.style.background = `radial-gradient(circle, ${mood.aura}30 0%, transparent 70%)`;
     }
   }
 }
@@ -2151,10 +2067,9 @@ async function _onDreamAnswer(idx, correct, btn, container, data) {
     });
     const r = await res.json();
     if (isCorrect) {
-      resEl.innerHTML = `✅ <strong>ГИПОТЕЗА ПОДТВЕРЖДЕНА!</strong> Cipher пробуждается! +${r.coins_earned} Ð DATA`;
-      _spawnCoinBurst(r.coins_earned);
-      // Refresh pet stats
-      setTimeout(loadPet, 800);
+      resEl.innerHTML = `✅ <strong>ГИПОТЕЗА ПОДТВЕРЖДЕНА!</strong> Гомункул пробуждается!`;
+      // Refresh homunculus stats
+      setTimeout(loadHomunculus, 800);
     } else {
       const meta = data.concept_meta || {};
       resEl.innerHTML = `❌ <strong>АНОМАЛИЯ ОБНАРУЖЕНА.</strong> Изучи протокол "${meta.name || data.concept}" для рекалибровки.<br>
@@ -2169,56 +2084,40 @@ async function _onDreamAnswer(idx, correct, btn, container, data) {
 // ── EVOLUTION SYSTEM ──────────────────────────────────────────────────────
 // ═══════════════════════════════════════════════════════════════════════════
 
-function renderEvolution(evo) {
-  if (!evo) return;
-  const info = evo.info || {};
-  const el   = document.getElementById("evoEmoji");
-  if (el) el.textContent = info.emoji || "🧬";
-  const nm = document.getElementById("evoName");
-  if (nm) nm.textContent = info.name || "Cell Cipher";
-  const st = document.getElementById("evoStage");
-  if (st) st.textContent = `Ст.${evo.stage || 1}`;
-  if (evo.evolved) {
-    setTimeout(() => _showEvolutionModal(evo), 800);
-  }
-}
-
 async function showEvolutionInfo() {
   if (!state.userId) return;
   try {
-    const res  = await fetch(`${API}/pet/evolution/${state.userId}`);
-    const data = await res.json();
-    _renderEvolutionStagesList(data);
+    const [stagesRes, homRes] = await Promise.all([
+      fetch(`${API}/homunculus/stages`),
+      fetch(`${API}/homunculus/${state.userId}`),
+    ]);
+    const stages = await stagesRes.json();
+    const hom    = await homRes.json();
+    _renderHomunculusStagesList(stages, hom.stage || 1);
+    const titleEl = document.getElementById("evoModalTitle");
+    if (titleEl) titleEl.textContent = "Стадии Гомункула";
+    const bigEl = document.getElementById("evoEmojiBig");
+    if (bigEl) bigEl.textContent = "⚗️";
+    const nameEl = document.getElementById("evoModalName");
+    if (nameEl) nameEl.textContent = hom.stage_name || "";
     openModal("evolutionModal");
   } catch (e) { console.warn("evo info:", e); }
 }
 window.showEvolutionInfo = showEvolutionInfo;
 
-function _showEvolutionModal(evo) {
-  if (tg?.HapticFeedback) tg.HapticFeedback.notificationOccurred("success");
-  const info = evo.info || {};
-  document.getElementById("evoEmojiBig").textContent   = info.emoji || "🧬";
-  document.getElementById("evoModalTitle").textContent = "ТРАНСФОРМАЦИЯ!";
-  document.getElementById("evoModalName").textContent  = info.name || "";
-  _renderEvolutionStagesList(evo);
-  _spawnEvolutionParticles();
-  openModal("evolutionModal");
-}
-
-function _renderEvolutionStagesList(evo) {
+function _renderHomunculusStagesList(stages, currentStage) {
   const listEl = document.getElementById("evoStagesList");
   if (!listEl) return;
-  const stages = evo.all_stages || [];
-  const current = evo.stage || 1;
-  listEl.innerHTML = stages.map(s => {
+  const stageIcons = ["⚗️","🧪","👶","🐉","🔥","👑","💎"];
+  listEl.innerHTML = (stages || []).map((s, i) => {
     let cls = "evo-stage-row";
-    if (s.stage < current) cls += " done";
-    if (s.stage === current) cls += " current";
+    if (s.id < currentStage)  cls += " done";
+    if (s.id === currentStage) cls += " current";
     return `<div class="${cls}">
-      <span class="evo-stage-emoji">${s.emoji}</span>
-      <span><strong>${s.name}</strong> — ${s.req}</span>
-      ${s.stage === current ? "<span style='margin-left:auto'>← Сейчас</span>" : ""}
-      ${s.stage < current ? "<span style='margin-left:auto'>✓</span>" : ""}
+      <span class="evo-stage-emoji">${stageIcons[i] || "⚗️"}</span>
+      <span><strong>Ст.${s.id} ${s.name}</strong> — ${s.souls_req} душ / ${s.modules_req} мод.</span>
+      ${s.id === currentStage ? "<span style='margin-left:auto'>← Сейчас</span>" : ""}
+      ${s.id < currentStage   ? "<span style='margin-left:auto'>✓</span>" : ""}
     </div>`;
   }).join("");
 }
@@ -2227,7 +2126,7 @@ function _spawnEvolutionParticles() {
   const container = document.getElementById("evoParticles");
   if (!container) return;
   container.innerHTML = "";
-  const emojis = ["🧬","⚡","💠","🌑","💎","✨","〜"];
+  const emojis = ["⚗️","✨","💎","🌑","🔥","〜","⚡"];
   for (let i = 0; i < 20; i++) {
     const el = document.createElement("div");
     el.style.cssText = `

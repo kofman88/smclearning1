@@ -6490,3 +6490,280 @@ body.is-hollow::after {
   cursor: pointer; transition: all 0.2s; text-align: center;
 }
 .phase4-btn:hover { background: rgba(255,255,255,0.08); border-color: rgba(200,168,78,0.3); }
+
+/* ═══════════════════════════════════════════════════════════
+   HOMUNCULUS SYSTEM — Алхимический питомец
+   ═══════════════════════════════════════════════════════════ */
+
+/* Screen layout */
+.hom-screen {
+  display: flex; flex-direction: column;
+  height: 100%; padding: 0 0 12px 0;
+  overflow-y: auto; overflow-x: hidden;
+}
+
+/* Header */
+.hom-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 14px 6px;
+  background: linear-gradient(180deg, rgba(168,85,247,0.08) 0%, transparent 100%);
+}
+.hom-header-left { display: flex; align-items: center; gap: 8px; }
+.hom-stage-badge {
+  font-size: 10px; font-weight: 800; letter-spacing: 0.06em;
+  background: rgba(168,85,247,0.2); border: 1px solid rgba(168,85,247,0.4);
+  color: #c084fc; border-radius: 6px; padding: 2px 6px;
+}
+.hom-stage-name {
+  font-size: 15px; font-weight: 700; color: #e8e6e1;
+  letter-spacing: 0.02em;
+}
+.hom-status-badge {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.05em;
+  border-radius: 20px; padding: 3px 8px;
+  text-transform: uppercase;
+}
+.hom-status--active  { background: rgba(16,185,129,0.15); border: 1px solid rgba(16,185,129,0.4); color: #34d399; }
+.hom-status--hungry  { background: rgba(245,158,11,0.15); border: 1px solid rgba(245,158,11,0.4); color: #fbbf24; }
+.hom-status--dying   { background: rgba(239,68,68,0.15);  border: 1px solid rgba(239,68,68,0.4);  color: #f87171; }
+.hom-status--dead    { background: rgba(107,114,128,0.15); border: 1px solid rgba(107,114,128,0.4); color: #9ca3af; }
+.hom-status--enraged { background: rgba(220,38,38,0.2);   border: 1px solid rgba(220,38,38,0.5);   color: #fca5a5; animation: hom-enrage-pulse 0.8s ease-in-out infinite; }
+
+@keyframes hom-enrage-pulse {
+  0%,100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+/* Creature area */
+.hom-creature-wrap {
+  position: relative;
+  width: 100%; height: 240px;
+  flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  overflow: hidden;
+}
+.hom-aura {
+  position: absolute; inset: 0;
+  background: radial-gradient(circle, rgba(168,85,247,0.18) 0%, transparent 70%);
+  pointer-events: none;
+  transition: background 0.6s ease;
+}
+.hom-creature {
+  position: relative;
+  width: 160px; height: 200px;
+  display: flex; align-items: center; justify-content: center;
+  transition: filter 0.3s;
+}
+.hom-svg { width: 100%; height: 100%; }
+
+/* Status visual states */
+.hom-creature--hungry  { filter: saturate(0.6) brightness(0.85); }
+.hom-creature--dying   { filter: saturate(0.3) brightness(0.7); animation: hom-shake 1.8s ease-in-out infinite; }
+.hom-creature--dead    { filter: grayscale(1) brightness(0.4); }
+.hom-creature--enraged { filter: saturate(2) brightness(1.15) hue-rotate(-10deg); animation: hom-enrage-shake 0.3s ease-in-out infinite; }
+
+@keyframes hom-shake {
+  0%,100% { transform: translateX(0); }
+  20% { transform: translateX(-3px) rotate(-1deg); }
+  40% { transform: translateX(3px) rotate(1deg); }
+  60% { transform: translateX(-2px); }
+  80% { transform: translateX(2px); }
+}
+@keyframes hom-enrage-shake {
+  0%,100% { transform: translateX(0); }
+  50% { transform: translateX(-2px) rotate(-0.5deg); }
+}
+
+/* Tap squish animation */
+.hom-squish {
+  animation: hom-squish-anim 0.2s cubic-bezier(0.34,1.56,0.64,1) forwards !important;
+}
+@keyframes hom-squish-anim {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(0.88, 1.1); }
+  100% { transform: scale(1); }
+}
+
+/* Breathe animation on live SVG elements */
+.hom-breathe {
+  animation: hom-breathe-anim 3s ease-in-out infinite;
+}
+@keyframes hom-breathe-anim {
+  0%,100% { transform: scale(1); }
+  50% { transform: scale(1.02); }
+}
+.hom-bubble {
+  animation: hom-bubble-float 2.5s ease-in-out infinite;
+}
+@keyframes hom-bubble-float {
+  0%,100% { transform: translateY(0); opacity: 0.8; }
+  50% { transform: translateY(-8px); opacity: 1; }
+}
+.hom-particle-float {
+  animation: hom-particle-anim 3s ease-in-out infinite;
+}
+@keyframes hom-particle-anim {
+  0%,100% { transform: translateY(0) scale(1); opacity: 0.6; }
+  50% { transform: translateY(-12px) scale(1.15); opacity: 1; }
+}
+.hom-spin-slow {
+  animation: hom-spin 12s linear infinite;
+  transform-origin: 80px 88px;
+}
+.hom-spin-reverse {
+  animation: hom-spin 8s linear infinite reverse;
+  transform-origin: 80px 88px;
+}
+@keyframes hom-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+/* Dead overlay */
+.hom-dead-overlay {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: rgba(0,0,0,0.55);
+  border-radius: 8px;
+}
+.hom-skull { font-size: 48px; margin-bottom: 8px; }
+.hom-dead-text { font-size: 13px; color: #9ca3af; font-weight: 600; }
+
+/* Float rewards */
+.hom-float-rewards {
+  position: absolute; inset: 0; pointer-events: none;
+}
+.hom-float-reward {
+  position: absolute;
+  font-size: 18px; font-weight: 800; color: #c084fc;
+  text-shadow: 0 0 8px rgba(168,85,247,0.6);
+  animation: hom-float-up 0.9s ease-out forwards;
+  pointer-events: none;
+}
+@keyframes hom-float-up {
+  0%   { transform: translateY(0) scale(1); opacity: 1; }
+  100% { transform: translateY(-60px) scale(0.8); opacity: 0; }
+}
+
+/* Combo badge */
+.hom-combo {
+  position: absolute; top: 16px; left: 50%; transform: translateX(-50%);
+  background: linear-gradient(135deg, #7c3aed, #a855f7);
+  color: #fff; font-size: 13px; font-weight: 800; letter-spacing: 0.05em;
+  padding: 4px 14px; border-radius: 20px;
+  box-shadow: 0 0 16px rgba(168,85,247,0.5);
+  animation: hom-combo-pop 0.3s cubic-bezier(0.34,1.56,0.64,1);
+}
+@keyframes hom-combo-pop {
+  0% { transform: translateX(-50%) scale(0.7); }
+  100% { transform: translateX(-50%) scale(1); }
+}
+
+/* Combo bar */
+.hom-combo-bar-wrap {
+  height: 4px; background: rgba(255,255,255,0.06);
+  border-radius: 0; margin: 0;
+}
+.hom-combo-bar {
+  height: 100%; width: 0%;
+  background: linear-gradient(90deg, #7c3aed, #a855f7, #f0abfc);
+  border-radius: 0 2px 2px 0;
+  transition: width 0.15s ease;
+}
+.hom-combo-label {
+  text-align: center; font-size: 10px; color: rgba(232,230,225,0.35);
+  padding: 2px 0 6px; letter-spacing: 0.04em;
+}
+
+/* Stats HUD */
+.hom-hud {
+  display: flex; gap: 0;
+  margin: 0 14px 10px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 12px; overflow: hidden;
+}
+.hom-hud-item {
+  flex: 1; text-align: center;
+  padding: 8px 4px;
+  border-right: 1px solid rgba(255,255,255,0.06);
+}
+.hom-hud-item:last-child { border-right: none; }
+.hom-hud-val {
+  font-size: 15px; font-weight: 800;
+  color: #c084fc;
+  line-height: 1.2;
+}
+.hom-hud-key {
+  font-size: 9px; color: rgba(232,230,225,0.35);
+  letter-spacing: 0.04em; margin-top: 2px;
+  text-transform: uppercase;
+}
+
+/* Evolution progress section */
+.hom-evo-section {
+  margin: 0 14px 10px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(168,85,247,0.15);
+  border-radius: 12px; padding: 10px 12px;
+}
+.hom-evo-header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 6px;
+}
+.hom-evo-label { font-size: 11px; font-weight: 700; color: rgba(232,230,225,0.6); text-transform: uppercase; letter-spacing: 0.05em; }
+.hom-evo-vals  { font-size: 11px; color: #c084fc; font-weight: 600; }
+.hom-evo-bar-wrap {
+  height: 6px; background: rgba(255,255,255,0.06); border-radius: 3px; overflow: hidden; margin-bottom: 6px;
+}
+.hom-evo-bar {
+  height: 100%; width: 0%;
+  background: linear-gradient(90deg, #7c3aed, #a855f7);
+  border-radius: 3px; transition: width 0.4s ease;
+}
+.hom-module-note { font-size: 11px; color: rgba(232,230,225,0.45); }
+
+/* Revive section */
+.hom-revive-section {
+  margin: 0 14px 10px;
+  background: rgba(107,114,128,0.08);
+  border: 1px solid rgba(107,114,128,0.2);
+  border-radius: 12px; padding: 12px;
+  text-align: center;
+}
+.hom-revive-cost { font-size: 12px; color: #9ca3af; margin-bottom: 10px; }
+.hom-revive-btn {
+  width: 100%; padding: 10px;
+  background: linear-gradient(135deg, rgba(107,114,128,0.3), rgba(168,85,247,0.2));
+  border: 1px solid rgba(168,85,247,0.3);
+  border-radius: 10px; color: #e8e6e1;
+  font-size: 13px; font-weight: 700; cursor: pointer;
+  transition: all 0.2s;
+}
+.hom-revive-btn:hover { background: linear-gradient(135deg, rgba(107,114,128,0.4), rgba(168,85,247,0.3)); }
+.hom-revive-note { font-size: 10px; color: rgba(232,230,225,0.3); margin-top: 6px; }
+
+/* Enrage notice */
+.hom-enrage-notice {
+  margin: 0 14px 10px;
+  background: rgba(220,38,38,0.12);
+  border: 1px solid rgba(220,38,38,0.35);
+  border-radius: 10px; padding: 8px 12px;
+  font-size: 12px; font-weight: 700; color: #fca5a5;
+  text-align: center;
+  animation: hom-enrage-pulse 0.8s ease-in-out infinite;
+}
+
+/* Evolution flash */
+.hom-evolution-flash {
+  position: fixed; inset: 0; z-index: 9999;
+  background: radial-gradient(circle, rgba(168,85,247,0.6) 0%, transparent 70%);
+  pointer-events: none;
+  animation: hom-flash-anim 0.9s ease-out forwards;
+}
+@keyframes hom-flash-anim {
+  0%   { opacity: 1; }
+  100% { opacity: 0; }
+}

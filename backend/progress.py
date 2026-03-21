@@ -715,6 +715,269 @@ def get_souls_state(user_id: int) -> Dict[str, Any]:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# ── HOMUNCULUS SYSTEM (Алхимическая тапалка, 7 стадий эволюции) ──────────────
+# ══════════════════════════════════════════════════════════════════════════════
+
+HOMUNCULUS_STAGES = [
+    {"id": 1, "name": "Реагент",           "souls_req": 0,      "modules_req": 0,  "mult": 1.0,  "desc": "Мерцающая колба с мутной жидкостью"},
+    {"id": 2, "name": "Зародыш",           "souls_req": 500,    "modules_req": 1,  "mult": 1.2,  "desc": "В колбе появляется силуэт существа"},
+    {"id": 3, "name": "Гомункул",          "souls_req": 2000,   "modules_req": 3,  "mult": 1.5,  "desc": "Существо вылезло из колбы"},
+    {"id": 4, "name": "Фамильяр",          "souls_req": 5000,   "modules_req": 9,  "mult": 2.0,  "desc": "Существо с чертами дракона. Парит в воздухе"},
+    {"id": 5, "name": "Элементаль",        "souls_req": 15000,  "modules_req": 10, "mult": 3.0,  "desc": "Существо из чистой энергии"},
+    {"id": 6, "name": "Архонт",            "souls_req": 50000,  "modules_req": 10, "mult": 5.0,  "desc": "Величественная сущность в тёмной ауре"},
+    {"id": 7, "name": "Философский Камень","souls_req": 100000, "modules_req": 10, "mult": 10.0, "desc": "Абстрактная геометрическая форма"},
+]
+
+_HOM_STATUS_MULT = {"active": 1.0, "hungry": 0.8, "dying": 0.3, "dead": 0.1, "enraged": 2.0}
+_HOM_DAILY_CAP   = 1000   # taps per day before efficiency drops
+_HOM_REVIVE_COST = 200    # souls to revive dead homunculus
+
+
+def _default_homunculus() -> Dict[str, Any]:
+    return {
+        "stage":        1,
+        "status":       "active",
+        "souls_fed":    0,        # lifetime souls fed (drives evolution)
+        "total_taps":   0,
+        "taps_today":   0,
+        "last_tap_at":  None,
+        "last_daily_reset": None,
+        "combo_best":   0,
+        "enraged_until": None,
+        "died_at":      None,
+        "created_at":   datetime.utcnow().isoformat(),
+    }
+
+
+def get_homunculus_state(user_id: int) -> Dict[str, Any]:
+    """Get homunculus state, creating default if missing."""
+    state = get_user_state(user_id)
+    if "homunculus" not in state:
+        state["homunculus"] = _default_homunculus()
+    hom = state["homunculus"]
+    for k, v in _default_homunculus().items():
+        hom.setdefault(k, v)
+
+    # Check enrage expiry
+    if hom.get("status") == "enraged" and hom.get("enraged_until"):
+        try:
+            if datetime.fromisoformat(hom["enraged_until"]) < datetime.utcnow():
+                hom["status"] = "active"
+                hom["enraged_until"] = None
+                save_progress()
+        except Exception:
+            pass
+
+    # Reset taps_today if new day
+    last_reset = hom.get("last_daily_reset")
+    today_str = date.today().isoformat()
+    if last_reset != today_str:
+        hom["taps_today"] = 0
+        hom["last_daily_reset"] = today_str
+        save_progress()
+
+    stage = hom.get("stage", 1)
+    stage_data = HOMUNCULUS_STAGES[stage - 1]
+    next_stage = HOMUNCULUS_STAGES[stage] if stage < 7 else None
+
+    return {
+        "stage":        stage,
+        "stage_name":   stage_data["name"],
+        "stage_desc":   stage_data["desc"],
+        "stage_mult":   stage_data["mult"],
+        "status":       hom.get("status", "active"),
+        "souls_fed":    hom.get("souls_fed", 0),
+        "total_taps":   hom.get("total_taps", 0),
+        "taps_today":   hom.get("taps_today", 0),
+        "combo_best":   hom.get("combo_best", 0),
+        "daily_cap":    _HOM_DAILY_CAP,
+        "last_tap_at":  hom.get("last_tap_at"),
+        "enraged_until": hom.get("enraged_until"),
+        "next_stage":   next_stage,
+        "progress_pct": round(min(100, hom.get("souls_fed", 0) / next_stage["souls_req"] * 100)) if next_stage else 100,
+    }
+
+
+def homunculus_process_taps(user_id: int, tap_count: int, max_combo: int = 0) -> Dict[str, Any]:
+    """Process a batch of taps. Anti-cheat: max 20 per 2s batch. Returns souls earned + evolution info."""
+    state = get_user_state(user_id)
+    if "homunculus" not in state:
+        state["homunculus"] = _default_homunculus()
+    hom = state["homunculus"]
+    for k, v in _default_homunculus().items():
+        hom.setdefault(k, v)
+
+    # Anti-cheat cap
+    tap_count = max(1, min(tap_count, 20))
+
+    # Reset daily taps if new day
+    today_str = date.today().isoformat()
+    if hom.get("last_daily_reset") != today_str:
+        hom["taps_today"] = 0
+        hom["last_daily_reset"] = today_str
+
+    # Daily cap efficiency
+    taps_done = hom.get("taps_today", 0)
+    if taps_done >= _HOM_DAILY_CAP:
+        efficiency = 0.1
+    else:
+        efficiency = 1.0
+
+    # Multipliers
+    stage = hom.get("stage", 1)
+    stage_mult = HOMUNCULUS_STAGES[stage - 1]["mult"]
+    streak_mult = get_streak_multiplier(state.get("streak", 0))
+    hollow_mult = 0.5 if state.get("hollow_since") else 1.0
+
+    status = hom.get("status", "active")
+    # Check enrage expiry
+    if status == "enraged" and hom.get("enraged_until"):
+        try:
+            if datetime.fromisoformat(hom["enraged_until"]) < datetime.utcnow():
+                status = "active"
+                hom["status"] = "active"
+                hom["enraged_until"] = None
+        except Exception:
+            pass
+
+    # If tapping revives hungry/dying
+    if status in ("hungry", "dying"):
+        hom["status"] = "active"
+        status = "active"
+
+    status_mult = _HOM_STATUS_MULT.get(status, 1.0)
+
+    # Combo bonus souls (added to last tap of batch)
+    combo_bonus = 0
+    if max_combo >= 100:
+        combo_bonus = 10
+    elif max_combo >= 50:
+        combo_bonus = 5
+    elif max_combo >= 25:
+        combo_bonus = 2
+    elif max_combo >= 10:
+        combo_bonus = 1
+
+    base_per_tap = stage_mult * streak_mult * hollow_mult * status_mult * efficiency
+    souls_earned = max(1, int(tap_count * base_per_tap) + combo_bonus)
+
+    # Update homunculus
+    now = datetime.utcnow()
+    hom["taps_today"]  = hom.get("taps_today", 0) + tap_count
+    hom["total_taps"]  = hom.get("total_taps", 0) + tap_count
+    hom["last_tap_at"] = now.isoformat()
+    hom["souls_fed"]   = hom.get("souls_fed", 0) + souls_earned
+    if max_combo > hom.get("combo_best", 0):
+        hom["combo_best"] = max_combo
+
+    # Check evolution
+    evolved = False
+    new_stage = stage
+    modules_done = state.get("module_index", 0)
+    for s in HOMUNCULUS_STAGES:
+        if s["id"] <= stage:
+            continue
+        if hom["souls_fed"] >= s["souls_req"] and modules_done >= s["modules_req"]:
+            new_stage = s["id"]
+            evolved = True
+    if evolved:
+        hom["stage"] = new_stage
+
+    # Award souls
+    result = add_souls(user_id, souls_earned, source="homunculus_tap")
+    save_progress()
+
+    next_stage_data = HOMUNCULUS_STAGES[new_stage] if new_stage < 7 else None
+    return {
+        "ok":           True,
+        "souls_earned": souls_earned,
+        "total_souls":  result.get("total", 0),
+        "evolution":    evolved,
+        "new_stage":    new_stage,
+        "stage_name":   HOMUNCULUS_STAGES[new_stage - 1]["name"],
+        "stage_mult":   HOMUNCULUS_STAGES[new_stage - 1]["mult"],
+        "status":       hom["status"],
+        "taps_today":   hom["taps_today"],
+        "combo_best":   hom["combo_best"],
+        "souls_fed":    hom["souls_fed"],
+        "progress_pct": round(min(100, hom["souls_fed"] / next_stage_data["souls_req"] * 100)) if next_stage_data else 100,
+        "next_souls_req": next_stage_data["souls_req"] if next_stage_data else None,
+    }
+
+
+def homunculus_revive(user_id: int) -> Dict[str, Any]:
+    """Pay 200 souls to revive dead homunculus. Stage goes back by 1."""
+    state = get_user_state(user_id)
+    hom = state.get("homunculus", {})
+    if hom.get("status") != "dead":
+        return {"ok": False, "reason": "not_dead"}
+    result = spend_souls(user_id, _HOM_REVIVE_COST, reason="homunculus_revive")
+    if not result["ok"]:
+        return {"ok": False, "reason": "not_enough_souls", "need": _HOM_REVIVE_COST}
+    stage = max(1, hom.get("stage", 1) - 1)
+    hom["stage"]    = stage
+    hom["status"]   = "active"
+    hom["died_at"]  = None
+    # Reduce souls_fed to match rollback threshold
+    hom["souls_fed"] = max(0, HOMUNCULUS_STAGES[stage - 1]["souls_req"])
+    save_progress()
+    return {
+        "ok":         True,
+        "new_stage":  stage,
+        "stage_name": HOMUNCULUS_STAGES[stage - 1]["name"],
+        "total_souls": result.get("total", 0),
+    }
+
+
+def homunculus_enrage(user_id: int) -> None:
+    """Called after boss death. Homunculus enters enraged state for 10 minutes."""
+    state = get_user_state(user_id)
+    hom = state.setdefault("homunculus", _default_homunculus())
+    if hom.get("status") == "dead":
+        return  # can't enrage dead
+    hom["status"]       = "enraged"
+    hom["enraged_until"] = (datetime.utcnow() + timedelta(minutes=10)).isoformat()
+    save_progress()
+
+
+def check_homunculus_health(user_id: int) -> Dict[str, Any]:
+    """Check & update homunculus status based on inactivity. Returns {changed, old_status, new_status}."""
+    state = get_user_state(user_id)
+    hom = state.get("homunculus")
+    if not hom:
+        return {"changed": False}
+    last_tap = hom.get("last_tap_at")
+    if not last_tap:
+        return {"changed": False, "status": hom.get("status", "active")}
+
+    now        = datetime.utcnow()
+    last_dt    = datetime.fromisoformat(last_tap)
+    hours_since = (now - last_dt).total_seconds() / 3600
+    old_status  = hom.get("status", "active")
+    new_status  = old_status
+
+    if old_status == "enraged":
+        if hom.get("enraged_until") and datetime.fromisoformat(hom["enraged_until"]) < now:
+            new_status = "active"
+    elif old_status not in ("dead",):
+        if hours_since >= 168:    # 7 days → dead
+            new_status = "dead"
+        elif hours_since >= 72:   # 3 days → dying
+            new_status = "dying"
+        elif hours_since >= 24:   # 1 day → hungry
+            new_status = "hungry"
+
+    changed = new_status != old_status
+    if changed:
+        hom["status"] = new_status
+        if new_status == "dead":
+            hom["died_at"] = now.isoformat()
+        save_progress()
+
+    return {"changed": changed, "old_status": old_status, "new_status": new_status, "user_id": user_id}
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # ── PET SYSTEM (SMC Fox companion) ───────────────────────────────────────────
 # ══════════════════════════════════════════════════════════════════════════════
 

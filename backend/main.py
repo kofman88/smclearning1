@@ -94,6 +94,8 @@ async def lifespan(application: FastAPI):
     logger.info("Daily challenge loop started")
     asyncio.create_task(_invasion_weekly_loop())
     logger.info("Invasion weekly loop started")
+    asyncio.create_task(_homunculus_health_loop())
+    logger.info("Homunculus health loop started")
     if _raw_webhook:
         asyncio.create_task(_keep_alive_loop(_raw_webhook))
         logger.info("Keep-alive loop started")
@@ -1188,6 +1190,61 @@ async def bonfire_rest(user_id: int):
     }
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+# ── HOMUNCULUS SYSTEM (API) ───────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+
+from progress import (
+    get_homunculus_state, homunculus_process_taps,
+    homunculus_revive as _homunculus_revive_fn,
+    homunculus_enrage, check_homunculus_health,
+    HOMUNCULUS_STAGES,
+)
+
+class HomunculusTapRequest(BaseModel):
+    user_id:   int
+    tap_count: int = 1
+    max_combo: int = 0
+
+class HomunculusReviveRequest(BaseModel):
+    user_id: int
+
+@app.get("/api/homunculus/{user_id}")
+async def get_homunculus_api(user_id: int):
+    """Return homunculus state: stage, status, souls_fed, taps_today, progress, etc."""
+    return {"ok": True, **get_homunculus_state(user_id)}
+
+@app.post("/api/homunculus/tap")
+async def homunculus_tap_api(req: HomunculusTapRequest):
+    """Process a batch of taps. Returns souls_earned, evolution flag, new_stage."""
+    result = homunculus_process_taps(req.user_id, req.tap_count, req.max_combo)
+    if result.get("evolution"):
+        stage_name = result["stage_name"]
+        uid = req.user_id
+        def _notify_evo():
+            try:
+                telegram_bot.send_message(
+                    uid,
+                    f"🧬 <b>ЭВОЛЮЦИЯ!</b>\n\nТвой Гомункул перешёл на стадию:\n<b>{stage_name}</b>!\n\n"
+                    f"Множитель тапов: x{result['stage_mult']}",
+                    parse_mode="HTML",
+                )
+            except Exception as e:
+                logger.warning("homunculus evo notify: %r", e)
+        asyncio.get_running_loop().run_in_executor(None, _notify_evo)
+    return result
+
+@app.post("/api/homunculus/revive")
+async def homunculus_revive_api(req: HomunculusReviveRequest):
+    """Spend 200 souls to revive dead homunculus. Stage rolls back by 1."""
+    return _homunculus_revive_fn(req.user_id)
+
+@app.get("/api/homunculus/stages")
+async def homunculus_stages_api():
+    """Return all 7 stage definitions."""
+    return {"ok": True, "stages": HOMUNCULUS_STAGES}
+
+
 # ── PET SYSTEM ────────────────────────────────────────────────────────────────
 
 # Map quiz_ref → lesson_key for pet effects on quiz completion
@@ -1788,6 +1845,37 @@ async def _keep_alive_loop(base_url: str):
                 logger.info("Keep-alive: webhook re-registered")
         except Exception as e:
             logger.warning(f"Keep-alive ping failed: {e}")
+
+
+# ── Homunculus health loop (hourly) ──────────────────────────────────────────
+
+async def _homunculus_health_loop():
+    """Check homunculus health every hour. Sends Telegram notifications on status change."""
+    while True:
+        await asyncio.sleep(3600)  # every hour
+        try:
+            for uid in list(user_progress.keys()):
+                try:
+                    result = check_homunculus_health(int(uid))
+                    if not result.get("changed"):
+                        continue
+                    new_status = result["new_status"]
+                    msg = None
+                    if new_status == "hungry":
+                        msg = "⚗️ Твой Гомункул голодает. Зайди и покорми его тапами, пока не поздно!"
+                    elif new_status == "dying":
+                        msg = "☠️ Твой Гомункул при смерти! Ещё немного — и придётся воскрешать за 200 ⚡"
+                    elif new_status == "dead":
+                        msg = "💀 Твой Гомункул мёртв. Воскрешение стоит 200 ⚡. Стадия будет понижена."
+                    if msg:
+                        await asyncio.get_running_loop().run_in_executor(
+                            None,
+                            lambda u=int(uid), t=msg: telegram_bot.send_message(u, t)
+                        )
+                except Exception as e:
+                    logger.debug("homunculus health check user %s: %r", uid, e)
+        except Exception as e:
+            logger.error("_homunculus_health_loop error: %r", e)
 
 
 # ── Daily Challenge push loop (09:00 MSK) ─────────────────────────────────────
