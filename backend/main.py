@@ -53,6 +53,7 @@ from charts import generate_chart
 from bot import bot as telegram_bot, setup_webhook, process_update, make_hw_keyboard
 from boss import router as boss_router
 from social import router as social_router, get_daily_challenge, _msk_now
+from notification_service import notification_service
 
 @asynccontextmanager
 async def lifespan(application: FastAPI):
@@ -87,6 +88,10 @@ async def lifespan(application: FastAPI):
     else:
         logger.info("WEBHOOK_URL not set — webhook not configured (polling mode)")
 
+    # ── Wire notification service ──────────────────────────────────────────
+    notification_service.set_bot(telegram_bot)
+    logger.info("NotificationService bot wired")
+
     # ── Start background tasks ─────────────────────────────────────────────
     asyncio.create_task(start_market_feed_loop())
     logger.info("Market feed background task started")
@@ -96,6 +101,12 @@ async def lifespan(application: FastAPI):
     logger.info("Invasion weekly loop started")
     asyncio.create_task(_homunculus_health_loop())
     logger.info("Homunculus health loop started")
+    asyncio.create_task(_streak_warning_loop())
+    logger.info("Streak warning loop started")
+    asyncio.create_task(_notification_queue_flush_loop())
+    logger.info("Notification queue flush loop started")
+    asyncio.create_task(_deadline_check_loop())
+    logger.info("Deadline check loop started")
     if _raw_webhook:
         asyncio.create_task(_keep_alive_loop(_raw_webhook))
         logger.info("Keep-alive loop started")
@@ -371,12 +382,35 @@ async def user_init(req: UserInitRequest):
         "hollow": hollow,
         "souls_state": get_souls_state(req.user_id),
         "daily_souls_bonus": souls_bonus,
+        "onboarding_complete": state.get("onboarding_complete", False),
     }
 
 
 def _state_safe(state: dict) -> dict:
     """Return state without large binary fields."""
     return {k: v for k, v in state.items() if k != "homework_photo"}
+
+
+class OnboardingRequest(BaseModel):
+    user_id: int
+
+@app.post("/api/onboarding/complete")
+async def onboarding_complete_api(req: OnboardingRequest):
+    """Mark onboarding as complete and award 50 starting souls."""
+    state = get_user_state(req.user_id)
+    if state.get("onboarding_complete"):
+        return {"ok": True, "already_done": True, "souls": state.get("souls", 0)}
+    state["onboarding_complete"] = True
+    # Award 50 starting souls (in addition to the 50 from ritual itself)
+    result = add_souls(req.user_id, 50, source="onboarding")
+    save_progress()
+    # Optionally send a welcome notification
+    try:
+        from notification_service import notification_service
+        await notification_service.send(req.user_id, "onboarding_welcome")
+    except Exception:
+        pass
+    return {"ok": True, "souls_awarded": result.get("delta", 50), "total_souls": state.get("souls", 0)}
 
 
 @app.get("/api/user/{user_id}")
@@ -1860,18 +1894,15 @@ async def _homunculus_health_loop():
                     if not result.get("changed"):
                         continue
                     new_status = result["new_status"]
-                    msg = None
+                    tpl = None
                     if new_status == "hungry":
-                        msg = "⚗️ Твой Гомункул голодает. Зайди и покорми его тапами, пока не поздно!"
+                        tpl = "homunculus_hungry"
                     elif new_status == "dying":
-                        msg = "☠️ Твой Гомункул при смерти! Ещё немного — и придётся воскрешать за 200 ⚡"
+                        tpl = "homunculus_dying"
                     elif new_status == "dead":
-                        msg = "💀 Твой Гомункул мёртв. Воскрешение стоит 200 ⚡. Стадия будет понижена."
-                    if msg:
-                        await asyncio.get_running_loop().run_in_executor(
-                            None,
-                            lambda u=int(uid), t=msg: telegram_bot.send_message(u, t)
-                        )
+                        tpl = "homunculus_dead"
+                    if tpl:
+                        await notification_service.send(int(uid), tpl)
                 except Exception as e:
                     logger.debug("homunculus health check user %s: %r", uid, e)
         except Exception as e:
@@ -1925,3 +1956,84 @@ async def _daily_challenge_loop():
         except Exception as e:
             logger.error("_daily_challenge_loop error: %r", e)
 
+
+# ── Streak warning loop (20:00 MSK) ──────────────────────────────────────────
+
+async def _streak_warning_loop():
+    """At 20:00 MSK, warn users who haven't done their daily challenge yet."""
+    _warned_date: str | None = None
+    while True:
+        await asyncio.sleep(60)
+        try:
+            now_msk = _msk_now()
+            today   = now_msk.strftime("%Y-%m-%d")
+            if now_msk.hour != 20 or now_msk.minute != 0:
+                continue
+            if _warned_date == today:
+                continue
+            _warned_date = today
+            for uid in list(user_progress.keys()):
+                try:
+                    st = get_user_state(int(uid))
+                    # Only warn if daily challenge not yet completed today
+                    last_daily = st.get("daily_bonus_claimed")
+                    if last_daily and last_daily.startswith(today):
+                        continue  # already done today
+                    streak = st.get("streak", 0)
+                    if streak < 1:
+                        continue  # nothing to lose
+                    await notification_service.send(
+                        int(uid), "streak_warning",
+                        {"streak_days": streak}
+                    )
+                except Exception as e:
+                    logger.debug("streak_warning uid=%s: %r", uid, e)
+        except Exception as e:
+            logger.error("_streak_warning_loop error: %r", e)
+
+
+# ── Notification queue flush loop (08:00 MSK) ────────────────────────────────
+
+async def _notification_queue_flush_loop():
+    """At 08:00 MSK flush queued notifications (quiet-hour holdovers)."""
+    _flushed_date: str | None = None
+    while True:
+        await asyncio.sleep(60)
+        try:
+            now_msk = _msk_now()
+            today   = now_msk.strftime("%Y-%m-%d")
+            if now_msk.hour != 8 or now_msk.minute != 0:
+                continue
+            if _flushed_date == today:
+                continue
+            _flushed_date = today
+            await notification_service.flush_all_queues()
+            logger.info("Notification queues flushed at 08:00 MSK")
+        except Exception as e:
+            logger.error("_notification_queue_flush_loop error: %r", e)
+
+
+# ── Homework deadline check loop (hourly) ────────────────────────────────────
+
+async def _deadline_check_loop():
+    """Every hour, warn users whose module deadline is within 3 hours."""
+    while True:
+        await asyncio.sleep(3600)
+        try:
+            now_utc = datetime.utcnow()
+            for uid in list(user_progress.keys()):
+                try:
+                    st = get_user_state(int(uid))
+                    dl = st.get("module_deadline")
+                    if not dl:
+                        continue
+                    dl_dt = datetime.fromisoformat(dl)
+                    hours_left = (dl_dt - now_utc).total_seconds() / 3600
+                    if 2.5 <= hours_left <= 3.5:
+                        await notification_service.send(
+                            int(uid), "homework_deadline"
+                        )
+                except Exception as e:
+                    logger.debug("deadline_check uid=%s: %r", uid, e)
+        except Exception as e:
+            logger.error("_deadline_check_loop error: %r", e)
