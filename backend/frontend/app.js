@@ -91,7 +91,7 @@ if (tg) { tg.ready(); tg.expand(); tg.setHeaderColor("#060810"); }
 function getUserInfo() {
   if (tg?.initDataUnsafe?.user) {
     const u = tg.initDataUnsafe.user;
-    return { id: u.id, username: u.username || null, first_name: u.first_name || null, last_name: u.last_name || null };
+    if (u.id) return { id: u.id, username: u.username || null, first_name: u.first_name || null, last_name: u.last_name || null };
   }
   return { id: DEV_UID, username: "dev_user", first_name: "Dev", last_name: null };
 }
@@ -1528,7 +1528,8 @@ async function init() {
       console.warn("user/init failed, continuing:", initErr);
     }
 
-    const userId = state.userId;
+    const userId = state.userId || DEV_UID;
+    state.userId = userId;
     const LOAD_TIMEOUT = 60000; // 60s to handle Render.com cold starts
     const [userRes, modulesRes, questsRes, metaRes, lbRes] = await Promise.all([
       fetchWithTimeout(`${API}/user/${userId}`, {}, LOAD_TIMEOUT),
