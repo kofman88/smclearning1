@@ -12,6 +12,7 @@ venv/
 env/
 
 # Runtime data (user progress — generated at runtime, not tracked)
+progress_smc.json
 backend/progress_smc.json
 
 # Environment
