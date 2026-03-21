@@ -1080,6 +1080,12 @@
           Идти дальше →
         </button>
       </div>
+      <!-- Phase 4 activities at bonfire -->
+      <div class="phase4-nav" style="margin-top:12px;">
+        <button class="phase4-btn" onclick="openRoulette()">🎰 Рулетка</button>
+        <button class="phase4-btn" onclick="openPvP()">⚔️ PvP</button>
+        <button class="phase4-btn" onclick="openClanPanel()">🛡 Клан</button>
+      </div>
       <div class="bonfire-quote">«Ты разжёг огонь. Следующий мир ждёт.»</div>
     </div>
   </div>
@@ -1246,6 +1252,135 @@
       <div class="contribute-actions">
         <button class="btn-contribute-confirm" onclick="confirmContribute()">Пожертвовать ⚡</button>
         <button class="btn-contribute-cancel" onclick="closeContributeModal()">Отмена</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ KNOWLEDGE ROULETTE MODAL ══════════════════════════════════════════ -->
+  <div id="rouletteModal" class="roulette-modal hidden">
+    <div class="roulette-backdrop" onclick="closeRoulette()"></div>
+    <div class="roulette-content">
+      <div class="roulette-header">
+        <div class="roulette-title">⚡ Рулетка Знаний</div>
+        <div class="roulette-subtitle">Ставь души. Крути. Получи x3 или потеряй всё.</div>
+      </div>
+
+      <!-- Wheel -->
+      <div class="roulette-wheel-wrap" id="rouletteWheelWrap">
+        <div class="roulette-wheel" id="rouletteWheel">
+          <div class="roulette-needle"></div>
+          <canvas id="rouletteCanvas" width="280" height="280"></canvas>
+        </div>
+      </div>
+
+      <!-- Bet selector (shown before spin) -->
+      <div class="roulette-bet-section" id="rouletteBetSection">
+        <div class="roulette-bet-label">Выбери ставку:</div>
+        <div class="roulette-bets">
+          <button class="roulette-bet-btn" data-bet="10" onclick="selectBet(10)">10 ⚡</button>
+          <button class="roulette-bet-btn" data-bet="25" onclick="selectBet(25)">25 ⚡</button>
+          <button class="roulette-bet-btn" data-bet="50" onclick="selectBet(50)">50 ⚡</button>
+          <button class="roulette-bet-btn" data-bet="100" onclick="selectBet(100)">100 ⚡</button>
+        </div>
+        <div class="roulette-souls-balance">Баланс: <span id="rouletteSoulsBalance">0</span> ⚡</div>
+        <button class="roulette-spin-btn" id="rouletteSpinBtn" onclick="spinRoulette()" disabled>
+          🎰 Крутить
+        </button>
+      </div>
+
+      <!-- Question (shown after spin) -->
+      <div class="roulette-question-section hidden" id="rouletteQuestionSection">
+        <div class="roulette-topic-label" id="rouletteTopicLabel">Структура рынка</div>
+        <div class="roulette-question" id="rouletteQuestion">Вопрос загружается...</div>
+        <div class="roulette-answer-reveal hidden" id="rouletteAnswerReveal">
+          <div class="roulette-answer-label">Правильный ответ:</div>
+          <div class="roulette-answer-text" id="rouletteAnswerText"></div>
+          <div class="roulette-self-grade">
+            <div class="roulette-self-grade-label">Ты ответил правильно?</div>
+            <div class="roulette-self-btns">
+              <button class="roulette-yes-btn" onclick="submitRouletteAnswer(true)">✅ Да! (+<span id="roulettePotential">0</span> ⚡)</button>
+              <button class="roulette-no-btn" onclick="submitRouletteAnswer(false)">❌ Нет (потеря ставки)</button>
+            </div>
+          </div>
+        </div>
+        <button class="roulette-reveal-btn" id="rouletteRevealBtn" onclick="revealRouletteAnswer()">
+          Показать ответ
+        </button>
+      </div>
+
+      <button class="roulette-close-btn" onclick="closeRoulette()">✕ Закрыть</button>
+    </div>
+  </div>
+
+  <!-- ══ INVASION MODAL ═════════════════════════════════════════════════════ -->
+  <div id="invasionModal" class="invasion-modal hidden">
+    <div class="invasion-content">
+      <div class="invasion-header">
+        <div class="invasion-skull">⚔️</div>
+        <div class="invasion-title">ВТОРЖЕНИЕ!</div>
+        <div class="invasion-timer-wrap">
+          <div class="invasion-timer-label">Осталось:</div>
+          <div class="invasion-timer" id="invasionTimer">30:00</div>
+        </div>
+      </div>
+      <div class="invasion-question" id="invasionQuestion">Загрузка задачи...</div>
+      <div class="invasion-reward">Награда: <span id="invasionReward">50</span> ⚡ + ачивка</div>
+      <textarea class="invasion-answer-input" id="invasionAnswerInput"
+        placeholder="Введи свой анализ здесь..." rows="5"></textarea>
+      <div class="invasion-actions">
+        <button class="invasion-submit-btn" onclick="submitInvasion()">⚔️ Ответить</button>
+        <button class="invasion-skip-btn" onclick="closeInvasion()">Закрыть (streak -1)</button>
+      </div>
+      <div class="invasion-result hidden" id="invasionResult"></div>
+    </div>
+  </div>
+
+  <!-- ══ PvP MODAL ══════════════════════════════════════════════════════════ -->
+  <div id="pvpModal" class="pvp-modal hidden">
+    <div class="pvp-content">
+      <!-- Matchmaking screen -->
+      <div id="pvpMatchmaking" class="pvp-screen">
+        <div class="pvp-title">⚔️ Битва Разметок</div>
+        <div class="pvp-desc">Ты и соперник получите один график. Размечайте независимо. Точнее — победил.</div>
+        <div class="pvp-waiting hidden" id="pvpWaiting">
+          <div class="pvp-spinner"></div>
+          <div class="pvp-wait-text">Ищем соперника...</div>
+          <div class="pvp-wait-sec">Ожидание: <span id="pvpWaitSec">0</span>с</div>
+        </div>
+        <div class="pvp-actions" id="pvpFindActions">
+          <button class="pvp-find-btn" onclick="pvpFindMatch()">⚔️ Найти соперника</button>
+          <button class="pvp-close-btn" onclick="closePvP()">✕ Закрыть</button>
+        </div>
+      </div>
+
+      <!-- Battle screen (after match found) -->
+      <div id="pvpBattle" class="pvp-screen hidden">
+        <div class="pvp-battle-header">
+          <div class="pvp-battle-title">БИТВА НАЧАТА</div>
+          <div class="pvp-battle-timer" id="pvpBattleTimer">3:00</div>
+          <div class="pvp-battle-chart-info">Тема: <span id="pvpChartTopic">-</span></div>
+        </div>
+        <div class="pvp-chart-area">
+          <div class="pvp-chart-placeholder">
+            <div class="pvp-chart-icon">📊</div>
+            <div class="pvp-chart-instruction">Разметь этот сетап на реальном графике в своём приложении и оцени свою точность:</div>
+          </div>
+        </div>
+        <div class="pvp-score-section">
+          <div class="pvp-score-label">Твоя точность разметки (0-100):</div>
+          <input type="range" class="pvp-score-slider" id="pvpScoreSlider" min="0" max="100" value="50">
+          <div class="pvp-score-value"><span id="pvpScoreValue">50</span>%</div>
+        </div>
+        <button class="pvp-submit-btn" onclick="submitPvP()">Отправить разметку</button>
+      </div>
+
+      <!-- Result screen -->
+      <div id="pvpResult" class="pvp-screen hidden">
+        <div class="pvp-result-icon" id="pvpResultIcon">🏆</div>
+        <div class="pvp-result-title" id="pvpResultTitle">ПОБЕДА!</div>
+        <div class="pvp-result-scores" id="pvpResultScores"></div>
+        <div class="pvp-result-souls" id="pvpResultSouls"></div>
+        <button class="pvp-close-btn" onclick="closePvP()">Закрыть</button>
       </div>
     </div>
   </div>

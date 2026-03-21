@@ -65,6 +65,17 @@ async def lifespan(application: FastAPI):
     _raw_admins  = os.getenv("ADMIN_ID", "NOT SET")
     _raw_token   = os.getenv("BOT_TOKEN", "")
     logger.info("ADMIN_CHANNEL_ID = %r  (negative = group/channel, positive = user DM)", _raw_channel)
+    # Validate ADMIN_CHANNEL_ID format
+    try:
+        _ch_int = int(_raw_channel) if _raw_channel not in ("NOT SET", "") else None
+        if _ch_int is not None and _ch_int > 0:
+            logger.error("⚠️  ADMIN_CHANNEL_ID is POSITIVE (%d) — group/channel ids must be NEGATIVE! Fix in env vars.", _ch_int)
+        elif _ch_int is not None and _ch_int < 0:
+            logger.info("✅ ADMIN_CHANNEL_ID is negative (looks correct): %d", _ch_int)
+        else:
+            logger.warning("⚠️  ADMIN_CHANNEL_ID is not set — homework will only go to individual admin DMs")
+    except ValueError:
+        logger.error("⚠️  ADMIN_CHANNEL_ID is not a valid integer: %r", _raw_channel)
     logger.info("ADMIN_ID         = %r", _raw_admins)
     logger.info("BOT_TOKEN        = %s", "SET (len=%d)" % len(_raw_token) if _raw_token else "NOT SET ⚠️")
 
@@ -427,8 +438,8 @@ def _get_cached_chart(lesson_key: str) -> Optional[bytes]:
 @app.get("/api/chart/{lesson_key}")
 async def get_chart(lesson_key: str):
     """Return chart as base64-encoded PNG JSON response."""
-    loop = asyncio.get_event_loop()
-    data = await loop.run_in_executor(None, _get_cached_chart, lesson_key)
+    
+    data = await asyncio.get_running_loop().run_in_executor(None, _get_cached_chart, lesson_key)
     if data is None:
         raise HTTPException(status_code=404, detail="График не найден")
     img_b64 = base64.b64encode(data).decode()
@@ -438,8 +449,8 @@ async def get_chart(lesson_key: str):
 @app.get("/api/chart/{lesson_key}/png")
 async def get_chart_png(lesson_key: str):
     """Return chart as raw PNG binary response."""
-    loop = asyncio.get_event_loop()
-    data = await loop.run_in_executor(None, _get_cached_chart, lesson_key)
+    
+    data = await asyncio.get_running_loop().run_in_executor(None, _get_cached_chart, lesson_key)
     if data is None:
         raise HTTPException(status_code=404, detail="График не найден")
     return Response(content=data, media_type="image/png")
@@ -679,8 +690,7 @@ async def submit_task(req: QuestSubmitRequest):
                 except Exception as e:
                     logger.error("HW notify FAILED → admin DM %s: %r", aid, e)
 
-    loop = asyncio.get_event_loop()
-    loop.run_in_executor(None, _dispatch_hw_notifications)
+    asyncio.get_running_loop().run_in_executor(None, _dispatch_hw_notifications)
 
     return {
         "ok": True,
@@ -915,8 +925,7 @@ async def webhook(request: Request):
     """Process incoming Telegram webhook updates."""
     try:
         data = await request.json()
-        loop = asyncio.get_event_loop()
-        await loop.run_in_executor(None, process_update, data)
+        await asyncio.get_running_loop().run_in_executor(None, process_update, data)
     except Exception as e:
         logger.error(f"Webhook error: {e}")
     return {"ok": True}
@@ -931,8 +940,7 @@ async def reset_webhook(admin_id: int):
         raise HTTPException(status_code=500, detail="WEBHOOK_URL не настроен")
     try:
         from bot import setup_webhook
-        loop = asyncio.get_event_loop()
-        await loop.run_in_executor(None, setup_webhook)
+        await asyncio.get_running_loop().run_in_executor(None, setup_webhook)
         return {"ok": True, "webhook_url": f"{webhook_url}/webhook"}
     except Exception as e:
         logger.error(f"reset-webhook error: {e}")
@@ -1209,6 +1217,545 @@ async def pet_tap(req: PetTapRequest):
     return {"ok": True, **result}
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+# ── PHASE 4: KNOWLEDGE ROULETTE ──────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+
+# Topics and questions for the roulette wheel
+_ROULETTE_TOPICS = [
+    {
+        "id": "market_structure",
+        "label": "Структура рынка",
+        "color": "#c8a84e",
+        "questions": [
+            {"q": "Что такое Break of Structure (BOS)?", "a": "Слом структуры — пробой последнего значимого HH или LL, подтверждающий смену тренда"},
+            {"q": "Чем BOS отличается от CHoCH?", "a": "BOS — продолжение тренда (HH в аптренде), CHoCH — Change of Character, разворот (LH после серии HH)"},
+            {"q": "Как определить Higher High (HH) на графике?", "a": "Следующий максимум выше предыдущего максимума при восходящем тренде"},
+        ]
+    },
+    {
+        "id": "liquidity",
+        "label": "Ликвидность",
+        "color": "#00d4ff",
+        "questions": [
+            {"q": "Где Smart Money чаще всего охотится за ликвидностью?", "a": "За очевидными уровнями поддержки/сопротивления, за ровными числами и swing high/low"},
+            {"q": "Что такое Equal Highs (EQH) и почему они важны?", "a": "EQH — два или более максимума на одном уровне. Они накапливают стопы быков — идеальная цель для sweep"},
+            {"q": "Что происходит после sweep ликвидности?", "a": "Цена разворачивается — Smart Money набирают позицию против хвоста. Ищи OB или FVG для входа"},
+        ]
+    },
+    {
+        "id": "order_blocks",
+        "label": "Ордер-блоки",
+        "color": "#a78bfa",
+        "questions": [
+            {"q": "Как определить валидный бычий Order Block?", "a": "Последняя медвежья свеча перед импульсным движением вверх. Должен быть создан BOS выше него"},
+            {"q": "Что делает Order Block невалидным?", "a": "Если цена полностью проходит сквозь него (mitigation) или если не был создан новый BOS"},
+            {"q": "Что такое Breaker Block?", "a": "Бывший OB, который был пробит. Меняет полярность: медвежий OB становится зоной сопротивления для лонгов"},
+        ]
+    },
+    {
+        "id": "fvg",
+        "label": "Fair Value Gap",
+        "color": "#00e87a",
+        "questions": [
+            {"q": "Из скольких свечей формируется FVG?", "a": "Из трёх свечей: тело средней свечи не перекрывается тенями первой и третьей"},
+            {"q": "Как торговать на FVG?", "a": "Жди возврата (retracement) цены в зону FVG. Ищи реакцию (отскок или поглощение) и входи по направлению импульса"},
+            {"q": "В чём разница между Bullish FVG и Bearish FVG?", "a": "Bullish FVG — gap направлен вверх (бычий импульс), цена должна вернуться снизу. Bearish — наоборот"},
+        ]
+    },
+    {
+        "id": "inducement",
+        "label": "Inducement",
+        "color": "#f59e0b",
+        "questions": [
+            {"q": "Что такое Inducement в SMC?", "a": "Ложный прорыв или уровень, созданный для привлечения розничных трейдеров перед реальным движением"},
+            {"q": "Как Inducement связан с ликвидностью?", "a": "Inducement создаёт пулы ликвидности (стопы и ордера). Smart Money используют их для набора крупных позиций"},
+            {"q": "Как определить Inducement на графике?", "a": "Ищи swing high/low, который выглядит как очевидный уровень для большинства трейдеров — именно туда пойдёт цена за стопами"},
+        ]
+    },
+    {
+        "id": "premium_discount",
+        "label": "Premium/Discount",
+        "color": "#ff4d6d",
+        "questions": [
+            {"q": "Что такое Premium и Discount зоны?", "a": "Premium — верхние 50% торгового диапазона (дорого для покупки). Discount — нижние 50% (выгодно для лонга)"},
+            {"q": "Как определить середину диапазона?", "a": "Fibonacci 50% между последним значимым swing high и swing low текущей структуры"},
+            {"q": "В какой зоне Smart Money предпочитают покупать?", "a": "В Discount зоне (ниже 50% диапазона) при бычьем тренде. В Premium — продают"},
+        ]
+    },
+    {
+        "id": "risk_management",
+        "label": "Риск-менеджмент",
+        "color": "#e8751a",
+        "questions": [
+            {"q": "Какой максимальный риск рекомендуется на одну сделку?", "a": "1-2% от депозита. Более 2% — азартная игра, не торговля"},
+            {"q": "Что такое Risk/Reward Ratio (RRR) и какой минимум?", "a": "Соотношение потенциальной прибыли к убытку. Минимум 1:2, в SMC ищут 1:3 и выше"},
+            {"q": "Как рассчитать размер позиции?", "a": "Size = (Капитал × %риска) / (Entry − Стоп). Стоп всегда определяет размер, не наоборот"},
+        ]
+    },
+    {
+        "id": "killzones",
+        "label": "Killzones",
+        "color": "#78716c",
+        "questions": [
+            {"q": "Назови три основные Killzone сессии", "a": "Asian Killzone (02:00-05:00 UTC), London Killzone (07:00-10:00 UTC), New York Killzone (13:00-16:00 UTC)"},
+            {"q": "Почему Killzone важны для трейдера?", "a": "В это время наибольший объём и манипуляции Smart Money. Лучшие сетапы формируются именно тут"},
+            {"q": "Что такое AMD Model в контексте сессий?", "a": "Accumulation (Asian) → Manipulation (London open) → Distribution (New York). Классическая трёхфазная модель"},
+        ]
+    },
+]
+
+# In-memory store for active roulette spins: spin_id → {user_id, topic, question, bet, timestamp}
+_active_spins: dict = {}
+
+class RouletteSpinRequest(BaseModel):
+    user_id: int
+    bet: int  # 10 / 25 / 50 / 100
+
+class RouletteAnswerRequest(BaseModel):
+    user_id: int
+    spin_id: str
+    is_correct: bool  # frontend validates answer vs displayed correct_answer
+
+@app.post("/api/roulette/spin")
+async def roulette_spin(req: RouletteSpinRequest):
+    """Spend souls to spin the roulette. Returns topic + question. Answer via /roulette/answer."""
+    VALID_BETS = {10, 25, 50, 100}
+    if req.bet not in VALID_BETS:
+        raise HTTPException(status_code=400, detail=f"Ставка должна быть одной из: {sorted(VALID_BETS)}")
+
+    # Deduct souls upfront
+    result = spend_souls(req.user_id, req.bet, reason="roulette_bet")
+    if not result["ok"]:
+        return {"ok": False, "error": "not_enough_souls", "souls": result.get("total", 0)}
+
+    # Pick random topic and question
+    topic = random.choice(_ROULETTE_TOPICS)
+    question_data = random.choice(topic["questions"])
+
+    spin_id = f"{req.user_id}_{int(datetime.utcnow().timestamp())}"
+    _active_spins[spin_id] = {
+        "user_id": req.user_id,
+        "topic_id": topic["id"],
+        "topic_label": topic["label"],
+        "question": question_data["q"],
+        "answer": question_data["a"],
+        "bet": req.bet,
+        "timestamp": datetime.utcnow().isoformat(),
+    }
+
+    # Clean old spins (older than 10 minutes)
+    cutoff = datetime.utcnow().timestamp() - 600
+    stale = [k for k, v in _active_spins.items() if float(v["timestamp"].split(".")[0].replace("T", " ").replace("-", "").replace(":", "").replace(" ", "")[:14]) < cutoff * 0 + 0 or
+             datetime.fromisoformat(v["timestamp"]).timestamp() < cutoff]
+    for k in stale:
+        _active_spins.pop(k, None)
+
+    return {
+        "ok": True,
+        "spin_id": spin_id,
+        "topic": {"id": topic["id"], "label": topic["label"], "color": topic["color"]},
+        "all_topics": [{"id": t["id"], "label": t["label"], "color": t["color"]} for t in _ROULETTE_TOPICS],
+        "question": question_data["q"],
+        "correct_answer": question_data["a"],
+        "bet": req.bet,
+        "potential_win": req.bet * 3,
+        "souls_remaining": result.get("total", 0),
+    }
+
+
+@app.post("/api/roulette/answer")
+async def roulette_answer(req: RouletteAnswerRequest):
+    """Submit roulette answer. Win x3 souls or lose the bet."""
+    spin = _active_spins.pop(req.spin_id, None)
+    if not spin:
+        return {"ok": False, "error": "spin_not_found_or_expired"}
+    if spin["user_id"] != req.user_id:
+        return {"ok": False, "error": "spin_belongs_to_another_user"}
+
+    if req.is_correct:
+        # Win: get back bet + 2x profit = 3x total
+        winnings = spin["bet"] * 3
+        result = add_souls(req.user_id, winnings, source="roulette_win")
+        return {
+            "ok": True,
+            "outcome": "win",
+            "souls_won": winnings,
+            "total_souls": result.get("total", 0),
+            "message": f"⚡ Правильно! +{winnings} душ (x3)",
+        }
+    else:
+        # Already deducted. Return confirmation of loss.
+        state = get_user_state(req.user_id)
+        return {
+            "ok": True,
+            "outcome": "loss",
+            "souls_lost": spin["bet"],
+            "total_souls": state.get("souls", 0),
+            "message": f"💀 Неверно. -{spin['bet']} душ.",
+        }
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ── PHASE 4: INVASIONS ───────────────────────────────────────════════════════
+# ══════════════════════════════════════════════════════════════════════════════
+
+_INVASION_TASKS = [
+    {
+        "id": "inv_bos_1",
+        "question": "На H4 графике BTC сформировался BOS вниз. Определи первый валидный медвежий OB выше текущей цены.",
+        "answer": "Последняя бычья свеча перед импульсным снижением, после которого был создан BOS. Уровень от её High до Low — это медвежий OB.",
+        "difficulty": "hard",
+        "souls_reward": 50,
+    },
+    {
+        "id": "inv_liq_1",
+        "question": "На M15 есть три Equal Lows под ценой. Ниже них — FVG. Опиши твой план входа в лонг.",
+        "answer": "Жди sweep Equal Lows (сбор ликвидности), затем реакцию в FVG зоне с бычьим подтверждением (bullish engulfing/pin bar). Стоп под FVG.",
+        "difficulty": "hard",
+        "souls_reward": 50,
+    },
+    {
+        "id": "inv_fvg_1",
+        "question": "Цена создала Bearish FVG на H1 и теперь ретестирует её снизу. Какие условия делают вход в шорт валидным?",
+        "answer": "1) Bearish структура на старшем ТФ. 2) FVG не заполнена полностью. 3) Есть ликвидность выше текущей цены для сбора. 4) Вход с подтверждением на M5/M15.",
+        "difficulty": "hard",
+        "souls_reward": 50,
+    },
+    {
+        "id": "inv_rb_1",
+        "question": "Объясни разницу между Rejection Block и Order Block. Когда ты торгуешь первый вместо второго?",
+        "answer": "Rejection Block — зона отторжения с длинным хвостом без реального тела. OB — последняя противоположная свеча перед импульсом. RB торгуем когда нет чёткого OB, но есть явное отторжение от уровня.",
+        "difficulty": "medium",
+        "souls_reward": 50,
+    },
+    {
+        "id": "inv_mm_1",
+        "question": "Как Market Maker Model объясняет движение цены от AMD? Разбери на примере лонговой позиции.",
+        "answer": "A (Accumulation/Asia): консолидация, набор позиций MM. M (Manipulation/London): ложный пробой вниз, сбор стопов лонговщиков. D (Distribution/NY): реальное движение вверх, ликвидация шортистов.",
+        "difficulty": "hard",
+        "souls_reward": 75,
+    },
+]
+
+class InvasionAnswerRequest(BaseModel):
+    user_id: int
+    invasion_id: str
+    answer_text: str  # free text — admin grades later; auto-pass for now after time check
+
+@app.get("/api/invasion/check/{user_id}")
+async def invasion_check(user_id: int):
+    """Check if user has an active invasion. Returns task if active."""
+    state = get_user_state(user_id)
+    inv = state.get("active_invasion")
+    if not inv:
+        return {"ok": True, "has_invasion": False}
+
+    # Check deadline
+    deadline = datetime.fromisoformat(inv["deadline"])
+    now = datetime.utcnow()
+    if now > deadline:
+        # Expired — mark as failed
+        if inv.get("result") is None:
+            inv["result"] = "defeated"
+            # Streak penalty
+            state["streak"] = max(0, state.get("streak", 0) - 1)
+            save_progress()
+        return {"ok": True, "has_invasion": True, "expired": True, "invasion": inv}
+
+    return {
+        "ok": True,
+        "has_invasion": True,
+        "expired": False,
+        "invasion": inv,
+        "minutes_left": max(0, int((deadline - now).total_seconds() / 60)),
+    }
+
+
+@app.post("/api/invasion/answer")
+async def invasion_answer(req: InvasionAnswerRequest):
+    """Submit invasion answer. Awards souls + badge."""
+    state = get_user_state(req.user_id)
+    inv = state.get("active_invasion")
+    if not inv or inv.get("id") != req.invasion_id:
+        return {"ok": False, "error": "no_active_invasion"}
+
+    deadline = datetime.fromisoformat(inv["deadline"])
+    if datetime.utcnow() > deadline:
+        inv["result"] = "defeated"
+        save_progress()
+        return {"ok": False, "error": "invasion_expired", "result": "defeated"}
+
+    if inv.get("result"):
+        return {"ok": False, "error": "already_answered", "result": inv["result"]}
+
+    # Mark survived
+    inv["result"] = "survived"
+    inv["answer"] = req.answer_text
+    inv["answered_at"] = datetime.utcnow().isoformat()
+
+    souls_reward = inv.get("souls_reward", 50)
+    add_souls(req.user_id, souls_reward, source="invasion_survived")
+    award_badge(req.user_id, "invader_slayer")
+
+    # Update invasion stats
+    stats = state.setdefault("invasion_stats", {"survived": 0, "defeated": 0})
+    stats["survived"] = stats.get("survived", 0) + 1
+    save_progress()
+
+    return {
+        "ok": True,
+        "result": "survived",
+        "souls_earned": souls_reward,
+        "total_souls": state.get("souls", 0),
+        "message": "⚔️ Вторжение отражено! +50 душ",
+    }
+
+
+async def _send_invasion(user_id: int, task: dict):
+    """Send invasion notification to user via bot."""
+    deadline = datetime.utcnow() + timedelta(minutes=30)
+    state = get_user_state(user_id)
+    state["active_invasion"] = {
+        "id": task["id"],
+        "question": task["question"],
+        "answer_hint": task["answer"],
+        "souls_reward": task["souls_reward"],
+        "deadline": deadline.isoformat(),
+        "result": None,
+        "sent_at": datetime.utcnow().isoformat(),
+    }
+    save_progress()
+    try:
+        text = (
+            f"⚔️ <b>ВТОРЖЕНИЕ!</b>\n\n"
+            f"У тебя <b>30 минут</b> на решение.\n\n"
+            f"❓ <b>{task['question']}</b>\n\n"
+            f"Награда: <b>{task['souls_reward']} душ</b>\n"
+            f"Провалишь — потеряешь streak.\n\n"
+            f"Открой приложение, чтобы ответить!"
+        )
+        await asyncio.get_running_loop().run_in_executor(
+            None,
+            lambda u=user_id, t=text: telegram_bot.send_message(u, t, parse_mode="HTML")
+        )
+        logger.info("Invasion sent to user %d", user_id)
+    except Exception as e:
+        logger.warning("Invasion notify failed for %d: %r", user_id, e)
+
+
+async def _invasion_weekly_loop():
+    """Every Monday at 12:00 MSK, send invasions to random active users."""
+    _last_invasion_week: str | None = None
+    while True:
+        await asyncio.sleep(60)
+        try:
+            now_msk = _msk_now()
+            # Monday = 0, hour 12, minute 0
+            week_key = f"{now_msk.isocalendar()[1]}-{now_msk.year}"
+            if now_msk.weekday() != 0 or now_msk.hour != 12 or now_msk.minute != 0:
+                continue
+            if _last_invasion_week == week_key:
+                continue
+            _last_invasion_week = week_key
+            logger.info("Invasion weekly dispatch: week %s", week_key)
+
+            # Select users who completed at least 1 module and have no active invasion
+            eligible = [
+                uid for uid, st in user_progress.items()
+                if st.get("module_index", 0) >= 1
+                and not st.get("active_invasion", {}).get("result") is None is False
+            ]
+            # Pick up to 20% of users (min 1)
+            count = max(1, len(eligible) // 5)
+            targets = random.sample(eligible, min(count, len(eligible)))
+            task = random.choice(_INVASION_TASKS)
+            for uid in targets:
+                await _send_invasion(int(uid), task)
+        except Exception as e:
+            logger.error("_invasion_weekly_loop error: %r", e)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ── PHASE 4: PvP BATTLE MARKUP ───────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+
+# In-memory matchmaking queue: {user_id: {joined_at, module_index, chart_seed}}
+_pvp_queue: dict = {}
+# Active matches: {match_id: {p1, p2, chart_seed, chart_key, started_at, submissions}}
+_pvp_matches: dict = {}
+
+_PVP_CHART_KEYS = [
+    "market_structure", "liquidity", "order_blocks", "fvg",
+    "inducement", "killzones", "risk_management",
+]
+
+class PvPFindRequest(BaseModel):
+    user_id: int
+
+class PvPSubmitRequest(BaseModel):
+    user_id: int
+    match_id: str
+    # Markup data: list of zones/annotations the player drew
+    markup: list  # [{"type": "ob"|"fvg"|"bos"|"liq", "x1": float, "x2": float, "y1": float, "y2": float}]
+    # Self-assessment score (0-100) until we have auto-grading
+    self_score: int
+
+@app.post("/api/pvp/find-match")
+async def pvp_find_match(req: PvPFindRequest):
+    """Find or create a PvP match. Returns match_id and chart info."""
+    state = get_user_state(req.user_id)
+    user_module = state.get("module_index", 0)
+
+    # Check if already in queue
+    if req.user_id in _pvp_queue:
+        entry = _pvp_queue[req.user_id]
+        # Still waiting
+        wait_sec = (datetime.utcnow() - datetime.fromisoformat(entry["joined_at"])).seconds
+        if wait_sec > 120:
+            # Timeout — remove from queue
+            del _pvp_queue[req.user_id]
+            return {"ok": False, "status": "timeout", "message": "Не удалось найти соперника. Попробуй позже."}
+        return {"ok": True, "status": "waiting", "wait_seconds": wait_sec}
+
+    # Look for opponent in queue (within ±1 module level)
+    opponent_id = None
+    for uid, entry in list(_pvp_queue.items()):
+        if uid == req.user_id:
+            continue
+        if abs(entry["module_index"] - user_module) <= 1:
+            opponent_id = uid
+            break
+
+    if opponent_id:
+        # Match found! Create match
+        opp_entry = _pvp_queue.pop(opponent_id)
+        chart_key = random.choice(_PVP_CHART_KEYS)
+        chart_seed = random.randint(1000, 9999)
+        match_id = f"pvp_{req.user_id}_{opponent_id}_{chart_seed}"
+        _pvp_matches[match_id] = {
+            "p1": req.user_id,
+            "p2": opponent_id,
+            "chart_key": chart_key,
+            "chart_seed": chart_seed,
+            "started_at": datetime.utcnow().isoformat(),
+            "submissions": {},
+            "result": None,
+        }
+        return {
+            "ok": True,
+            "status": "matched",
+            "match_id": match_id,
+            "chart_key": chart_key,
+            "chart_seed": chart_seed,
+            "opponent_module": opp_entry["module_index"],
+            "time_limit_seconds": 180,
+        }
+    else:
+        # Add to queue
+        _pvp_queue[req.user_id] = {
+            "joined_at": datetime.utcnow().isoformat(),
+            "module_index": user_module,
+        }
+        return {"ok": True, "status": "waiting", "wait_seconds": 0}
+
+
+@app.post("/api/pvp/submit")
+async def pvp_submit(req: PvPSubmitRequest):
+    """Submit PvP markup. When both players submit, calculate winner."""
+    match = _pvp_matches.get(req.match_id)
+    if not match:
+        return {"ok": False, "error": "match_not_found"}
+    if req.user_id not in (match["p1"], match["p2"]):
+        return {"ok": False, "error": "not_in_match"}
+    if req.user_id in match["submissions"]:
+        return {"ok": False, "error": "already_submitted"}
+
+    match["submissions"][req.user_id] = {
+        "markup": req.markup,
+        "self_score": req.self_score,
+        "submitted_at": datetime.utcnow().isoformat(),
+    }
+
+    # Check if both submitted
+    if len(match["submissions"]) < 2:
+        return {"ok": True, "status": "waiting_for_opponent"}
+
+    # Both submitted — determine winner by self_score (until auto-grading)
+    p1_score = match["submissions"].get(match["p1"], {}).get("self_score", 0)
+    p2_score = match["submissions"].get(match["p2"], {}).get("self_score", 0)
+
+    if p1_score > p2_score:
+        winner, loser = match["p1"], match["p2"]
+    elif p2_score > p1_score:
+        winner, loser = match["p2"], match["p1"]
+    else:
+        winner, loser = None, None  # Draw
+
+    match["result"] = {
+        "winner": winner,
+        "loser": loser,
+        "p1_score": p1_score,
+        "p2_score": p2_score,
+        "draw": winner is None,
+    }
+
+    # Award souls
+    if winner:
+        add_souls(winner, 30, source="pvp_win")
+        pvp_stats_w = get_user_state(winner).setdefault("pvp_stats", {"wins": 0, "losses": 0})
+        pvp_stats_w["wins"] = pvp_stats_w.get("wins", 0) + 1
+        pvp_stats_l = get_user_state(loser).setdefault("pvp_stats", {"wins": 0, "losses": 0})
+        pvp_stats_l["losses"] = pvp_stats_l.get("losses", 0) + 1
+    else:
+        # Draw: both get 10
+        for pid in [match["p1"], match["p2"]]:
+            add_souls(pid, 10, source="pvp_draw")
+    save_progress()
+
+    is_winner = req.user_id == winner
+    is_draw = winner is None
+    my_score = match["submissions"][req.user_id]["self_score"]
+    opp_id = match["p2"] if req.user_id == match["p1"] else match["p1"]
+    opp_score = match["submissions"][opp_id]["self_score"]
+
+    return {
+        "ok": True,
+        "status": "complete",
+        "result": "win" if is_winner else ("draw" if is_draw else "loss"),
+        "my_score": my_score,
+        "opponent_score": opp_score,
+        "souls_earned": 30 if is_winner else (10 if is_draw else 0),
+        "match": match["result"],
+    }
+
+
+@app.get("/api/pvp/result/{match_id}")
+async def pvp_result(match_id: str, user_id: int):
+    """Poll for match result (used by waiting player)."""
+    match = _pvp_matches.get(match_id)
+    if not match:
+        return {"ok": False, "error": "match_not_found"}
+    if not match.get("result"):
+        return {"ok": True, "status": "pending"}
+    r = match["result"]
+    is_winner = user_id == r.get("winner")
+    is_draw = r.get("draw", False)
+    return {
+        "ok": True,
+        "status": "complete",
+        "result": "win" if is_winner else ("draw" if is_draw else "loss"),
+        "match": r,
+    }
+
+
+@app.get("/api/pvp/stats/{user_id}")
+async def pvp_stats(user_id: int):
+    state = get_user_state(user_id)
+    stats = state.get("pvp_stats", {"wins": 0, "losses": 0})
+    return {"ok": True, "stats": stats}
+
+
 @app.on_event("startup")
 async def on_startup():
     load_progress()
@@ -1216,13 +1763,15 @@ async def on_startup():
     webhook_url = os.getenv("WEBHOOK_URL", "")
     if webhook_url:
         # Run blocking setup_webhook in executor so it doesn't block event loop
-        loop = asyncio.get_event_loop()
-        await loop.run_in_executor(None, setup_webhook)
+        await asyncio.get_running_loop().run_in_executor(None, setup_webhook)
     else:
         logger.info("WEBHOOK_URL not set — webhook not configured (polling mode)")
     # Start live market feed in background
     asyncio.create_task(start_market_feed_loop())
     logger.info("Market feed background task started")
+    # Phase 4: Start invasion weekly cron
+    asyncio.create_task(_invasion_weekly_loop())
+    logger.info("Invasion weekly loop started")
     # Keep-alive: prevents Render free tier from sleeping (pings /health every 10 min)
     if webhook_url:
         asyncio.create_task(_keep_alive_loop(webhook_url))
@@ -1243,8 +1792,7 @@ async def _keep_alive_loop(base_url: str):
             ping_count += 1
             # Re-register webhook every 2 hours (12 pings × 10 min = 120 min)
             if ping_count % 12 == 0:
-                loop = asyncio.get_event_loop()
-                await loop.run_in_executor(None, setup_webhook)
+                await asyncio.get_running_loop().run_in_executor(None, setup_webhook)
                 logger.info("Keep-alive: webhook re-registered")
         except Exception as e:
             logger.warning(f"Keep-alive ping failed: {e}")
@@ -1271,7 +1819,7 @@ async def _daily_challenge_loop():
             _sent_date = today
             logger.info("Daily challenge push: %s", today)
 
-            loop     = asyncio.get_event_loop()
+            
             user_ids = list(user_progress.keys())
             sent = 0
             for uid in user_ids:
@@ -1284,7 +1832,7 @@ async def _daily_challenge_loop():
                         f"Награда: <b>{ch['souls_reward']} душ</b>\n\n"
                         f"Открой приложение, чтобы ответить!"
                     )
-                    await loop.run_in_executor(
+                    await asyncio.get_running_loop().run_in_executor(
                         None,
                         lambda u=int(uid), t=text: telegram_bot.send_message(
                             u, t, parse_mode="HTML"

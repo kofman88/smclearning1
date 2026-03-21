@@ -3321,3 +3321,483 @@ document.addEventListener("DOMContentLoaded", () => {
     }, 200);
   });
 });
+
+// ══════════════════════════════════════════════════════════════════════════════
+// PHASE 4: KNOWLEDGE ROULETTE
+// ══════════════════════════════════════════════════════════════════════════════
+
+const _roulette = {
+  selectedBet: null,
+  spinId: null,
+  potentialWin: 0,
+  spinning: false,
+  allTopics: [],
+  winAngle: 0,
+};
+
+function openRoulette() {
+  const modal = document.getElementById("rouletteModal");
+  if (!modal) return;
+  modal.classList.remove("hidden");
+  // Refresh balance
+  const soulsEl = document.getElementById("rouletteSoulsBalance");
+  if (soulsEl && state.userState) soulsEl.textContent = state.userState.souls ?? 0;
+  // Reset state
+  document.getElementById("rouletteBetSection").classList.remove("hidden");
+  document.getElementById("rouletteQuestionSection").classList.add("hidden");
+  document.getElementById("rouletteRevealBtn").classList.remove("hidden");
+  document.getElementById("rouletteAnswerReveal").classList.add("hidden");
+  _roulette.selectedBet = null;
+  _roulette.spinId = null;
+  _roulette.spinning = false;
+  // Draw empty wheel
+  _drawRouletteWheel([]);
+  document.querySelectorAll(".roulette-bet-btn").forEach(b => b.classList.remove("selected"));
+  document.getElementById("rouletteSpinBtn").disabled = true;
+}
+
+function closeRoulette() {
+  document.getElementById("rouletteModal")?.classList.add("hidden");
+}
+
+function selectBet(amount) {
+  _roulette.selectedBet = amount;
+  document.querySelectorAll(".roulette-bet-btn").forEach(b => {
+    b.classList.toggle("selected", parseInt(b.dataset.bet) === amount);
+  });
+  document.getElementById("rouletteSpinBtn").disabled = false;
+}
+
+function _drawRouletteWheel(topics) {
+  const canvas = document.getElementById("rouletteCanvas");
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+  const cx = 140, cy = 140, r = 135;
+  ctx.clearRect(0, 0, 280, 280);
+
+  const defaultTopics = topics.length > 0 ? topics : [
+    {label:"Структура",color:"#c8a84e"},{label:"Ликвидность",color:"#00d4ff"},
+    {label:"OB",color:"#a78bfa"},{label:"FVG",color:"#00e87a"},
+    {label:"Inducement",color:"#f59e0b"},{label:"Premium/Disc",color:"#ff4d6d"},
+    {label:"Риск",color:"#e8751a"},{label:"Killzones",color:"#78716c"},
+  ];
+
+  const sliceAngle = (2 * Math.PI) / defaultTopics.length;
+  defaultTopics.forEach((t, i) => {
+    const start = i * sliceAngle - Math.PI / 2;
+    const end = start + sliceAngle;
+    // Slice fill
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.arc(cx, cy, r, start, end);
+    ctx.closePath();
+    ctx.fillStyle = i % 2 === 0 ? t.color + "cc" : t.color + "88";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(0,0,0,0.4)";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    // Label
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(start + sliceAngle / 2);
+    ctx.textAlign = "right";
+    ctx.fillStyle = "#fff";
+    ctx.font = "bold 11px Inter, sans-serif";
+    ctx.fillText(t.label, r - 10, 4);
+    ctx.restore();
+  });
+  // Center circle
+  ctx.beginPath();
+  ctx.arc(cx, cy, 20, 0, Math.PI * 2);
+  ctx.fillStyle = "#0a0a0f";
+  ctx.fill();
+  ctx.strokeStyle = "rgba(200,168,78,0.6)";
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  // Center icon
+  ctx.fillStyle = "#c8a84e";
+  ctx.font = "bold 14px sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText("⚡", cx, cy);
+}
+
+async function spinRoulette() {
+  if (!_roulette.selectedBet || _roulette.spinning) return;
+  if (!state.userId) return;
+  _roulette.spinning = true;
+  document.getElementById("rouletteSpinBtn").disabled = true;
+
+  try {
+    const res = await fetch(`${API}/roulette/spin`, {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({user_id: state.userId, bet: _roulette.selectedBet}),
+    });
+    const data = await res.json();
+    if (!data.ok) {
+      showToast(data.error === "not_enough_souls" ? "Недостаточно душ!" : "Ошибка", "error");
+      _roulette.spinning = false;
+      document.getElementById("rouletteSpinBtn").disabled = false;
+      return;
+    }
+
+    _roulette.spinId = data.spin_id;
+    _roulette.potentialWin = data.potential_win;
+    _roulette.allTopics = data.all_topics || [];
+
+    // Update balance
+    if (state.userState) state.userState.souls = data.souls_remaining;
+    const soulsEl = document.getElementById("rouletteSoulsBalance");
+    if (soulsEl) soulsEl.textContent = data.souls_remaining;
+    const hudEl = document.getElementById("soulsCount");
+    if (hudEl) hudEl.textContent = data.souls_remaining;
+
+    // Draw wheel with real topics
+    _drawRouletteWheel(_roulette.allTopics);
+
+    // Find index of winning topic
+    const topics = _roulette.allTopics;
+    const winIdx = topics.findIndex(t => t.id === data.topic.id);
+    const sliceAngle = 360 / topics.length;
+    // Spin to winning slice (needle at top = 0 deg)
+    const targetAngle = -(winIdx * sliceAngle + sliceAngle / 2);
+    const totalSpin = 1440 + ((targetAngle % 360) + 360) % 360;
+    document.getElementById("rouletteCanvas").style.setProperty("--spin-deg", totalSpin + "deg");
+
+    const wheel = document.getElementById("rouletteWheel");
+    wheel.classList.add("spinning");
+
+    // After 3s animation — show question
+    await new Promise(r => setTimeout(r, 3100));
+    wheel.classList.remove("spinning");
+
+    // Show question section
+    document.getElementById("rouletteBetSection").classList.add("hidden");
+    document.getElementById("rouletteQuestionSection").classList.remove("hidden");
+    document.getElementById("rouletteTopicLabel").textContent = data.topic.label;
+    document.getElementById("rouletteQuestion").textContent = data.question;
+    document.getElementById("rouletteAnswerText").textContent = data.correct_answer;
+    document.getElementById("roulettePotential").textContent = data.potential_win;
+
+    _roulette.spinning = false;
+  } catch(e) {
+    showToast("Ошибка сети", "error");
+    _roulette.spinning = false;
+    document.getElementById("rouletteSpinBtn").disabled = false;
+  }
+}
+
+function revealRouletteAnswer() {
+  document.getElementById("rouletteRevealBtn").classList.add("hidden");
+  document.getElementById("rouletteAnswerReveal").classList.remove("hidden");
+}
+
+async function submitRouletteAnswer(isCorrect) {
+  if (!_roulette.spinId) return;
+  document.querySelectorAll(".roulette-yes-btn, .roulette-no-btn").forEach(b => b.disabled = true);
+  try {
+    const res = await fetch(`${API}/roulette/answer`, {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({user_id: state.userId, spin_id: _roulette.spinId, is_correct: isCorrect}),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      if (state.userState) state.userState.souls = data.total_souls;
+      const hudEl = document.getElementById("soulsCount");
+      if (hudEl) hudEl.textContent = data.total_souls;
+      spawnSoulParticle(data.message, isCorrect);
+      showToast(data.message, isCorrect ? "success" : "error");
+      setTimeout(() => closeRoulette(), 2000);
+    }
+  } catch(e) { showToast("Ошибка", "error"); }
+}
+
+
+// ══════════════════════════════════════════════════════════════════════════════
+// PHASE 4: INVASIONS
+// ══════════════════════════════════════════════════════════════════════════════
+
+const _invasion = {
+  id: null,
+  deadline: null,
+  timerInterval: null,
+};
+
+async function checkInvasion() {
+  if (!state.userId) return;
+  try {
+    const res = await fetch(`${API}/invasion/check/${state.userId}`);
+    const data = await res.json();
+    if (data.has_invasion && !data.expired && !data.invasion?.result) {
+      _showInvasionModal(data.invasion, data.minutes_left);
+    }
+  } catch(e) { /* silent */ }
+}
+
+function _showInvasionModal(inv, minutesLeft) {
+  _invasion.id = inv.id;
+  _invasion.deadline = new Date(Date.now() + (minutesLeft || 30) * 60000);
+  document.getElementById("invasionQuestion").textContent = inv.question;
+  document.getElementById("invasionReward").textContent = inv.souls_reward || 50;
+  document.getElementById("invasionModal").classList.remove("hidden");
+  document.getElementById("invasionResult").classList.add("hidden");
+  document.getElementById("invasionAnswerInput").value = "";
+  _startInvasionTimer(minutesLeft * 60);
+}
+
+function _startInvasionTimer(seconds) {
+  clearInterval(_invasion.timerInterval);
+  let s = seconds;
+  const timerEl = document.getElementById("invasionTimer");
+  _invasion.timerInterval = setInterval(() => {
+    s--;
+    if (s <= 0) {
+      clearInterval(_invasion.timerInterval);
+      if (timerEl) timerEl.textContent = "00:00";
+      const res = document.getElementById("invasionResult");
+      if (res) {
+        res.textContent = "⏰ Время вышло! Streak -1";
+        res.className = "invasion-result defeated";
+        res.classList.remove("hidden");
+      }
+      return;
+    }
+    const m = Math.floor(s / 60), sec = s % 60;
+    if (timerEl) timerEl.textContent = `${String(m).padStart(2,"0")}:${String(sec).padStart(2,"0")}`;
+  }, 1000);
+}
+
+function closeInvasion() {
+  clearInterval(_invasion.timerInterval);
+  document.getElementById("invasionModal")?.classList.add("hidden");
+}
+
+async function submitInvasion() {
+  const answer = document.getElementById("invasionAnswerInput").value.trim();
+  if (!answer) { showToast("Введи ответ", "error"); return; }
+  if (!_invasion.id || !state.userId) return;
+
+  document.querySelector(".invasion-submit-btn").disabled = true;
+  try {
+    const res = await fetch(`${API}/invasion/answer`, {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({user_id: state.userId, invasion_id: _invasion.id, answer_text: answer}),
+    });
+    const data = await res.json();
+    clearInterval(_invasion.timerInterval);
+    const resEl = document.getElementById("invasionResult");
+    if (data.ok) {
+      resEl.textContent = `⚔️ Вторжение отражено! +${data.souls_earned} ⚡`;
+      resEl.className = "invasion-result survived";
+      if (state.userState) state.userState.souls = data.total_souls;
+      const hudEl = document.getElementById("soulsCount");
+      if (hudEl) hudEl.textContent = data.total_souls;
+      spawnSoulParticle(`+${data.souls_earned} ⚡`, true);
+    } else {
+      resEl.textContent = "❌ " + (data.error || "Ошибка");
+      resEl.className = "invasion-result defeated";
+    }
+    resEl.classList.remove("hidden");
+    setTimeout(() => closeInvasion(), 3000);
+  } catch(e) {
+    showToast("Ошибка сети", "error");
+    document.querySelector(".invasion-submit-btn").disabled = false;
+  }
+}
+
+
+// ══════════════════════════════════════════════════════════════════════════════
+// PHASE 4: PvP BATTLE MARKUP
+// ══════════════════════════════════════════════════════════════════════════════
+
+const _pvp = {
+  matchId: null,
+  pollInterval: null,
+  battleTimer: null,
+  timeLeft: 180,
+};
+
+function openPvP() {
+  document.getElementById("pvpModal")?.classList.remove("hidden");
+  document.getElementById("pvpMatchmaking")?.classList.remove("hidden");
+  document.getElementById("pvpBattle")?.classList.add("hidden");
+  document.getElementById("pvpResult")?.classList.add("hidden");
+  document.getElementById("pvpWaiting")?.classList.add("hidden");
+  document.getElementById("pvpFindActions")?.classList.remove("hidden");
+  _pvp.matchId = null;
+  clearInterval(_pvp.pollInterval);
+  clearInterval(_pvp.battleTimer);
+
+  // Setup slider
+  const slider = document.getElementById("pvpScoreSlider");
+  const valEl = document.getElementById("pvpScoreValue");
+  if (slider && valEl) {
+    slider.value = 50;
+    valEl.textContent = "50";
+    slider.oninput = () => {
+      valEl.textContent = slider.value;
+      slider.style.setProperty("--val", slider.value + "%");
+    };
+  }
+}
+
+function closePvP() {
+  clearInterval(_pvp.pollInterval);
+  clearInterval(_pvp.battleTimer);
+  document.getElementById("pvpModal")?.classList.add("hidden");
+}
+
+async function pvpFindMatch() {
+  if (!state.userId) return;
+  document.getElementById("pvpFindActions")?.classList.add("hidden");
+  document.getElementById("pvpWaiting")?.classList.remove("hidden");
+
+  let waitEl = document.getElementById("pvpWaitSec");
+  let waited = 0;
+  const waitTimer = setInterval(() => {
+    waited++;
+    if (waitEl) waitEl.textContent = waited;
+  }, 1000);
+
+  // Poll for match
+  _pvp.pollInterval = setInterval(async () => {
+    try {
+      const res = await fetch(`${API}/pvp/find-match`, {
+        method: "POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({user_id: state.userId}),
+      });
+      const data = await res.json();
+      if (data.status === "matched") {
+        clearInterval(_pvp.pollInterval);
+        clearInterval(waitTimer);
+        _pvp.matchId = data.match_id;
+        _startPvPBattle(data);
+      } else if (data.status === "timeout") {
+        clearInterval(_pvp.pollInterval);
+        clearInterval(waitTimer);
+        document.getElementById("pvpWaiting")?.classList.add("hidden");
+        document.getElementById("pvpFindActions")?.classList.remove("hidden");
+        showToast("Соперник не найден. Попробуй позже.", "info");
+      }
+    } catch(e) { /* silent poll failure */ }
+  }, 3000);
+}
+
+function _startPvPBattle(matchData) {
+  document.getElementById("pvpMatchmaking")?.classList.add("hidden");
+  document.getElementById("pvpBattle")?.classList.remove("hidden");
+
+  const topicMap = {
+    market_structure: "Структура рынка",
+    liquidity: "Ликвидность",
+    order_blocks: "Ордер-блоки",
+    fvg: "Fair Value Gap",
+    inducement: "Inducement",
+    killzones: "Killzones",
+    risk_management: "Риск-менеджмент",
+  };
+  const topicEl = document.getElementById("pvpChartTopic");
+  if (topicEl) topicEl.textContent = topicMap[matchData.chart_key] || matchData.chart_key;
+
+  // Battle countdown
+  _pvp.timeLeft = matchData.time_limit_seconds || 180;
+  const timerEl = document.getElementById("pvpBattleTimer");
+  _pvp.battleTimer = setInterval(() => {
+    _pvp.timeLeft--;
+    if (timerEl) {
+      const m = Math.floor(_pvp.timeLeft / 60), s = _pvp.timeLeft % 60;
+      timerEl.textContent = `${m}:${String(s).padStart(2,"0")}`;
+    }
+    if (_pvp.timeLeft <= 0) {
+      clearInterval(_pvp.battleTimer);
+      // Auto-submit with current score
+      submitPvP();
+    }
+  }, 1000);
+}
+
+async function submitPvP() {
+  if (!_pvp.matchId || !state.userId) return;
+  clearInterval(_pvp.battleTimer);
+  const score = parseInt(document.getElementById("pvpScoreSlider")?.value || "50");
+
+  document.querySelector(".pvp-submit-btn")?.setAttribute("disabled", true);
+  try {
+    const res = await fetch(`${API}/pvp/submit`, {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({
+        user_id: state.userId,
+        match_id: _pvp.matchId,
+        markup: [],
+        self_score: score,
+      }),
+    });
+    const data = await res.json();
+    if (data.status === "complete") {
+      _showPvPResult(data);
+    } else {
+      // Waiting for opponent
+      showToast("Ожидаем соперника...", "info");
+      _pvp.pollInterval = setInterval(async () => {
+        const r2 = await fetch(`${API}/pvp/result/${_pvp.matchId}?user_id=${state.userId}`);
+        const d2 = await r2.json();
+        if (d2.status === "complete") {
+          clearInterval(_pvp.pollInterval);
+          _showPvPResult({...d2, my_score: score, opponent_score: "?"});
+        }
+      }, 3000);
+    }
+  } catch(e) { showToast("Ошибка сети", "error"); }
+}
+
+function _showPvPResult(data) {
+  document.getElementById("pvpBattle")?.classList.add("hidden");
+  document.getElementById("pvpResult")?.classList.remove("hidden");
+
+  const icon = document.getElementById("pvpResultIcon");
+  const title = document.getElementById("pvpResultTitle");
+  const scores = document.getElementById("pvpResultScores");
+  const souls = document.getElementById("pvpResultSouls");
+
+  const resultMap = {
+    win: {icon:"🏆", text:"ПОБЕДА!", cls:"win", msg:`+${data.souls_earned || 30} ⚡ душ`},
+    loss: {icon:"💀", text:"ПОРАЖЕНИЕ", cls:"loss", msg:"Тренируйся — и возвращайся!"},
+    draw: {icon:"🤝", text:"НИЧЬЯ", cls:"draw", msg:`+${data.souls_earned || 10} ⚡ душ`},
+  };
+  const r = resultMap[data.result] || resultMap.draw;
+  if (icon) icon.textContent = r.icon;
+  if (title) { title.textContent = r.text; title.className = `pvp-result-title ${r.cls}`; }
+  if (scores) scores.innerHTML = `Твой счёт: <b>${data.my_score}%</b><br>Соперник: <b>${data.opponent_score}%</b>`;
+  if (souls) souls.textContent = r.msg;
+
+  if (state.userState && data.souls_earned) {
+    state.userState.souls = (state.userState.souls || 0) + data.souls_earned;
+    const hudEl = document.getElementById("soulsCount");
+    if (hudEl) hudEl.textContent = state.userState.souls;
+    if (data.souls_earned > 0) spawnSoulParticle(`+${data.souls_earned} ⚡`, true);
+  }
+}
+
+// Expose Phase 4 globals
+window.openRoulette        = openRoulette;
+window.closeRoulette       = closeRoulette;
+window.selectBet           = selectBet;
+window.spinRoulette        = spinRoulette;
+window.revealRouletteAnswer = revealRouletteAnswer;
+window.submitRouletteAnswer = submitRouletteAnswer;
+window.closeInvasion       = closeInvasion;
+window.submitInvasion      = submitInvasion;
+window.openPvP             = openPvP;
+window.closePvP            = closePvP;
+window.pvpFindMatch        = pvpFindMatch;
+window.submitPvP           = submitPvP;
+
+// Check invasion on page load
+document.addEventListener("DOMContentLoaded", () => {
+  setTimeout(checkInvasion, 3000);  // check 3s after load
+});
