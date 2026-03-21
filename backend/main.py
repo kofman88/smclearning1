@@ -1,14 +1,20 @@
 import asyncio
+import hashlib
+import hmac
 import html as _html
 import io
 import os
 import base64
 import logging
 import random
+import time
+import uuid
+from collections import defaultdict
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Dict, Optional
 from datetime import datetime, timedelta
+from urllib.parse import parse_qsl, unquote
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -23,6 +29,79 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 logger = logging.getLogger(__name__)
+
+# ── TELEGRAM INIT DATA VALIDATION ─────────────────────────────────────────────
+
+def validate_telegram_init_data(init_data: str) -> Optional[dict]:
+    """
+    Validate Telegram Mini App initData HMAC signature.
+    Returns parsed user dict on success, None on failure.
+    Reference: https://core.telegram.org/bots/webapps#validating-data-received-via-the-mini-app
+    """
+    bot_token = os.getenv("BOT_TOKEN", "").strip()
+    if not bot_token or not init_data:
+        return None
+    try:
+        params = dict(parse_qsl(init_data, keep_blank_values=True))
+        received_hash = params.pop("hash", None)
+        if not received_hash:
+            return None
+        # Check auth_date freshness (1 hour window)
+        auth_date = int(params.get("auth_date", 0))
+        if time.time() - auth_date > 3600:
+            logger.warning("initData expired: auth_date=%d", auth_date)
+            return None
+        # Build check string: sorted key=value pairs joined by \n
+        data_check_string = "\n".join(f"{k}={v}" for k, v in sorted(params.items()))
+        # secret_key = HMAC-SHA256("WebAppData", BOT_TOKEN)
+        secret_key = hmac.new(b"WebAppData", bot_token.encode(), hashlib.sha256).digest()
+        expected = hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(expected, received_hash):
+            logger.warning("initData HMAC mismatch")
+            return None
+        # Parse nested user JSON
+        import json as _json
+        user_raw = params.get("user", "{}")
+        return _json.loads(unquote(user_raw))
+    except Exception as e:
+        logger.warning("validate_telegram_init_data error: %r", e)
+        return None
+
+
+# ── SESSION TOKEN STORE ────────────────────────────────────────────────────────
+# Maps user_id → session_token (in-memory; resets on redeploy, which is fine)
+_session_tokens: Dict[int, str] = {}
+
+def _new_session_token(user_id: int) -> str:
+    token = uuid.uuid4().hex
+    _session_tokens[user_id] = token
+    return token
+
+def _check_session(user_id: int, token: Optional[str]) -> bool:
+    """Return True if token matches stored session for user_id (or no token stored yet)."""
+    if not token:
+        return True   # soft enforcement: allow requests without token
+    stored = _session_tokens.get(user_id)
+    if not stored:
+        return True   # no session established yet (first open)
+    return hmac.compare_digest(stored, token)
+
+
+# ── IN-MEMORY RATE LIMITER ────────────────────────────────────────────────────
+# Simple sliding-window per user_id
+_rate_buckets: Dict[int, list] = defaultdict(list)
+
+def _rate_limit(user_id: int, window_seconds: int = 5, max_calls: int = 10) -> bool:
+    """Return True if request is within rate limit, False if throttled."""
+    now = time.monotonic()
+    bucket = _rate_buckets[user_id]
+    # Remove timestamps outside window
+    _rate_buckets[user_id] = [t for t in bucket if now - t < window_seconds]
+    if len(_rate_buckets[user_id]) >= max_calls:
+        return False
+    _rate_buckets[user_id].append(now)
+    return True
+
 
 from progress import (
     get_user_state, save_progress, add_xp,
@@ -116,6 +195,13 @@ async def lifespan(application: FastAPI):
 
 app = FastAPI(title="CHM Smart Money Academy API", version="4.0.0", lifespan=lifespan)
 
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.exception("Unhandled exception on %s %s: %r", request.method, request.url.path, exc)
+    return JSONResponse(status_code=500, content={"ok": False, "error": "Internal server error"})
+
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -144,19 +230,22 @@ class UserInitRequest(BaseModel):
     username: Optional[str] = None
     first_name: Optional[str] = None
     last_name: Optional[str] = None
+    init_data: Optional[str] = None   # Telegram WebApp initData for HMAC validation
 
 
 class QuestSubmitRequest(BaseModel):
-    user_id: int
-    quest_id: str
-    photo: Optional[str] = None   # base64 data URL of homework screenshot
+    user_id:       int
+    quest_id:      str
+    photo:         Optional[str] = None   # base64 data URL of homework screenshot
+    session_token: Optional[str] = None
 
 
 class QuizAnswerRequest(BaseModel):
-    user_id: int
-    quest_id: str
+    user_id:       int
+    quest_id:      str
     question_index: int
-    is_correct: bool
+    is_correct:    bool
+    session_token: Optional[str] = None
 
 
 class AdminApproveRequest(BaseModel):
@@ -327,11 +416,27 @@ async def health():
 @app.post("/api/user/init")
 async def user_init(req: UserInitRequest):
     """Initialize or update user session: set name, update streak, claim daily bonus."""
-    state = get_user_state(req.user_id)
+    # ── Telegram initData validation (when provided) ───────────────────────
+    user_id = req.user_id
+    if req.init_data:
+        tg_user = validate_telegram_init_data(req.init_data)
+        if tg_user is None:
+            raise HTTPException(status_code=403, detail="Invalid Telegram initData")
+        # Override user_id with the validated one — prevents spoofing
+        user_id = tg_user.get("id", user_id)
+        # Trust names from validated initData
+        if not req.username:
+            req.username = tg_user.get("username")
+        if not req.first_name:
+            req.first_name = tg_user.get("first_name")
+        if not req.last_name:
+            req.last_name = tg_user.get("last_name")
+
+    state = get_user_state(user_id)
     name = (
         req.username
         or f"{req.first_name or ''} {req.last_name or ''}".strip()
-        or str(req.user_id)
+        or str(user_id)
     )
     state["name"] = name
 
@@ -343,28 +448,31 @@ async def user_init(req: UserInitRequest):
     state["last_online"] = datetime.utcnow().isoformat()
 
     # Track daily streak
-    streak, is_new_day = update_streak(req.user_id)
+    streak, is_new_day = update_streak(user_id)
 
     # Daily bonus XP (also calls save_progress internally)
-    daily_xp, got_bonus = claim_daily_bonus(req.user_id)
+    daily_xp, got_bonus = claim_daily_bonus(user_id)
 
     # Update evolution stage
-    evo = check_and_update_evolution(req.user_id)
+    evo = check_and_update_evolution(user_id)
 
     # Check hollow status (inactivity penalty)
-    hollow = check_hollow(req.user_id)
+    hollow = check_hollow(user_id)
 
     # Update display title
-    update_title(req.user_id)
+    update_title(user_id)
 
     # Award daily souls bonus (matches daily XP bonus)
     souls_bonus = 0
     if is_new_day:
-        souls_result = add_souls(req.user_id, 20, source="daily_login")
+        souls_result = add_souls(user_id, 20, source="daily_login")
         souls_bonus = souls_result.get("delta", 0)
 
     # Pulse (non-blocking: return cached if available)
     pulse = get_cached_pulse()
+
+    # Issue a session token tied to this user
+    session_token = _new_session_token(user_id)
 
     save_progress()
     # Note: update_streak and claim_daily_bonus already call save_progress()
@@ -373,6 +481,8 @@ async def user_init(req: UserInitRequest):
         save_progress()
     return {
         "ok": True,
+        "user_id": user_id,
+        "session_token": session_token,
         "state": state,
         "streak": streak,
         "is_new_day": is_new_day,
@@ -380,7 +490,7 @@ async def user_init(req: UserInitRequest):
         "evolution": evo,
         "market_pulse": pulse,
         "hollow": hollow,
-        "souls_state": get_souls_state(req.user_id),
+        "souls_state": get_souls_state(user_id),
         "daily_souls_bonus": souls_bonus,
         "onboarding_complete": state.get("onboarding_complete", False),
     }
@@ -592,6 +702,8 @@ async def start_quest(req: QuestSubmitRequest):
 @app.post("/api/quiz/answer")
 async def quiz_answer(req: QuizAnswerRequest):
     """Process a quiz answer; finalize quiz if all questions answered."""
+    if not _check_session(req.user_id, req.session_token):
+        raise HTTPException(status_code=403, detail="Invalid session")
     state = get_user_state(req.user_id)
     qstate = state.get("quiz_state")
     if not qstate:
@@ -661,6 +773,8 @@ async def quiz_answer(req: QuizAnswerRequest):
 @app.post("/api/quest/submit")
 async def submit_task(req: QuestSubmitRequest):
     """Submit homework task with optional photo; notify admins asynchronously."""
+    if not _check_session(req.user_id, req.session_token):
+        raise HTTPException(status_code=403, detail="Invalid session")
     state = get_user_state(req.user_id)
     if is_deadline_expired(state):
         return {
@@ -1235,13 +1349,18 @@ from progress import (
     HOMUNCULUS_STAGES,
 )
 
+MAX_TAP_BATCH       = 20    # max taps per batch (matches frontend 2-second window cap)
+MAX_COMBO_ALLOWED   = 50    # physically impossible to exceed 50 in 2s
+
 class HomunculusTapRequest(BaseModel):
-    user_id:   int
-    tap_count: int = 1
-    max_combo: int = 0
+    user_id:        int
+    tap_count:      int = 1
+    max_combo:      int = 0
+    session_token:  Optional[str] = None
 
 class HomunculusReviveRequest(BaseModel):
-    user_id: int
+    user_id:       int
+    session_token: Optional[str] = None
 
 @app.get("/api/homunculus/{user_id}")
 async def get_homunculus_api(user_id: int):
@@ -1251,7 +1370,16 @@ async def get_homunculus_api(user_id: int):
 @app.post("/api/homunculus/tap")
 async def homunculus_tap_api(req: HomunculusTapRequest):
     """Process a batch of taps. Returns souls_earned, evolution flag, new_stage."""
-    result = homunculus_process_taps(req.user_id, req.tap_count, req.max_combo)
+    # ── Session check ──────────────────────────────────────────────────────
+    if not _check_session(req.user_id, req.session_token):
+        raise HTTPException(status_code=403, detail="Invalid session")
+    # ── Rate limiting: max 10 tap-batches per 5 seconds per user ──────────
+    if not _rate_limit(req.user_id, window_seconds=5, max_calls=10):
+        raise HTTPException(status_code=429, detail="Too many requests")
+    # ── Server-side anti-cheat: cap tap_count and max_combo ───────────────
+    tap_count = max(1, min(req.tap_count, MAX_TAP_BATCH))
+    max_combo  = max(0, min(req.max_combo, MAX_COMBO_ALLOWED))
+    result = homunculus_process_taps(req.user_id, tap_count, max_combo)
     if result.get("evolution"):
         stage_name = result["stage_name"]
         uid = req.user_id
