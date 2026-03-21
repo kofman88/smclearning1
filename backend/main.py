@@ -17,6 +17,7 @@ from datetime import datetime, timedelta
 from urllib.parse import parse_qsl, unquote
 
 from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, Response, JSONResponse
@@ -209,6 +210,9 @@ app = FastAPI(title="CHM Smart Money Academy API", version="4.0.0", lifespan=lif
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
+    # Don't intercept HTTP/validation exceptions — let FastAPI handle them (404, 422, etc.)
+    if isinstance(exc, (HTTPException, RequestValidationError)):
+        raise exc
     logger.exception("Unhandled exception on %s %s: %r", request.method, request.url.path, exc)
     return JSONResponse(status_code=500, content={"ok": False, "error": "Internal server error"})
 
