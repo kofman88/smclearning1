@@ -533,6 +533,7 @@ function renderMarkdown(text) {
 
 // ── RENDER USER STATE ─────────────────────────────────────────────────────
 function renderHeader(s) {
+  if (!s) { console.error("renderHeader: s is null/undefined"); return; }
   state.userState = s;
   const rankName = s.rank || "Наблюдатель рынка";
   const lvlInfo  = getLevelInfo(s.xp || 0);
@@ -607,6 +608,10 @@ function renderModules(modules) {
   const container = $("#modulesList");
   if (!container) return;
   container.innerHTML = "";
+  if (!modules || modules.length === 0) {
+    container.innerHTML = '<div style="padding:20px;text-align:center;color:#666">Уроки не загружены. Проверь соединение.</div>';
+    return;
+  }
   const currentModuleIdx = state.userState?.module_index ?? 0;
 
   modules.forEach((mod, idx) => {
@@ -1516,7 +1521,7 @@ async function init() {
           last_name: info.last_name,
           init_data: tg?.initData || "",
         }),
-      }, 20000);
+      }, 90000); // 90s — Render.com free tier cold start
       if (_dbgLabel) _dbgLabel.textContent = `v6 | init ${initRes.status}`;
       const parsed = await initRes.json();
       // Only use initData when the server confirmed success
@@ -1562,6 +1567,11 @@ async function init() {
     ]);
 
     clearTimeout(slowTimer);
+
+    console.log("[DEBUG] userData:", userData);
+    console.log("[DEBUG] modulesData:", modulesData);
+    console.log("[DEBUG] questsData:", questsData);
+    console.log("[DEBUG] metaData keys:", Object.keys(metaData || {}).length);
 
     Object.assign(state.lessonsMetaCache, metaData);
 

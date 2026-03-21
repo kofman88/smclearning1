@@ -1,8 +1,17 @@
 import json
 import logging
 import os
-import fcntl
 from pathlib import Path
+
+try:
+    import fcntl
+    def _lock_file(f, exclusive=False):
+        fcntl.flock(f.fileno(), fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH)
+    def _unlock_file(f):
+        fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+except ImportError:
+    def _lock_file(f, exclusive=False): pass
+    def _unlock_file(f): pass
 from datetime import datetime, timedelta, date
 from typing import Dict, Any, List, Tuple
 
@@ -160,11 +169,11 @@ def load_progress():
     if PROGRESS_FILE.exists():
         try:
             with open(PROGRESS_FILE, "r", encoding="utf-8") as f:
-                fcntl.flock(f.fileno(), fcntl.LOCK_SH)
+                _lock_file(f, exclusive=False)
                 try:
                     data = json.load(f)
                 finally:
-                    fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+                    _unlock_file(f)
             user_progress = {int(k): v for k, v in data.items()}
             logger.info("Прогресс загружен: %d пользователей", len(user_progress))
         except Exception as e:
@@ -179,11 +188,11 @@ def save_progress():
     try:
         tmp = PROGRESS_FILE.with_suffix(".tmp")
         with open(tmp, "w", encoding="utf-8") as f:
-            fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+            _lock_file(f, exclusive=True)
             try:
                 json.dump(user_progress, f, ensure_ascii=False, indent=2)
             finally:
-                fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+                _unlock_file(f)
         tmp.replace(PROGRESS_FILE)
     except Exception as e:
         logger.error("Ошибка сохранения прогресса: %s", e)
