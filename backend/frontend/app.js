@@ -1606,6 +1606,11 @@ async function init() {
     const isTimeout = e?.name === "AbortError";
     const isHttp    = e?.message?.startsWith("HTTP ");
     let msg;
+    // Show raw error in progress label for debugging
+    if (!isTimeout && !isHttp) {
+      const progLabel = document.getElementById("progressLabel");
+      if (progLabel) progLabel.textContent = String(e?.message || e).slice(0, 120);
+    }
     if (isTimeout) msg = "Сервер не отвечает. Нажми «Повторить» через 30 сек.";
     else if (isHttp) msg = `Ошибка сервера (${e.message}). Попробуй ещё раз.`;
     else msg = "Ошибка загрузки данных. Попробуй ещё раз.";
