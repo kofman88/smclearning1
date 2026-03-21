@@ -262,6 +262,19 @@ def get_user_state(user_id: int) -> Dict[str, Any]:
     # Boss system back-compat
     state.setdefault("boss_attempts", [])
     state.setdefault("bonfire_rested", [])  # list of module_ids where bonfire was rested
+
+    # ── Timed boost expiry cleanup ────────────────────────────────────────
+    # Clear expired timed boosts so they don't persist after expiry
+    _now_iso = datetime.utcnow()
+    for _boost_key in ("double_tap_until", "catalyst_shield_until"):
+        _val = state.get(_boost_key)
+        if _val:
+            try:
+                if datetime.fromisoformat(_val) <= _now_iso:
+                    state[_boost_key] = None
+            except Exception:
+                state[_boost_key] = None
+
     return state
 
 

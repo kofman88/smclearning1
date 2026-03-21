@@ -523,9 +523,9 @@ async def user_init(req: UserInitRequest):
     # Issue a session token tied to this user
     session_token = _new_session_token(user_id)
 
-    save_progress()
-    # Note: update_streak and claim_daily_bonus already call save_progress()
-    # Only save if name changed and neither function triggered a save
+    # Note: update_streak and claim_daily_bonus already call save_progress() internally.
+    # add_souls also saves. Only save once more to catch name/last_online changes
+    # that aren't covered by those helpers.
     if not is_new_day and not got_bonus:
         save_progress()
     return {
@@ -1607,6 +1607,8 @@ class RouletteAnswerRequest(BaseModel):
 @app.post("/api/roulette/spin")
 async def roulette_spin(req: RouletteSpinRequest):
     """Spend 1 action + souls to spin the roulette."""
+    if not _rate_limit(req.user_id, window_seconds=5, max_calls=5):
+        raise HTTPException(status_code=429, detail="Too many requests")
     # ── Тратим 1 действие ───────────────────────────────────────────────
     from progress import spend_action
     action_result = spend_action(req.user_id, "roulette", user_progress)
@@ -2272,6 +2274,12 @@ async def catalyst_activate_api(req: CatReq):
 
 @app.post("/api/catalyst/attack")
 async def catalyst_attack_api(req: CatReq):
+    if not _rate_limit(req.user_id, window_seconds=5, max_calls=5):
+        raise HTTPException(status_code=429, detail="Too many requests")
+    # Guard: do not spend an action if there is no active catalyst
+    cat_status = cat_get_status()
+    if not cat_status.get("active"):
+        return {"ok": False, "error": "no_catalyst"}
     # ── Тратим действие из общего пула ──────────────────────────────────
     from progress import spend_action
     action_result = spend_action(req.user_id, "attack_catalyst", user_progress)
