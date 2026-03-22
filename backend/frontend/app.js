@@ -574,14 +574,55 @@ document.getElementById("repurchaseBtn")?.addEventListener("click", async () => 
 
 // ── TABS ──────────────────────────────────────────────────────────────────
 function switchTab(name) {
-  document.querySelectorAll(".tab").forEach(b => b.classList.toggle("active", b.dataset.tab === name));
-  document.querySelectorAll(".tab-content").forEach(c => c.classList.toggle("active", c.id === `tab-${name}`));
-  if (name === "quests")       loadQuests();
-  if (name === "leaderboard")  { loadLeaderboard(); loadPersonalLeaderboard(); loadBattlePass(); loadRaid(); }
-  if (name === "homunculus")   { loadHomunculus(); loadShop(); loadReferral(); }
+  // Скрыть все контенты
+  document.querySelectorAll(".tab-content").forEach(el => el.classList.remove("active"));
+  // Убрать active со всех вкладок (новых)
+  document.querySelectorAll(".tn-tab").forEach(el => el.classList.remove("active"));
+
+  // Показать нужный контент
+  const content = document.getElementById(`tab-${name}`);
+  if (content) content.classList.add("active");
+
+  // Выделить активную вкладку
+  const tabBtn = document.querySelector(`.tn-tab[data-tab="${name}"]`);
+  if (tabBtn) tabBtn.classList.add("active");
+
+  // Загрузка данных при переключении
+  if (name === "leaderboard") {
+    loadLeaderboard();
+    loadPersonalLeaderboard();
+    loadBattlePass();
+    loadRaid();
+    // Убрать бейдж при открытии
+    _clearTabBadge("Leaderboard");
+  }
+  if (name === "homunculus") {
+    loadHomunculus();
+    loadShop();
+    loadReferral();
+    loadCatalyst();
+    // Убрать бейдж при открытии
+    _clearTabBadge("Alchemy");
+  }
+  if (name === "quests") loadQuests();
+
   if (tg?.HapticFeedback) tg.HapticFeedback.selectionChanged();
 }
 window.switchTab = switchTab;
+
+// ── TAB BADGES ──────────────────────────────────────────────
+function _showTabBadge(tabName, color = "amber") {
+  const el = document.getElementById(`tnBadge${tabName}`);
+  if (!el) return;
+  el.style.display = "block";
+  if (color === "red") el.classList.add("tn-badge-red");
+  else el.classList.remove("tn-badge-red");
+}
+
+function _clearTabBadge(tabName) {
+  const el = document.getElementById(`tnBadge${tabName}`);
+  if (el) el.style.display = "none";
+}
 
 // ── MODALS ────────────────────────────────────────────────────────────────
 function openModal(id)  { const sel = id.startsWith('#') ? id : '#'+id; $(sel)?.classList.remove("hidden"); if (tg?.HapticFeedback) tg.HapticFeedback.impactOccurred("light"); }
@@ -614,11 +655,21 @@ function renderHeader(s) {
 
   // Аватар
   const avatarEl = document.getElementById("headerAvatarSvg");
-  if (avatarEl) avatarEl.innerHTML = getRankSVG(s.rank || "Наблюдатель рынка").replace(/<svg[^>]*>/,'').replace('</svg>','');
+  if (avatarEl) {
+    const svg = getRankSVG(s.rank || "Наблюдатель рынка");
+    avatarEl.innerHTML = svg.replace(/<svg[^>]*>/, '').replace('</svg>', '');
+  }
+
+  // Кольцо уровня — цвет меняется с уровнем
+  const ring = document.getElementById("avatarLevelRing");
+  if (ring) {
+    const lvlInfo = getLevelInfo(s.xp || 0);
+    ring.style.border = `2px solid ${lvlInfo.color}66`;
+  }
 
   // Имя и ранг
   const nameEl = document.getElementById("headerUsername");
-  if (nameEl) nameEl.textContent = (s.name || "CHM").slice(0,14);
+  if (nameEl) nameEl.textContent = (s.name || "CHM").slice(0, 14);
   const rankEl = document.getElementById("headerRankName");
   if (rankEl) rankEl.textContent = s.rank || "Наблюдатель рынка";
 
@@ -630,6 +681,9 @@ function renderHeader(s) {
   const lvlEl = document.getElementById("hudLevelVal");
   if (lvlEl) lvlEl.textContent = s.level || 1;
 
+  // XP полоска
+  _updateXPStrip(s.xp || 0);
+
   // moduleName
   const modEl = document.getElementById("moduleName");
   if (modEl) modEl.textContent = `Модуль ${(s.module_index ?? 0) + 1}`;
@@ -639,6 +693,22 @@ function renderHeader(s) {
 
   // Прогресс-бар (обновляется из renderQuests тоже)
   state.userState = s;
+}
+
+function _updateXPStrip(xp) {
+  const strip = document.getElementById("xpStripFill");
+  if (!strip) return;
+  let pct = 0;
+  for (let i = 0; i < SMC_LEVELS.length - 1; i++) {
+    const curr = SMC_LEVELS[i];
+    const next = SMC_LEVELS[i + 1];
+    if (xp >= curr.xp && xp < next.xp) {
+      pct = Math.round((xp - curr.xp) / (next.xp - curr.xp) * 100);
+      break;
+    }
+    if (i === SMC_LEVELS.length - 2 && xp >= next.xp) pct = 100;
+  }
+  strip.style.width = pct + "%";
 }
 
 function setProgress(completed, total) {
@@ -1575,22 +1645,46 @@ async function loadActionsPool() {
 }
 
 function renderActionsHUD(d) {
-  const el = document.getElementById("actionsHUD");
-  if (!el) return;
+  // Обновить карточку в Алхимии
+  const dotsWrap = document.getElementById("ahcDots");
+  const label = document.getElementById("ahcLabel");
+  const reset = document.getElementById("ahcReset");
+  const chanceRow = document.getElementById("catChanceRow");
+  const chanceVal = document.getElementById("catChanceVal");
 
-  const left  = d.left ?? 0;
+  if (!dotsWrap) return;
+
+  const left = d.left ?? 0;
   const total = d.daily_total ?? 1;
   const chance = d.catalyst_chance_pct ?? 0;
 
-  // Кружочки-действия (● = доступно, ○ = потрачено)
-  const dots = Array.from({length: total}, (_, i) =>
-    `<span class="action-dot ${i < left ? 'action-dot-ready' : 'action-dot-used'}"></span>`
+  // Кружочки
+  dotsWrap.innerHTML = Array.from({length: total}, (_, i) =>
+    `<div class="ahc-dot ${i < left ? 'ahc-dot-ready' : 'ahc-dot-used'}"></div>`
   ).join('');
 
-  el.innerHTML = `
-    <div class="actions-dots">${dots}</div>
-    <span id="actionsLeft" class="actions-label">${left}/${total}</span>
-    ${chance > 0 ? `<div class="cat-chance-hint">⚗️ Катализатор: ${chance}%</div>` : ''}`;
+  if (label) label.textContent = `${left} / ${total} действий`;
+
+  if (reset) {
+    if (left === 0) {
+      const now = new Date();
+      const midnight = new Date();
+      midnight.setUTCHours(24, 0, 0, 0);
+      const h = Math.floor((midnight - now) / 3600000);
+      const m = Math.floor(((midnight - now) % 3600000) / 60000);
+      reset.textContent = `Сброс через ${h}ч ${m}м`;
+      reset.style.display = "inline";
+    } else {
+      reset.style.display = "none";
+    }
+  }
+
+  if (chanceRow) chanceRow.style.display = chance > 0 ? "flex" : "none";
+  if (chanceVal) chanceVal.textContent = chance + "%";
+
+  // Старый #actionsHUD в хедере — скрыть
+  const oldHUD = document.getElementById("actionsHUD");
+  if (oldHUD) oldHUD.style.display = "none";
 }
 
 // ── CATALYST UI ──────────────────────────────────────────────────────
@@ -1608,6 +1702,12 @@ async function loadCatalyst() {
     // Показать/скрыть быструю кнопку в хедере
     const qaBtn = document.getElementById("qaCatalyst");
     if (qaBtn) qaBtn.style.display = cat.active ? "flex" : "none";
+    // Показать бейдж если Катализатор активен
+    if (cat.active) {
+      _showTabBadge("Alchemy", "red");
+    } else {
+      _clearTabBadge("Alchemy");
+    }
   } catch(e) { console.warn("catalyst:", e); }
 }
 
@@ -3161,9 +3261,38 @@ function _showBossVictory(data) {
   _spawnVictoryParticles();
   if (tg?.HapticFeedback) tg.HapticFeedback.notificationOccurred("success");
 
+  // Добавить кнопку шеринга
+  _addShareToBossVictory(data.boss_name || "Босс", data.souls_earned ?? 0, data.accuracy ?? 0);
+
   // Refresh header souls
   setTimeout(() => { refreshHeader(); loadQuests(); }, 500);
 }
+
+function _addShareToBossVictory(bossName, souls, accuracy) {
+  const screen = document.getElementById("bossVictoryScreen");
+  if (!screen) return;
+
+  let shareBlock = screen.querySelector(".boss-share-block");
+  if (!shareBlock) {
+    shareBlock = document.createElement("div");
+    shareBlock.className = "boss-share-block";
+    const continueBtn = screen.querySelector(".btn-victory-continue");
+    if (continueBtn) continueBtn.parentNode.insertBefore(shareBlock, continueBtn);
+    else screen.appendChild(shareBlock);
+  }
+
+  const text = `⚔️ Я победил ${bossName} в CHM Academy!\n${accuracy}% точности · ${souls} душ заработано\n\nПрисоединяйся → t.me/CHM_smcbot`;
+  shareBlock.innerHTML = `<button class="boss-share-btn" onclick="shareBossVictory(\`${text.replace(/`/g,'\\`')}\`)">📤 Поделиться победой</button>`;
+}
+
+function shareBossVictory(text) {
+  if (tg) {
+    tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent("https://t.me/CHM_smcbot")}&text=${encodeURIComponent(text)}`);
+  } else {
+    navigator.clipboard?.writeText(text).then(() => showToast("Скопировано!", "success"));
+  }
+}
+window.shareBossVictory = shareBossVictory;
 
 function afterBossVictory() {
   document.getElementById("bossVictoryScreen")?.classList.add("hidden");
@@ -4653,6 +4782,10 @@ async function loadBattlePass() {
   try {
     const d = await fetch(`${API}/season/progress/${state.userId}`).then(r=>r.json());
     _renderBattlePass(d);
+    // Показать бейдж если есть незабранные награды
+    if (d.claimable_count > 0) {
+      _showTabBadge("Leaderboard", "amber");
+    }
   } catch(e) { console.warn("bp:", e); }
 }
 
@@ -4861,6 +4994,11 @@ async function loadRaid() {
   try {
     const d = await fetch(`${API}/raid/status`).then(r=>r.json());
     _renderRaid(d);
+    // Бейдж если активный рейд и пользователь ещё не атаковал
+    const myAnswered = d.participants?.[String(state.userId)]?.answered;
+    if (d.active && !myAnswered) {
+      _showTabBadge("Leaderboard", "red");
+    }
   } catch(e) {}
 }
 
