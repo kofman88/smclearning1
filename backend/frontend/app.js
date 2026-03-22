@@ -904,7 +904,7 @@ function renderQuests(resp) {
       q.type === "quiz" ? "FIELD TEST" : isBoss ? "👑 APEX" : "ПРОТОКОЛ");
     badges.appendChild(typeBadge);
 
-    const hw = state.userState?.homework_status;
+    const hw = (q.id === state.userState?.active_quest) ? state.userState?.homework_status : null;
     if (q.is_active && q.type === "task") {
       const statuses = {
         pending:  ["⏳ На проверке", "pending"],
@@ -1288,7 +1288,10 @@ function openTask(questId, title, xpReward, description) {
   });
 
   // Show/hide teacher comment based on current homework status
-  const hw = state.userState?.homework_status;
+  // Only treat as "pending/approved/revision/rejected" if THIS quest is the active_quest being reviewed
+  const hw = (state.currentQuestId === state.userState?.active_quest)
+    ? state.userState?.homework_status
+    : null;
   const commentBlock = $("#teacherCommentBlock");
   const commentText  = $("#teacherCommentText");
   const hwComment    = state.userState?.homework_comment || "";
