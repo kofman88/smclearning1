@@ -209,6 +209,10 @@ async def lifespan(application: FastAPI):
     logger.info("Deadline check loop started")
     asyncio.create_task(_catalyst_drain_loop())
     logger.info("Catalyst drain loop started")
+    asyncio.create_task(_live_signal_loop())
+    logger.info("Live signal loop started")
+    asyncio.create_task(_weekly_raid_loop())
+    logger.info("Weekly raid loop started")
     if _raw_webhook:
         asyncio.create_task(_keep_alive_loop(_raw_webhook))
         logger.info("Keep-alive loop started")
@@ -794,6 +798,10 @@ async def quiz_answer(req: QuizAnswerRequest):
                     except Exception as pe:
                         logger.warning(f"Pet effect error: {pe}")
 
+                # Battle Pass XP for completing a quest
+                _add_bp_xp(req.user_id, 20, user_progress)
+                # Mark mystery box available
+                state.setdefault("pending_mystery_boxes", []).append(quest_id)
                 save_progress()
                 # add_xp, award_badge, try_advance_module already save;
                 # no extra save_progress() needed here
@@ -805,6 +813,8 @@ async def quiz_answer(req: QuizAnswerRequest):
                     "module_advanced": advanced,
                     "rank": get_user_state(req.user_id)["rank"],
                     "pet_effect": pet_effect,
+                    "mystery_box_available": True,
+                    "mystery_box_quest": quest_id,
                 }
         else:
             state["quiz_state"] = None
@@ -1058,8 +1068,12 @@ async def admin_approve(req: AdminApproveRequest):
     except Exception as ce:
         logger.warning(f"Pet coins error on approval: {ce}")
 
+    # Battle Pass XP for approved quest
+    _add_bp_xp(req.user_id, 20, user_progress)
+    state.setdefault("pending_mystery_boxes", []).append(req.quest_id)
     save_progress()
-    return {"ok": True, "new_level": level, "leveled_up": leveled_up, "module_advanced": advanced}
+    return {"ok": True, "new_level": level, "leveled_up": leveled_up, "module_advanced": advanced,
+            "mystery_box_available": True, "mystery_box_quest": req.quest_id}
 
 
 @app.post("/api/admin/reject")
@@ -2386,3 +2400,477 @@ async def _catalyst_drain_loop():
                         pass
         except Exception as e:
             logger.error("_catalyst_drain_loop: %r", e)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ── SHOP ─────────────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+
+import random as _random
+from datetime import datetime as _dt, timedelta as _td
+
+SHOP_CATALOG = [
+    # consumable
+    {"id":"estus_1",    "category":"consumable","name":"Estus-фласка",          "icon":"🔶","desc":"Восстановить 1 жизнь гомункула",             "price":50,  "owned_key":None,               "duration_h":None},
+    {"id":"estus_3",    "category":"consumable","name":"Estus ×3",               "icon":"🔷","desc":"Три фласки разом",                           "price":120, "owned_key":None,               "duration_h":None},
+    {"id":"isotope_1",  "category":"consumable","name":"Нестабильный Изотоп",    "icon":"🧪","desc":"Запускает особый квест-катализатор",          "price":200, "owned_key":None,               "duration_h":None},
+    # boost
+    {"id":"double_tap_1h","category":"boost",   "name":"Двойная реакция 1ч",     "icon":"⚡","desc":"Двойной XP за тапы на 1 час",                "price":80,  "owned_key":"double_tap_until", "duration_h":1},
+    {"id":"double_tap_3h","category":"boost",   "name":"Двойная реакция 3ч",     "icon":"⚡","desc":"Двойной XP за тапы на 3 часа",               "price":200, "owned_key":"double_tap_until", "duration_h":3},
+    {"id":"xp_boost_1h", "category":"boost",   "name":"Буст XP 1ч",             "icon":"🌟","desc":"Двойной XP за уроки и квесты на 1 час",      "price":100, "owned_key":"xp_boost_until",   "duration_h":1},
+    # protection
+    {"id":"shield_24h",  "category":"protection","name":"Щит Катализатора 24ч", "icon":"🛡","desc":"Блокирует атаки катализатора на 24ч",         "price":150, "owned_key":"catalyst_shield_until","duration_h":24},
+    {"id":"hollow_guard","category":"protection","name":"Стражник Полых 1д",     "icon":"💠","desc":"Защита от штрафа Hollow на 1 день",           "price":300, "owned_key":"hollow_guard_until","duration_h":24},
+    # emergency
+    {"id":"deadline_ext","category":"emergency","name":"Продление дедлайна",     "icon":"⏳","desc":"Добавить +12 часов к дедлайну модуля",        "price":250, "owned_key":None,               "duration_h":None},
+    {"id":"quest_skip",  "category":"emergency","name":"Пропуск квеста",         "icon":"🎯","desc":"Пропустить текущий квест без штрафа",         "price":500, "owned_key":None,               "duration_h":None},
+    # cosmetic
+    {"id":"tap_fx_gold", "category":"cosmetic", "name":"Эффект тапа: Золото",    "icon":"✨","desc":"Золотые частицы при тапе гомункула",          "price":300, "owned_key":"tap_fx_gold",      "duration_h":None},
+    {"id":"aura_purple", "category":"cosmetic", "name":"Аура: Фиолетовая",       "icon":"💜","desc":"Фиолетовая аура вокруг гомункула",            "price":400, "owned_key":"aura_purple",      "duration_h":None},
+    # title
+    {"id":"title_alchemist","category":"title", "name":"Титул «Алхимик»",        "icon":"⚗️","desc":"Отображается рядом с именем в рейтинге",      "price":600, "owned_key":"title_alchemist",  "duration_h":None},
+    {"id":"title_hunter",  "category":"title",  "name":"Титул «Охотник»",        "icon":"🗡","desc":"Отображается рядом с именем в рейтинге",      "price":600, "owned_key":"title_hunter",     "duration_h":None},
+]
+
+
+@app.get("/api/shop")
+async def shop_catalog(user_id: int):
+    st = get_user_state(user_id)
+    souls = st.get("souls", 0)
+    now = _dt.utcnow()
+    items = []
+    for item in SHOP_CATALOG:
+        owned = False
+        active_until = None
+        key = item.get("owned_key")
+        if key:
+            val = st.get(key)
+            if val:
+                if item["duration_h"]:
+                    try:
+                        exp = _dt.fromisoformat(val)
+                        if exp > now:
+                            active_until = val
+                        else:
+                            owned = False
+                    except Exception:
+                        pass
+                else:
+                    owned = True
+        items.append({**item, "owned": owned, "active_until": active_until,
+                      "can_afford": souls >= item["price"]})
+    return {"items": items, "souls": round(souls, 1)}
+
+
+class ShopBuyRequest(BaseModel):
+    user_id: int
+    item_id: str
+
+
+@app.post("/api/shop/buy")
+async def shop_buy(req: ShopBuyRequest):
+    if not _rate_limit(req.user_id, 10, 5):
+        return {"ok": False, "message": "Слишком быстро"}
+    st = get_user_state(req.user_id)
+    item = next((i for i in SHOP_CATALOG if i["id"] == req.item_id), None)
+    if not item:
+        return {"ok": False, "message": "Товар не найден"}
+    souls = st.get("souls", 0)
+    if souls < item["price"]:
+        return {"ok": False, "message": f"Нужно {item['price']} ⚡, есть {round(souls,1)}"}
+
+    st["souls"] = round(souls - item["price"], 1)
+    now = _dt.utcnow()
+    key = item.get("owned_key")
+    dur = item.get("duration_h")
+    msg = f"✅ Куплено: {item['name']}"
+
+    if item["id"] == "estus_1":
+        st["estus_flasks"] = st.get("estus_flasks", 0) + 1
+    elif item["id"] == "estus_3":
+        st["estus_flasks"] = st.get("estus_flasks", 0) + 3
+    elif item["id"] == "isotope_1":
+        st["unstable_isotopes"] = st.get("unstable_isotopes", 0) + 1
+    elif item["id"] == "deadline_ext":
+        if st.get("module_deadline"):
+            try:
+                old = _dt.fromisoformat(st["module_deadline"])
+                st["module_deadline"] = (old + _td(hours=12)).isoformat()
+                msg = "⏳ Дедлайн продлён на +12ч"
+            except Exception:
+                pass
+    elif item["id"] == "quest_skip":
+        st["quest_skip_available"] = st.get("quest_skip_available", 0) + 1
+        msg = "🎯 Пропуск квеста добавлен"
+    elif key and dur:
+        exp = now + _td(hours=dur)
+        # extend if already active
+        try:
+            existing = _dt.fromisoformat(st.get(key, ""))
+            if existing > now:
+                exp = existing + _td(hours=dur)
+        except Exception:
+            pass
+        st[key] = exp.isoformat()
+    elif key:
+        st.setdefault("owned_cosmetics", [])
+        if key not in st["owned_cosmetics"]:
+            st["owned_cosmetics"].append(key)
+        st[key] = True
+
+    save_progress()
+    return {"ok": True, "message": msg, "souls_left": round(st["souls"], 1)}
+
+
+# ── PERSONAL LEADERBOARD ──────────────────────────────────────────────────────
+
+@app.get("/api/leaderboard/personal/{user_id}")
+async def personal_leaderboard(user_id: int):
+    all_entries = []
+    for uid, st in user_progress.items():
+        all_entries.append({
+            "user_id": uid,
+            "name": st.get("name", str(uid)),
+            "xp": st.get("xp", 0),
+            "level": st.get("level", 1),
+            "rank": st.get("rank", "Наблюдатель рынка"),
+            "streak": st.get("streak", 0),
+            "is_hollow": bool(st.get("hollow_since")),
+            "module": st.get("module_index", 0) + 1,
+        })
+    all_entries.sort(key=lambda x: x["xp"], reverse=True)
+
+    my_pos = next((i for i, e in enumerate(all_entries) if e["user_id"] == user_id), -1)
+    my_entry = all_entries[my_pos] if my_pos >= 0 else None
+    total = len(all_entries)
+
+    top3 = [dict(e) for e in all_entries[:3]]
+    for i, e in enumerate(top3):
+        e["position"] = i + 1
+        e["is_me"] = (e["user_id"] == user_id)
+
+    around = []
+    if my_pos >= 0:
+        start = max(3, my_pos - 2)
+        end   = min(total, my_pos + 3)
+        for i in range(start, end):
+            e = dict(all_entries[i])
+            e["position"] = i + 1
+            e["is_me"] = (e["user_id"] == user_id)
+            around.append(e)
+
+    taunt = None
+    if my_pos > 0 and my_entry:
+        rival = all_entries[my_pos - 1]
+        xp_gap = rival["xp"] - my_entry["xp"]
+        taunt = f"⚔️ {rival['name']} на {xp_gap} XP впереди. Не дай ему уйти."
+    elif my_pos == 0 and total > 1:
+        chaser = all_entries[1]
+        xp_gap = my_entry["xp"] - chaser["xp"] if my_entry else 0
+        taunt = f"🔥 Ты первый! {chaser['name']} отстаёт на {xp_gap} XP."
+
+    return {
+        "top3": top3,
+        "around": around,
+        "my_position": my_pos + 1 if my_pos >= 0 else None,
+        "my_entry": (dict(my_entry) | {"position": my_pos + 1}) if my_entry else None,
+        "total_players": total,
+        "taunt": taunt,
+    }
+
+
+# ── MYSTERY BOX ───────────────────────────────────────────────────────────────
+
+MYSTERY_BOX_TABLE = [
+    (50, "souls",    10,   50, "Души"),
+    (20, "souls",    51,  200, "Много Душ"),
+    (12, "souls",   201,  500, "Клад Душ"),
+    (8,  "boost",     1,    1, "Двойная реакция 1ч"),
+    (5,  "estus",     1,    3, "Estus-фласки"),
+    (3,  "isotope",   1,    1, "Нестабильный Изотоп"),
+    (1,  "tap_fx",    0,    0, "Эффект тапа: Золото"),
+    (1,  "souls",  1000, 1000, "ДЖЕКПОТ 💀"),
+]
+
+
+def open_mystery_box(user_id: int, quest_id: str) -> dict:
+    st = get_user_state(user_id)
+    opened = st.setdefault("mystery_boxes_opened", [])
+    if quest_id in opened:
+        return {"ok": False, "error": "already_opened"}
+    opened.append(quest_id)
+
+    weights = [r[0] for r in MYSTERY_BOX_TABLE]
+    row = _random.choices(MYSTERY_BOX_TABLE, weights=weights, k=1)[0]
+    _, rtype, vmin, vmax, label = row
+
+    reward = {"type": rtype, "label": label, "amount": 0}
+    now = _dt.utcnow()
+
+    if rtype == "souls":
+        amount = _random.randint(vmin, vmax)
+        st["souls"] = round(st.get("souls", 0) + amount, 1)
+        reward["amount"] = amount
+        reward["message"] = f"+{amount} Душ"
+    elif rtype == "boost":
+        exp = (now + _td(hours=1)).isoformat()
+        st["double_tap_until"] = exp
+        reward["amount"] = 1
+        reward["message"] = "Двойная реакция +1ч"
+    elif rtype == "estus":
+        count = _random.randint(vmin, vmax)
+        st["estus_flasks"] = st.get("estus_flasks", 0) + count
+        reward["amount"] = count
+        reward["message"] = f"+{count} Estus-фласки"
+    elif rtype == "isotope":
+        st["unstable_isotopes"] = st.get("unstable_isotopes", 0) + 1
+        reward["amount"] = 1
+        reward["message"] = "🧪 Нестабильный Изотоп!"
+    elif rtype == "tap_fx":
+        st.setdefault("owned_cosmetics", []).append("tap_effect_gold")
+        st["active_tap_effect"] = "gold"
+        reward["amount"] = 1
+        reward["message"] = "✨ Эффект тапа: Золото!"
+
+    if row[0] <= 1:
+        reward["rarity"] = "legendary"
+    elif row[0] <= 5:
+        reward["rarity"] = "epic"
+    elif row[0] <= 13:
+        reward["rarity"] = "rare"
+    else:
+        reward["rarity"] = "common"
+
+    return {"ok": True, "reward": reward}
+
+
+class MysteryBoxRequest(BaseModel):
+    user_id: int
+    quest_id: str
+
+
+@app.post("/api/mystery-box/open")
+async def open_mystery_box_api(req: MysteryBoxRequest):
+    result = open_mystery_box(req.user_id, req.quest_id)
+    if result.get("ok"):
+        save_progress()
+    return result
+
+
+# ── LIVE SIGNAL ───────────────────────────────────────────────────────────────
+
+_live_signal: dict = {"active": False}
+
+
+@app.get("/api/live-signal")
+async def get_live_signal():
+    return _live_signal
+
+
+@app.post("/api/live-signal/dismiss/{user_id}")
+async def dismiss_live_signal(user_id: int):
+    st = get_user_state(user_id)
+    st.setdefault("dismissed_signals", [])
+    sig_id = _live_signal.get("created_at", "")
+    if sig_id and sig_id not in st["dismissed_signals"]:
+        st["dismissed_signals"].append(sig_id)
+        if len(st["dismissed_signals"]) > 50:
+            st["dismissed_signals"] = st["dismissed_signals"][-50:]
+    save_progress()
+    return {"ok": True}
+
+
+async def _live_signal_loop():
+    """Обновляет Live Signal при изменении рыночного состояния."""
+    global _live_signal
+    from market_feed import detect_live_signal as _detect
+    while True:
+        await asyncio.sleep(61)
+        try:
+            pulse = get_cached_pulse()
+            if pulse:
+                new_signal = _detect(pulse)
+                if new_signal:
+                    _live_signal = new_signal
+                    logger.info("Live signal: %s → %s", new_signal["market_state"], new_signal["concept"])
+                    now_dt = _dt.utcnow()
+                    for uid, st in list(user_progress.items()):
+                        lo = st.get("last_online", "")
+                        if not lo:
+                            continue
+                        try:
+                            if (_dt.utcnow() - _dt.fromisoformat(lo)).total_seconds() > 3600:
+                                continue
+                        except Exception:
+                            continue
+                        try:
+                            asyncio.get_running_loop().run_in_executor(None,
+                                lambda u=int(uid), m=new_signal["message"]: telegram_bot.send_message(
+                                    u, f"📡 <b>ЖИВОЙ СИГНАЛ</b>\n\n{m}\n\nОткрой приложение!", parse_mode="HTML"))
+                        except Exception:
+                            pass
+        except Exception as e:
+            logger.error("_live_signal_loop: %r", e)
+
+
+# ── BATTLE PASS / SEASON ──────────────────────────────────────────────────────
+
+from season import get_season_progress, add_bp_xp as _add_bp_xp, claim_bp_reward
+
+
+@app.get("/api/season/progress/{user_id}")
+async def season_progress_api(user_id: int):
+    return get_season_progress(user_id, user_progress)
+
+
+class BPClaimRequest(BaseModel):
+    user_id: int
+    level: int
+
+
+@app.post("/api/season/claim")
+async def season_claim_api(req: BPClaimRequest):
+    result = claim_bp_reward(req.user_id, req.level, user_progress)
+    if result.get("ok"):
+        save_progress()
+    return result
+
+
+# ── REFERRAL ──────────────────────────────────────────────────────────────────
+
+_BOT_USERNAME = os.getenv("BOT_USERNAME", "CHM_smcbot")
+
+
+@app.get("/api/referral/{user_id}")
+async def referral_info(user_id: int):
+    st = get_user_state(user_id)
+    refs = st.get("referrals", [])
+    milestones = [
+        {"count":  1, "reward": "100 Душ",          "reached": len(refs) >= 1},
+        {"count":  3, "reward": "300 Душ",           "reached": len(refs) >= 3},
+        {"count":  5, "reward": "Титул Вербовщик",   "reached": len(refs) >= 5},
+        {"count": 10, "reward": "Изотоп + 1000 Душ", "reached": len(refs) >= 10},
+    ]
+    return {
+        "ref_link": f"https://t.me/{_BOT_USERNAME}?start=ref_{user_id}",
+        "total_referrals": len(refs),
+        "souls_earned": st.get("referral_souls_earned", 0),
+        "milestones": milestones,
+        "referrals": refs[:20],
+    }
+
+
+# ── SCHOLAR JOURNAL ───────────────────────────────────────────────────────────
+
+@app.get("/api/scholar-journal/{user_id}")
+async def scholar_journal(user_id: int):
+    st = get_user_state(user_id)
+    modules_completed = st.get("module_index", 0)
+    quests_done = len(st.get("completed_quests", []))
+    streak = st.get("streak", 0)
+    souls = round(st.get("souls", 0) + st.get("total_souls_earned", 0), 0)
+    level = st.get("level", 1)
+    rank = st.get("rank", "Наблюдатель рынка")
+    name = st.get("name", "Трейдер")
+    badges = st.get("badges", [])
+    boss_wins = sum(1 for a in st.get("boss_attempts", []) if a.get("result") == "win")
+
+    if modules_completed >= 9:
+        card_title = "Smart Money Архитектор"
+    elif modules_completed >= 6:
+        card_title = "SMC Практик"
+    elif modules_completed >= 3:
+        card_title = "Охотник за Ликвидностью"
+    else:
+        card_title = "Начинающий Алхимик"
+
+    return {
+        "name": name,
+        "rank": rank,
+        "card_title": card_title,
+        "level": level,
+        "modules_completed": modules_completed,
+        "quests_done": quests_done,
+        "boss_wins": boss_wins,
+        "streak": streak,
+        "souls_total": int(souls),
+        "badges_count": len(badges),
+        "share_text": (
+            f"📜 Моя карточка в CHM Smart Money Academy:\n"
+            f"🎓 {card_title} · Lvl {level}\n"
+            f"📚 {modules_completed} модулей · ⚔️ {boss_wins} боссов\n"
+            f"🔥 Стрик: {streak} дней\n\n"
+            f"Учись торговать по-настоящему → t.me/{_BOT_USERNAME}"
+        ),
+    }
+
+
+# ── CLAN RAID ─────────────────────────────────────────────────────────────────
+
+from social import get_raid_status, start_weekly_raid, raid_attack as _raid_attack_fn
+
+
+@app.get("/api/raid/status")
+async def raid_status():
+    return get_raid_status()
+
+
+class RaidAttackRequest(BaseModel):
+    user_id: int
+    is_correct: bool
+
+
+@app.post("/api/raid/attack")
+async def raid_attack_api(req: RaidAttackRequest):
+    st = get_user_state(req.user_id)
+    level = st.get("level", 1)
+    clan_id = st.get("clan_id", "")
+
+    result = _raid_attack_fn(req.user_id, level, clan_id, req.is_correct)
+
+    if result.get("ok") and req.is_correct:
+        add_xp(req.user_id, result.get("xp_reward", 0))
+        st["souls"] = round(st.get("souls", 0) + result.get("souls_reward", 0), 1)
+        _add_bp_xp(req.user_id, 30, user_progress)
+        save_progress()
+
+    if result.get("boss_defeated"):
+        boss_name = get_raid_status().get("boss", {}).get("name", "Босс")
+        for uid in list(user_progress.keys()):
+            try:
+                asyncio.get_running_loop().run_in_executor(None,
+                    lambda u=int(uid), bn=boss_name: telegram_bot.send_message(u,
+                        f"🏆 <b>РЕЙД ЗАВЕРШЁН!</b>\n\nКланы победили {bn}!\n"
+                        f"Все участники получают награды.",
+                        parse_mode="HTML"))
+            except Exception:
+                pass
+
+    return result
+
+
+async def _weekly_raid_loop():
+    """Каждый понедельник 10:00 UTC запускает новый рейд."""
+    import datetime as _dtime
+    _last_raid_week = ""
+    while True:
+        await asyncio.sleep(60)
+        try:
+            now = _dtime.datetime.utcnow()
+            week_key = f"{now.isocalendar()[1]}-{now.year}"
+            if now.weekday() == 0 and now.hour == 10 and now.minute == 0 and _last_raid_week != week_key:
+                _last_raid_week = week_key
+                raid = start_weekly_raid()
+                boss_name = raid["boss"]["name"]
+                logger.info("Weekly raid started: %s", boss_name)
+                for uid in list(user_progress.keys()):
+                    try:
+                        asyncio.get_running_loop().run_in_executor(None,
+                            lambda u=int(uid), bn=boss_name: telegram_bot.send_message(u,
+                                f"⚔️ <b>РЕЙД НАЧАЛСЯ!</b>\n\n{bn} атакует Академию!\n"
+                                f"Открой приложение → вкладка Рейтинг → атаковать.",
+                                parse_mode="HTML"))
+                    except Exception:
+                        pass
+        except Exception as e:
+            logger.error("_weekly_raid_loop: %r", e)

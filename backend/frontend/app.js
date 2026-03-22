@@ -577,8 +577,8 @@ function switchTab(name) {
   document.querySelectorAll(".tab").forEach(b => b.classList.toggle("active", b.dataset.tab === name));
   document.querySelectorAll(".tab-content").forEach(c => c.classList.toggle("active", c.id === `tab-${name}`));
   if (name === "quests")       loadQuests();
-  if (name === "leaderboard")  loadLeaderboard();
-  if (name === "homunculus")   loadHomunculus();
+  if (name === "leaderboard")  { loadLeaderboard(); loadPersonalLeaderboard(); loadBattlePass(); loadRaid(); }
+  if (name === "homunculus")   { loadHomunculus(); loadShop(); loadReferral(); }
   if (tg?.HapticFeedback) tg.HapticFeedback.selectionChanged();
 }
 window.switchTab = switchTab;
@@ -1112,6 +1112,10 @@ function onQuizFinished(data) {
     }
     loadQuests();
     refreshHeader();
+    // Mystery Box after quest
+    if (data.mystery_box_available && data.mystery_box_quest) {
+      setTimeout(() => showMysteryBox(data.mystery_box_quest), 1800);
+    }
     // Refresh homunculus stats after quiz completion
     setTimeout(() => {
       showToast("⚗️ Гомункул впитывает знания!", "success");
@@ -1966,6 +1970,14 @@ async function init() {
     loadActionsPool();
     if (state._actionsInterval) clearInterval(state._actionsInterval);
     state._actionsInterval = setInterval(loadActionsPool, 30000); // каждые 30 сек
+
+    // Live Signal
+    checkLiveSignal();
+    if (state._liveSignalInterval) clearInterval(state._liveSignalInterval);
+    state._liveSignalInterval = setInterval(checkLiveSignal, 120000);
+
+    // Raid
+    loadRaid();
 
     console.log("[CHM] init complete. userId=", state.userId, "modules=", modulesData?.modules?.length);
 
@@ -4311,3 +4323,639 @@ window.submitPvP           = submitPvP;
 document.addEventListener("DOMContentLoaded", () => {
   setTimeout(checkInvasion, 3000);  // check 3s after load
 });
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ── SHOP ─────────────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+
+const SHOP_CATS = [
+  {id:"consumable", label:"Расходники"},
+  {id:"boost",      label:"Бусты"},
+  {id:"protection", label:"Защита"},
+  {id:"emergency",  label:"Экстренное"},
+  {id:"cosmetic",   label:"Косметика"},
+  {id:"title",      label:"Титулы"},
+];
+let _shopData = null, _shopCat = "consumable";
+
+async function loadShop() {
+  if (!state.userId) return;
+  try {
+    const d = await fetch(`${API}/shop?user_id=${state.userId}`).then(r=>r.json());
+    _shopData = d;
+    _renderShop(d);
+  } catch(e) { console.warn("shop:", e); }
+}
+
+function _renderShop(d) {
+  const wrap = document.getElementById("shopWrap");
+  if (!wrap) return;
+  const souls = d.souls || 0;
+  wrap.innerHTML = `
+    <div class="shop-hdr">
+      <span class="shop-ttl">⚗️ Лаборатория Алхимика</span>
+      <div class="shop-bal">
+        <span>⚡</span>
+        <span id="shopSouls">${Math.floor(souls)}</span>
+        <span class="shop-bal-lbl">душ</span>
+      </div>
+    </div>
+    <div class="shop-cats" id="shopCats">
+      ${SHOP_CATS.map(c=>`
+        <button class="shop-cat ${c.id===_shopCat?'shop-cat-on':''}"
+          onclick="setShopCat('${c.id}')">${c.label}</button>`).join('')}
+    </div>
+    <div id="shopItems"></div>
+    <div class="shop-stars-row">
+      Мало душ? <button class="shop-stars-btn" onclick="openBotShop()">Купить за ⭐ Stars</button>
+    </div>`;
+  _renderShopItems(d);
+}
+
+function setShopCat(cat) {
+  _shopCat = cat;
+  document.querySelectorAll(".shop-cat").forEach(b=>{
+    b.classList.toggle("shop-cat-on", b.textContent.trim()===SHOP_CATS.find(c=>c.id===cat)?.label);
+  });
+  if (_shopData) _renderShopItems(_shopData);
+}
+window.setShopCat = setShopCat;
+
+function _renderShopItems(d) {
+  const el = document.getElementById("shopItems");
+  if (!el) return;
+  const items = (d.items||[]).filter(i=>i.category===_shopCat);
+  if (!items.length) { el.innerHTML='<div class="shop-empty">Нет товаров</div>'; return; }
+  el.innerHTML = items.map(item=>{
+    const owned = item.owned, active = !!item.active_until;
+    const canAfford = item.can_afford;
+    let badge = owned ? '<span class="shop-owned">✓</span>'
+              : active ? '<span class="shop-active">Активно</span>' : '';
+    let btnTxt = `${item.price} ⚡`;
+    let btnCls = "shop-buy-btn";
+    let dis = "";
+    if (owned || active) { btnTxt = owned?"Куплено":"Активно"; btnCls+=" shop-btn-dim"; dis="disabled"; }
+    else if (!canAfford)  { btnCls+=" shop-btn-dim"; dis="disabled"; }
+    return `
+    <div class="shop-item">
+      <span class="shop-item-ico">${item.icon}</span>
+      <div class="shop-item-body">
+        <div class="shop-item-name">${item.name} ${badge}</div>
+        <div class="shop-item-desc">${item.desc}</div>
+      </div>
+      <button class="${btnCls}" ${dis}
+        onclick="buyItem('${item.id}','${item.name.replace(/'/g,"\\'")}',${item.price})">
+        ${btnTxt}
+      </button>
+    </div>`;
+  }).join('');
+}
+
+async function buyItem(id, name, price) {
+  if ((_shopData?.souls||0) < price) {
+    showToast(`Нужно ${price} ⚡. Есть ${Math.floor(_shopData?.souls||0)}.`,"error"); return;
+  }
+  if (!confirm(`Купить «${name}» за ${price} ⚡?`)) return;
+  try {
+    const d = await fetch(`${API}/shop/buy`,{
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({user_id:state.userId, item_id:id})
+    }).then(r=>r.json());
+    if (d.ok) {
+      playSound("buy");
+      if (tg?.HapticFeedback) tg.HapticFeedback.notificationOccurred("success");
+      showToast(d.message,"success");
+      if (_shopData) _shopData.souls = d.souls_left;
+      const el = document.getElementById("shopSouls");
+      if (el) el.textContent = Math.floor(d.souls_left);
+      const hud = document.getElementById("hudSoulsVal");
+      if (hud) hud.textContent = Math.floor(d.souls_left);
+      setTimeout(loadShop, 400);
+    } else { showToast(d.message||"Ошибка","error"); }
+  } catch(e) { showToast("Ошибка","error"); }
+}
+window.buyItem = buyItem;
+
+function openBotShop() {
+  tg ? tg.openTelegramLink("https://t.me/CHM_smcbot?start=shop")
+     : showToast("Открой в Telegram","info");
+}
+window.openBotShop = openBotShop;
+
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ── PERSONAL LEADERBOARD ─────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+
+async function loadPersonalLeaderboard() {
+  if (!state.userId) return;
+  try {
+    const d = await fetch(`${API}/leaderboard/personal/${state.userId}`).then(r=>r.json());
+    _renderPersonalLB(d);
+  } catch(e) { console.warn("personal lb:", e); }
+}
+
+function _renderPersonalLB(d) {
+  const wrap = document.getElementById("leaderboardContent");
+  if (!wrap) return;
+
+  const myPos = d.my_position;
+  const total = d.total_players;
+  const medals = ["🥇","🥈","🥉"];
+
+  const renderRow = (e, highlight=false) => {
+    const posLabel = medals[e.position-1] || `#${e.position}`;
+    const hollow = e.is_hollow ? ' lb-hollow' : '';
+    const me = e.is_me ? ' lb-me' : '';
+    return `
+    <div class="lb-row${hollow}${me}${highlight?' lb-rival':''}">
+      <span class="lb-pos">${posLabel}</span>
+      <div class="lb-info">
+        <span class="lb-name">${e.name}${e.is_hollow?' <span class="lb-hollow-badge">Hollow</span>':''}</span>
+        <span class="lb-meta">Lvl ${e.level} · ${e.xp} XP · 🔥${e.streak}</span>
+      </div>
+      <span class="lb-xp">${e.xp}</span>
+    </div>`;
+  };
+
+  const tauntHtml = d.taunt ? `<div class="lb-taunt">${d.taunt}</div>` : '';
+  const myBadge = myPos ? `
+    <div class="lb-my-pos">
+      <span class="lb-my-pos-num">#${myPos}</span>
+      <span class="lb-my-pos-lbl">из ${total} трейдеров</span>
+    </div>` : '';
+
+  wrap.innerHTML = `
+    ${tauntHtml}
+    ${myBadge}
+    <div class="lb-section-label">Топ-3</div>
+    ${(d.top3||[]).map(e=>renderRow(e)).join('')}
+    ${(d.around||[]).length && d.my_position > 3 ? `
+      <div class="lb-divider">···</div>
+      <div class="lb-section-label">Рядом с тобой</div>
+      ${d.around.map(e=>renderRow(e, !e.is_me && e.position === d.my_position-1)).join('')}
+    ` : ''}`;
+}
+
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ── MYSTERY BOX ──────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+
+async function showMysteryBox(questId) {
+  const modal = document.getElementById("mysteryBoxModal");
+  if (!modal) return;
+  modal.querySelector(".mb-flask").classList.remove("mb-shake","mb-open");
+  modal.querySelector(".mb-reward").classList.add("hidden");
+  modal.querySelector(".mb-tap-hint").classList.remove("hidden");
+  modal.dataset.questId = questId;
+  modal.dataset.opened = "0";
+  modal.classList.remove("hidden");
+  if (tg?.HapticFeedback) tg.HapticFeedback.impactOccurred("light");
+}
+
+async function tapMysteryBox() {
+  const modal = document.getElementById("mysteryBoxModal");
+  if (!modal || modal.dataset.opened === "1") return;
+  modal.dataset.opened = "1";
+  const flask = modal.querySelector(".mb-flask");
+  const questId = modal.dataset.questId;
+  flask.classList.add("mb-shake");
+  playSound("catalyst_on");
+  if (tg?.HapticFeedback) tg.HapticFeedback.impactOccurred("heavy");
+  try {
+    const d = await fetch(`${API}/mystery-box/open`, {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({user_id: state.userId, quest_id: questId})
+    }).then(r=>r.json());
+    setTimeout(() => {
+      flask.classList.remove("mb-shake");
+      flask.classList.add("mb-open");
+      if (d.ok && d.reward) {
+        const r = d.reward;
+        const rarityColors = {
+          legendary:"#fbbf24", epic:"#a78bfa", rare:"#60a5fa", common:"#94a3b8"
+        };
+        const col = rarityColors[r.rarity] || "#94a3b8";
+        const rewardEl = modal.querySelector(".mb-reward");
+        rewardEl.innerHTML = `
+          <div class="mb-rarity" style="color:${col}">${r.rarity.toUpperCase()}</div>
+          <div class="mb-reward-icon">${r.type==="souls"?"💀":r.type==="isotope"?"🧪":r.type==="boost"?"⚡":"✨"}</div>
+          <div class="mb-reward-msg" style="color:${col}">${r.message}</div>`;
+        rewardEl.classList.remove("hidden");
+        modal.querySelector(".mb-tap-hint").classList.add("hidden");
+        if (r.rarity==="legendary") playSound("bosswin");
+        else if (r.rarity==="epic") playSound("levelup");
+        else if (r.rarity==="rare") playSound("questdone");
+        else playSound("soulsgain");
+        if (tg?.HapticFeedback) {
+          if (r.rarity==="legendary") tg.HapticFeedback.notificationOccurred("success");
+          else tg.HapticFeedback.impactOccurred("medium");
+        }
+        if (r.type==="souls" && state.userState) {
+          state.userState.souls = (state.userState.souls||0) + r.amount;
+          const hud = document.getElementById("hudSoulsVal");
+          if (hud) hud.textContent = Math.floor(state.userState.souls);
+        }
+      }
+    }, 800);
+  } catch(e) { console.error("mystery box:", e); }
+}
+window.tapMysteryBox = tapMysteryBox;
+
+function closeMysteryBox() {
+  const modal = document.getElementById("mysteryBoxModal");
+  if (modal) { modal.classList.add("hidden"); modal.dataset.opened="0"; }
+}
+window.closeMysteryBox = closeMysteryBox;
+
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ── LIVE SIGNAL BANNER ───────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+
+let _liveSignalData = null;
+
+async function checkLiveSignal() {
+  try {
+    const d = await fetch(`${API}/live-signal`).then(r=>r.json());
+    if (d.active) {
+      _liveSignalData = d;
+      _showLiveSignalBanner(d);
+    } else {
+      _hideLiveSignalBanner();
+    }
+  } catch(e) {}
+}
+
+function _showLiveSignalBanner(d) {
+  let banner = document.getElementById("liveSignalBanner");
+  if (!banner) {
+    banner = document.createElement("div");
+    banner.id = "liveSignalBanner";
+    banner.className = "ls-banner";
+    const header = document.querySelector(".app-header, .module-progress-area");
+    if (header?.nextSibling) header.parentNode.insertBefore(banner, header.nextSibling);
+    else document.body.prepend(banner);
+  }
+  const stateColors = {
+    crash:"#ff4d6d", dump:"#f97316", pump:"#fbbf24",
+    rally:"#00e87a", volatile:"#a78bfa", flat:"#64748b", neutral:"#6366f1"
+  };
+  const col = stateColors[d.market_state] || "#6366f1";
+  banner.style.borderColor = col + "55";
+  banner.innerHTML = `
+    <div class="ls-pulse" style="background:${col}"></div>
+    <div class="ls-body">
+      <span class="ls-label" style="color:${col}">📡 ЖИВОЙ СИГНАЛ</span>
+      <span class="ls-concept">${d.concept}</span>
+      <span class="ls-price">BTC $${(d.btc_price||0).toLocaleString()} ${d.price_change_1h>0?'+':''}${d.price_change_1h||0}%</span>
+    </div>
+    <button class="ls-open-btn" onclick="openLiveSignalLesson()" style="border-color:${col};color:${col}">
+      Учиться
+    </button>
+    <button class="ls-dismiss" onclick="dismissLiveSignal()">✕</button>`;
+  banner.classList.remove("hidden");
+}
+
+function _hideLiveSignalBanner() {
+  const b = document.getElementById("liveSignalBanner");
+  if (b) b.classList.add("hidden");
+}
+
+async function openLiveSignalLesson() {
+  if (!_liveSignalData) return;
+  switchTab("lessons");
+  setTimeout(() => {
+    const lessonKey = _liveSignalData.lesson_key;
+    if (typeof openLesson === "function") openLesson(lessonKey);
+  }, 300);
+  dismissLiveSignal();
+}
+window.openLiveSignalLesson = openLiveSignalLesson;
+
+async function dismissLiveSignal() {
+  _hideLiveSignalBanner();
+  if (!state.userId) return;
+  try {
+    await fetch(`${API}/live-signal/dismiss/${state.userId}`, {method:"POST"});
+  } catch(e) {}
+}
+window.dismissLiveSignal = dismissLiveSignal;
+
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ── BATTLE PASS ──────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+
+async function loadBattlePass() {
+  if (!state.userId) return;
+  try {
+    const d = await fetch(`${API}/season/progress/${state.userId}`).then(r=>r.json());
+    _renderBattlePass(d);
+  } catch(e) { console.warn("bp:", e); }
+}
+
+function _renderBattlePass(d) {
+  const wrap = document.getElementById("battlePassWrap");
+  if (!wrap) return;
+  const col = d.season?.accent_color || "#ff4d6d";
+  const lvl = d.bp_level || 0;
+  const hasClaim = d.claimable_count > 0;
+  wrap.innerHTML = `
+    <div class="bp-header">
+      <div class="bp-header-left">
+        <span class="bp-season-name" style="color:${col}">${d.season?.name || "Сезон 1"}</span>
+        <span class="bp-days-left">${d.days_left} дней осталось</span>
+      </div>
+      <div class="bp-level-badge" style="border-color:${col}">
+        <span class="bp-lvl-num">${lvl}</span>
+        <span class="bp-lvl-lbl">/ 30</span>
+      </div>
+    </div>
+    <div class="bp-xp-bar-wrap">
+      <div class="bp-xp-bar-bg">
+        <div class="bp-xp-bar-fill" style="width:${d.bp_pct}%;background:${col}"></div>
+      </div>
+      <div class="bp-xp-info">
+        <span>XP до след. уровня: ${d.bp_xp_to_next}</span>
+        ${hasClaim ? `<span class="bp-claim-hint" style="color:${col}">${d.claimable_count} наград ждут!</span>` : ''}
+      </div>
+    </div>
+    ${hasClaim ? `
+    <div class="bp-claimable-section">
+      ${(d.claimable||[]).map(r=>`
+        <div class="bp-reward-card ${r.type}" style="border-color:${col}44">
+          <span class="bp-rew-level" style="color:${col}">Ур.${r.level}</span>
+          <span class="bp-rew-label">${r.label}</span>
+          <button class="bp-claim-btn" style="background:${col}" onclick="claimBP(${r.level})">Забрать</button>
+        </div>`).join('')}
+    </div>` : ''}
+    <div class="bp-track" id="bpTrack">
+      ${(d.rewards||[]).map(r=>{
+        const done = r.level <= lvl;
+        const claimed = (d.claimed||[]).includes(r.level);
+        return `
+          <div class="bp-node ${done?'bp-done':''} ${claimed?'bp-claimed':''}">
+            <div class="bp-node-circle" style="${done?`background:${col}`:''}">
+              ${claimed?'✓':r.level}
+            </div>
+            <div class="bp-node-label">${r.label.split(' ').slice(0,2).join(' ')}</div>
+          </div>`;
+      }).join('')}
+    </div>`;
+}
+
+async function claimBP(level) {
+  try {
+    const d = await fetch(`${API}/season/claim`, {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({user_id: state.userId, level})
+    }).then(r=>r.json());
+    if (d.ok) {
+      playSound("questdone");
+      showToast(`🎁 ${d.label}`, "success");
+      loadBattlePass();
+    } else {
+      showToast(d.error||"Ошибка","error");
+    }
+  } catch(e) { showToast("Ошибка","error"); }
+}
+window.claimBP = claimBP;
+
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ── REFERRAL ─────────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+
+async function loadReferral() {
+  if (!state.userId) return;
+  try {
+    const d = await fetch(`${API}/referral/${state.userId}`).then(r=>r.json());
+    _renderReferral(d);
+  } catch(e) { console.warn("referral:", e); }
+}
+
+function _renderReferral(d) {
+  const wrap = document.getElementById("referralWrap");
+  if (!wrap) return;
+  const link = d.ref_link || "";
+  wrap.innerHTML = `
+    <div class="ref-header">⚗️ Реферальная Алхимия</div>
+    <div class="ref-link-box">
+      <span class="ref-link-text" id="refLinkText">${link}</span>
+      <button class="ref-copy-btn" onclick="copyRefLink('${link.replace(/'/g,"\\'")}')">Скопировать</button>
+    </div>
+    <button class="ref-share-btn" onclick="shareRefLink('${link.replace(/'/g,"\\'")}')">📤 Поделиться</button>
+    <div class="ref-stats">
+      <div class="ref-stat">
+        <span class="ref-stat-val">${d.total_referrals}</span>
+        <span class="ref-stat-lbl">приглашено</span>
+      </div>
+      <div class="ref-stat">
+        <span class="ref-stat-val">${d.souls_earned || 0}</span>
+        <span class="ref-stat-lbl">Душ заработано</span>
+      </div>
+    </div>
+    <div class="ref-milestones">
+      ${(d.milestones||[]).map(m=>`
+        <div class="ref-ms ${m.reached?'ref-ms-done':''}">
+          <span class="ref-ms-check">${m.reached?'✓':'○'}</span>
+          <span class="ref-ms-count">${m.count} чел.</span>
+          <span class="ref-ms-reward">${m.reward}</span>
+        </div>`).join('')}
+    </div>`;
+}
+
+function copyRefLink(link) {
+  navigator.clipboard?.writeText(link).then(()=>showToast("Ссылка скопирована ✓","success"))
+    .catch(()=>{
+      const el=document.getElementById("refLinkText");
+      if(el){const r=document.createRange();r.selectNode(el);window.getSelection().removeAllRanges();window.getSelection().addRange(r);}
+    });
+}
+window.copyRefLink = copyRefLink;
+
+function shareRefLink(link) {
+  if (tg) {
+    const text = encodeURIComponent("Крипто Химия — Souls-like обучение SMC. Присоединяйся:");
+    tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(link)}&text=${text}`);
+  } else {
+    copyRefLink(link);
+  }
+}
+window.shareRefLink = shareRefLink;
+
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ── SCHOLAR JOURNAL ──────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+
+async function openScholarJournal() {
+  const modal = document.getElementById("journalModal");
+  if (!modal) return;
+  modal.classList.remove("hidden");
+  try {
+    const d = await fetch(`${API}/scholar-journal/${state.userId}`).then(r=>r.json());
+    const body = modal.querySelector(".journal-body");
+    if (!body) return;
+    const shareText = d.share_text || "";
+    body.innerHTML = `
+      <div class="journal-card">
+        <div class="journal-watermark">⚗️</div>
+        <div class="journal-top">
+          <div class="journal-academy">CHM Smart Money Academy</div>
+          <div class="journal-title">${d.card_title}</div>
+          <div class="journal-name">${d.name}</div>
+        </div>
+        <div class="journal-divider"></div>
+        <div class="journal-stats">
+          <div class="journal-stat">
+            <span class="j-val">${d.level}</span>
+            <span class="j-lbl">Уровень</span>
+          </div>
+          <div class="journal-stat">
+            <span class="j-val">${d.modules_completed}</span>
+            <span class="j-lbl">Модулей</span>
+          </div>
+          <div class="journal-stat">
+            <span class="j-val">${d.boss_wins}</span>
+            <span class="j-lbl">Боссов</span>
+          </div>
+          <div class="journal-stat">
+            <span class="j-val">${d.streak}</span>
+            <span class="j-lbl">Стрик</span>
+          </div>
+        </div>
+        <div class="journal-divider"></div>
+        <div class="journal-rank">${d.rank}</div>
+        <div class="journal-souls">💀 ${(d.souls_total||0).toLocaleString()} Душ накоплено</div>
+      </div>
+      <button class="journal-share-btn" id="journalShareBtn">📤 Поделиться в Telegram</button>
+      <button class="journal-close-btn" onclick="closeJournal()">Закрыть</button>`;
+    document.getElementById("journalShareBtn").onclick = () => shareJournal(shareText);
+  } catch(e) { console.error("journal:", e); }
+}
+window.openScholarJournal = openScholarJournal;
+
+function shareJournal(text) {
+  if (tg) {
+    tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent("https://t.me/CHM_smcbot")}&text=${encodeURIComponent(text)}`);
+  } else {
+    navigator.clipboard?.writeText(text).then(()=>showToast("Скопировано!","success"));
+  }
+}
+window.shareJournal = shareJournal;
+
+function closeJournal() {
+  document.getElementById("journalModal")?.classList.add("hidden");
+}
+window.closeJournal = closeJournal;
+
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ── CLAN RAID ─────────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+
+async function loadRaid() {
+  try {
+    const d = await fetch(`${API}/raid/status`).then(r=>r.json());
+    _renderRaid(d);
+  } catch(e) {}
+}
+
+function _renderRaid(d) {
+  const wrap = document.getElementById("raidWrap");
+  if (!wrap) return;
+
+  if (!d.active) {
+    wrap.innerHTML = `
+      <div class="raid-inactive">
+        <span class="raid-icon">⚔️</span>
+        <div>
+          <div class="raid-inactive-ttl">Клановый Рейд</div>
+          <div class="raid-inactive-sub">Следующий рейд — в понедельник в 10:00 UTC</div>
+        </div>
+      </div>`;
+    return;
+  }
+
+  const boss = d.boss || {};
+  const hpPct = d.hp_max > 0 ? Math.round(d.hp_current / d.hp_max * 100) : 0;
+  const hpCol = hpPct > 50 ? '#00e87a' : hpPct > 25 ? '#f59e0b' : '#ff4d6d';
+  const myEntry = d.participants?.[String(state.userId)];
+  const alreadyAnswered = myEntry?.answered;
+
+  wrap.innerHTML = `
+    <div class="raid-active">
+      <div class="raid-boss-header">
+        <span class="raid-boss-icon">${boss.icon || '💀'}</span>
+        <div>
+          <div class="raid-boss-name">РЕЙД: ${boss.name}</div>
+          <div class="raid-boss-sub">Атакуй вместе с кланом</div>
+        </div>
+      </div>
+      <div class="raid-hp-section">
+        <div class="raid-hp-labels">
+          <span>HP Босса</span>
+          <span style="color:${hpCol};font-weight:700">${(d.hp_current||0).toLocaleString()} / ${(d.hp_max||0).toLocaleString()}</span>
+        </div>
+        <div class="raid-hp-bg">
+          <div class="raid-hp-fill" style="width:${hpPct}%;background:${hpCol}"></div>
+        </div>
+      </div>
+      ${!alreadyAnswered ? `
+      <div class="raid-question-card">
+        <div class="raid-q-label">❓ Вопрос для атаки</div>
+        <div class="raid-q-text">${boss.question || ''}</div>
+        <div class="raid-q-btns">
+          <button class="raid-reveal-btn" onclick="_revealRaidAnswer()">Показать ответ</button>
+        </div>
+        <div class="raid-answer-box hidden" id="raidAnswerBox">
+          <div class="raid-ans-text">${boss.answer || ''}</div>
+          <div class="raid-confirm-row">
+            <span>Ты знал ответ?</span>
+            <button class="raid-yes-btn" onclick="submitRaid(true)">✓ Да (+${boss.souls_reward || 0} душ)</button>
+            <button class="raid-no-btn"  onclick="submitRaid(false)">✕ Нет</button>
+          </div>
+        </div>
+      </div>` : `
+      <div class="raid-done-badge">
+        ✓ Ты уже атаковал в этом рейде!
+        ${myEntry?.is_correct ? `<br>+${boss.souls_reward || 0} душ получено.` : '<br>Урон всё равно нанесён.'}
+      </div>`}
+      <div class="raid-participants">
+        Участников: ${Object.keys(d.participants || {}).length}
+      </div>
+    </div>`;
+}
+
+function _revealRaidAnswer() {
+  const box = document.getElementById("raidAnswerBox");
+  if (box) {
+    box.classList.remove("hidden");
+    const btn = document.querySelector(".raid-reveal-btn");
+    if (btn) btn.style.display = "none";
+  }
+}
+window._revealRaidAnswer = _revealRaidAnswer;
+
+async function submitRaid(isCorrect) {
+  try {
+    const d = await fetch(`${API}/raid/attack`, {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({user_id: state.userId, is_correct: isCorrect})
+    }).then(r=>r.json());
+    if (d.ok) {
+      playSound(d.boss_defeated ? "bosswin" : isCorrect ? "questdone" : "hit");
+      if (tg?.HapticFeedback) tg.HapticFeedback.impactOccurred(d.boss_defeated?"heavy":"medium");
+      if (d.boss_defeated) showToast("💥 БОСС ПОВЕРЖЕН! Клан победил!", "success");
+      else if (isCorrect) showToast(`⚔️ Урон ${d.damage}! +${d.souls_reward} душ`, "success");
+      else showToast(`⚔️ Урон ${d.damage} (ошибка). Учись!`, "info");
+      setTimeout(loadRaid, 500);
+    } else {
+      showToast(d.error||"Ошибка","error");
+    }
+  } catch(e) { showToast("Ошибка","error"); }
+}
+window.submitRaid = submitRaid;

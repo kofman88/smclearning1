@@ -280,6 +280,7 @@
           <span id="actionsLeft">?</span>
         </div>
         <button id="soundBtn" class="hud-sound-btn" onclick="toggleSound()">🔊</button>
+        <button onclick="openScholarJournal()" class="journal-trigger-btn" title="Scholar Journal">📜</button>
       </div>
     </header>
 
@@ -388,11 +389,16 @@
     <div id="tab-leaderboard" class="tab-content">
       <div id="leaderboardPodium" class="lb-podium"></div>
       <div id="leaderboardList"></div>
+      <div id="leaderboardContent"></div>
+      <div id="battlePassWrap"></div>
+      <div id="raidWrap"></div>
     </div>
 
     <!-- HOMUNCULUS TAB (Алхимия) -->
     <div id="tab-homunculus" class="tab-content">
       <div id="catalystWrap"></div>
+      <div id="shopWrap"></div>
+      <div id="referralWrap"></div>
       <div class="hom-screen">
 
         <!-- Header: stage name + status badge -->
@@ -1411,6 +1417,31 @@
         <div class="pvp-result-souls" id="pvpResultSouls"></div>
         <button class="pvp-close-btn" onclick="closePvP()">Закрыть</button>
       </div>
+    </div>
+  </div>
+
+  <!-- ══ MYSTERY BOX MODAL ══════════════════════════════════════════════════ -->
+  <div id="mysteryBoxModal" class="mb-modal hidden" data-opened="0">
+    <div class="mb-backdrop" onclick="closeMysteryBox()"></div>
+    <div class="mb-content">
+      <div class="mb-title">⚗️ Mystery Box</div>
+      <div class="mb-flask" onclick="tapMysteryBox()">
+        <div class="mb-flask-body">
+          <div class="mb-liquid"></div>
+          <div class="mb-sparkles"></div>
+        </div>
+      </div>
+      <div class="mb-tap-hint">Тапни колбу, чтобы открыть</div>
+      <div class="mb-reward hidden"></div>
+      <button class="mb-close-btn" onclick="closeMysteryBox()">Забрать</button>
+    </div>
+  </div>
+
+  <!-- ══ SCHOLAR JOURNAL MODAL ══════════════════════════════════════════════ -->
+  <div id="journalModal" class="journal-modal hidden">
+    <div class="journal-backdrop" onclick="closeJournal()"></div>
+    <div class="journal-wrap">
+      <div class="journal-body"></div>
     </div>
   </div>
 
