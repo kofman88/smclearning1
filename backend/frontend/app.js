@@ -7,7 +7,8 @@ console.log("[CHM] app.js loaded, starting...");
 // ── CONFIG ────────────────────────────────────────────────────────────────
 const API     = "/api";
 const tg      = window.Telegram?.WebApp ?? null;
-const DEV_UID = 445677777;
+const DEV_UID   = 445677777;
+const ADMIN_IDS = new Set([445677777, 705020259]);
 
 // ══════════════════════════════════════════════════════════════════════
 // ── SOUND ENGINE v2 — Web Audio API, zero files ──────────────────────
@@ -605,6 +606,7 @@ function switchTab(name) {
     _clearTabBadge("Alchemy");
   }
   if (name === "quests") loadQuests();
+  if (name === "admin")  loadAdminPanel();
 
   if (tg?.HapticFeedback) tg.HapticFeedback.selectionChanged();
 }
@@ -1985,6 +1987,11 @@ async function init() {
 
     const userId = state.userId || DEV_UID;
     state.userId = userId;
+    // Show admin tab for admin users
+    if (ADMIN_IDS.has(userId)) {
+      const adminBtn = document.getElementById("adminTabBtn");
+      if (adminBtn) adminBtn.classList.remove("hidden");
+    }
     if (_dbgLabel) _dbgLabel.textContent = `v6 | загрузка данных uid=${userId}…`;
     const LOAD_TIMEOUT = 60000; // 60s to handle Render.com cold starts
     const [userRes, modulesRes, questsRes, metaRes, lbRes] = await Promise.all([
@@ -2869,7 +2876,7 @@ function _spawnEvolutionParticles() {
 }
 
 // ══════════════════════════════════════════════════════════════════════════
-// ── SOULS SYSTEM (Dark Souls × SMC) — Phase 1 ────────────────────────────
+// ── SOULS SYSTEM (CHM Souls) — Phase 1 ────────────────────────────
 // ══════════════════════════════════════════════════════════════════════════
 
 /**
@@ -5170,3 +5177,159 @@ async function submitRaid(isCorrect) {
   } catch(e) { showToast("Ошибка","error"); }
 }
 window.submitRaid = submitRaid;
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ADMIN PANEL
+// ══════════════════════════════════════════════════════════════════════════════
+
+const HW_STATUS_LABEL = {
+  idle:     { text: "—",            cls: "" },
+  pending:  { text: "⏳ Ожидает",   cls: "hw-pending" },
+  approved: { text: "✅ Принято",   cls: "hw-approved" },
+  revision: { text: "🔄 Доработка", cls: "hw-revision" },
+  rejected: { text: "⛔ Отклонено", cls: "hw-rejected" },
+};
+
+async function loadAdminPanel() {
+  if (!ADMIN_IDS.has(state.userId)) return;
+  const pendingEl = document.getElementById("adminPendingList");
+  const usersEl   = document.getElementById("adminUsersList");
+  if (!pendingEl || !usersEl) return;
+  pendingEl.innerHTML = '<div class="admin-empty">Загрузка…</div>';
+  usersEl.innerHTML   = '<div class="admin-empty">Загрузка…</div>';
+  try {
+    const res  = await fetch(`${API}/admin/users?admin_id=${state.userId}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const { users = [] } = await res.json();
+
+    const pending = users.filter(u => u.homework_status === "pending");
+    pendingEl.innerHTML = "";
+    if (pending.length === 0) {
+      pendingEl.innerHTML = '<div class="admin-empty">Нет ожидающих проверки</div>';
+    } else {
+      pending.forEach(u => pendingEl.appendChild(buildPendingCard(u)));
+    }
+
+    usersEl.innerHTML = "";
+    if (users.length === 0) {
+      usersEl.innerHTML = '<div class="admin-empty">Нет учеников</div>';
+    } else {
+      users.sort((a, b) => (b.xp || 0) - (a.xp || 0))
+           .forEach(u => usersEl.appendChild(buildUserRow(u)));
+    }
+  } catch (e) {
+    pendingEl.innerHTML = `<div class="admin-empty">Ошибка: ${e.message}</div>`;
+    usersEl.innerHTML = "";
+  }
+}
+
+function _esc(s) {
+  return String(s || "").replace(/[&<>"']/g, c =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+function buildPendingCard(u) {
+  const card = document.createElement("div");
+  card.className = "admin-hw-card";
+  card.dataset.userId  = u.user_id;
+  card.dataset.questId = u.active_quest || "";
+  card.innerHTML = `
+    <div class="admin-hw-meta">
+      <span class="admin-hw-name">${_esc(u.name)}</span>
+      <span class="admin-hw-quest">Модуль ${(u.module_index||0)+1} · ${_esc(u.active_quest||"—")}</span>
+    </div>
+    ${u.has_photo ? `<button class="admin-btn admin-btn--photo" onclick="adminViewPhoto(${u.user_id})">🖼 Фото ДЗ</button>` : ""}
+    <div class="admin-hw-photo-wrap hidden" id="adminPhoto_${u.user_id}"></div>
+    <textarea class="admin-hw-comment" id="adminComment_${u.user_id}"
+      placeholder="Комментарий ученику (при доработке/отказе)…" rows="2"></textarea>
+    <div class="admin-hw-actions">
+      <button class="admin-btn admin-btn--approve"  onclick="adminApprove(${u.user_id},'${_esc(u.active_quest||'')}')">✅ Принять</button>
+      <button class="admin-btn admin-btn--revision" onclick="adminReject(${u.user_id},'${_esc(u.active_quest||'')}','revision')">🔄 Доработка</button>
+      <button class="admin-btn admin-btn--reject"   onclick="adminReject(${u.user_id},'${_esc(u.active_quest||'')}','rejected')">⛔ Отклонить</button>
+    </div>`;
+  return card;
+}
+
+function buildUserRow(u) {
+  const row  = document.createElement("div");
+  row.className = "admin-user-row";
+  const hw   = HW_STATUS_LABEL[u.homework_status] || HW_STATUS_LABEL.idle;
+  const dl   = u.is_expired ? "🔴 Просрочен" : (u.hours_remaining != null ? `${u.hours_remaining}ч` : "—");
+  const str  = u.streak > 0 ? ` 🔥${u.streak}` : "";
+  row.innerHTML = `
+    <div class="admin-user-info">
+      <span class="admin-user-name">${_esc(u.name)}</span>
+      <span class="admin-user-meta">Lvl${u.level} · ${u.xp}XP · М${(u.module_index||0)+1}${str}</span>
+    </div>
+    <div class="admin-user-right">
+      <span class="admin-hw-badge ${hw.cls}">${hw.text}</span>
+      <span class="admin-dl-badge">${dl}</span>
+      <button class="admin-btn admin-btn--extend" onclick="adminExtendDeadline(${u.user_id})">+7д</button>
+    </div>`;
+  return row;
+}
+
+async function adminViewPhoto(userId) {
+  const wrap = document.getElementById(`adminPhoto_${userId}`);
+  if (!wrap) return;
+  if (!wrap.classList.contains("hidden")) { wrap.classList.add("hidden"); return; }
+  wrap.innerHTML = '<div class="admin-empty">Загрузка…</div>';
+  wrap.classList.remove("hidden");
+  try {
+    const res  = await fetch(`${API}/admin/homework_photo/${userId}?admin_id=${state.userId}`);
+    if (!res.ok) throw new Error("Нет фото");
+    const data = await res.json();
+    wrap.innerHTML = `<img src="${data.photo}" class="admin-hw-img" alt="ДЗ">`;
+  } catch (e) {
+    wrap.innerHTML = `<div class="admin-empty">${e.message}</div>`;
+  }
+}
+window.adminViewPhoto = adminViewPhoto;
+
+async function adminApprove(userId, questId) {
+  if (!questId) { showToast("Нет активного квеста", "warn"); return; }
+  const card = document.querySelector(`.admin-hw-card[data-user-id="${userId}"]`);
+  if (card) card.style.opacity = "0.5";
+  try {
+    const res  = await fetch(`${API}/admin/approve`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ admin_id: state.userId, user_id: userId, quest_id: questId }),
+    });
+    const data = await res.json();
+    if (data.ok) { showToast(`✅ Принято — ${userId}`, "success"); setTimeout(loadAdminPanel, 600); }
+    else { showToast("Ошибка: " + (data.detail || "?"), "error"); if (card) card.style.opacity = "1"; }
+  } catch (e) { showToast("Ошибка сети", "error"); if (card) card.style.opacity = "1"; }
+}
+window.adminApprove = adminApprove;
+
+async function adminReject(userId, questId, status) {
+  const comment = document.getElementById(`adminComment_${userId}`)?.value?.trim()
+    || (status === "revision" ? "Нужно доработать." : "Не принято.");
+  const card = document.querySelector(`.admin-hw-card[data-user-id="${userId}"]`);
+  if (card) card.style.opacity = "0.5";
+  try {
+    const res  = await fetch(`${API}/admin/reject`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ admin_id: state.userId, user_id: userId, quest_id: questId, status, comment }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      showToast(status === "revision" ? `🔄 На доработке — ${userId}` : `⛔ Отклонено — ${userId}`, "warn");
+      setTimeout(loadAdminPanel, 600);
+    } else { showToast("Ошибка: " + (data.detail || "?"), "error"); if (card) card.style.opacity = "1"; }
+  } catch (e) { showToast("Ошибка сети", "error"); if (card) card.style.opacity = "1"; }
+}
+window.adminReject = adminReject;
+
+async function adminExtendDeadline(userId) {
+  try {
+    const res  = await fetch(`${API}/admin/extend`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ admin_id: state.userId, user_id: userId, days: 7 }),
+    });
+    const data = await res.json();
+    if (data.ok) { showToast(`📅 Дедлайн до ${data.new_deadline}`, "success"); setTimeout(loadAdminPanel, 600); }
+    else showToast("Ошибка: " + (data.detail || "?"), "error");
+  } catch (e) { showToast("Ошибка сети", "error"); }
+}
+window.adminExtendDeadline = adminExtendDeadline;
