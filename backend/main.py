@@ -901,14 +901,27 @@ async def submit_task(req: QuestSubmitRequest):
             except Exception as e:
                 logger.error("HW notify FAILED → channel %s: %r — falling back to DMs", _channel_id, e)
 
-        # 2. Fallback: individual admin DMs (only if channel delivery failed or no channel set)
+        # 2. Individual admin DMs — always send so admins get buttons even if channel is configured
         if not sent_to_channel:
+            if not _channel_id:
+                logger.warning(
+                    "⚠️  ADMIN_CHANNEL_ID not set — sending HW notification to individual admin DMs. "
+                    "Set ADMIN_CHANNEL_ID env var (negative group/channel ID) so admins get buttons in one place."
+                )
             for aid in _admin_ids:
                 try:
                     _send_hw_notification(aid, admin_text, _photo_snapshot,
                                           _user_id_snapshot, _quest_id_snapshot)
                 except Exception as e:
-                    logger.error("HW notify FAILED → admin DM %s: %r", aid, e)
+                    # 403 = bot was blocked or user never started the bot
+                    err_str = str(e)
+                    if "403" in err_str or "Forbidden" in err_str or "chat not found" in err_str.lower():
+                        logger.error(
+                            "HW notify FAILED → admin DM %s: %r. "
+                            "Admin must /start the bot first. Set ADMIN_CHANNEL_ID instead.", aid, e
+                        )
+                    else:
+                        logger.error("HW notify FAILED → admin DM %s: %r", aid, e)
 
     asyncio.get_running_loop().run_in_executor(None, _dispatch_hw_notifications)
 
