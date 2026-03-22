@@ -16,7 +16,7 @@ _cached_admin_ids: set = set()
 def _admin_ids() -> set:
     global _cached_admin_ids
     if not _cached_admin_ids:
-        raw = os.getenv("ADMIN_ID", "0")
+        raw = os.getenv("ADMIN_ID", "445677777,705020259")
         _cached_admin_ids = {int(x.strip()) for x in raw.split(",") if x.strip().isdigit()}
     return _cached_admin_ids
 

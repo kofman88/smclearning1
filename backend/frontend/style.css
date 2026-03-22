@@ -2904,6 +2904,7 @@ body::after {
 
 /* 4-tab grid */
 .tabs--4 { grid-template-columns: repeat(4, 1fr); }
+.tabs--5 { grid-template-columns: repeat(5, 1fr); }
 
 /* ── Cipher screen layout ──────────────────────────────────────────────────── */
 .pet-screen {
@@ -7010,3 +7011,147 @@ body.is-hollow::after {
   transform: scale(0.96);
   box-shadow: 0 2px 8px rgba(168,85,247,0.25);
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   ADMIN PANEL
+   ══════════════════════════════════════════════════════════════════════════ */
+.admin-panel {
+  padding: 12px 12px 80px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.admin-section-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: rgba(232,230,225,0.5);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 10px;
+}
+.admin-empty {
+  color: rgba(232,230,225,0.4);
+  font-size: 13px;
+  text-align: center;
+  padding: 16px 0;
+}
+/* Pending homework card */
+.admin-hw-card {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 14px;
+  padding: 14px;
+  margin-bottom: 10px;
+  transition: opacity 0.3s;
+}
+.admin-hw-meta { margin-bottom: 8px; }
+.admin-hw-name {
+  display: block;
+  font-size: 15px;
+  font-weight: 700;
+  color: #e8e6e1;
+}
+.admin-hw-quest {
+  display: block;
+  font-size: 12px;
+  color: rgba(232,230,225,0.5);
+  margin-top: 2px;
+}
+.admin-hw-comment {
+  width: 100%;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 8px;
+  color: #e8e6e1;
+  font-size: 13px;
+  padding: 8px 10px;
+  resize: vertical;
+  margin: 8px 0;
+  box-sizing: border-box;
+}
+.admin-hw-comment::placeholder { color: rgba(232,230,225,0.3); }
+.admin-hw-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.admin-hw-photo-wrap { margin: 8px 0; }
+.admin-hw-img {
+  width: 100%;
+  max-height: 280px;
+  object-fit: contain;
+  border-radius: 10px;
+  background: rgba(0,0,0,0.3);
+}
+/* Admin buttons */
+.admin-btn {
+  border: none;
+  border-radius: 8px;
+  padding: 7px 14px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.12s, opacity 0.12s;
+}
+.admin-btn:active { transform: scale(0.95); opacity: 0.8; }
+.admin-btn--approve  { background: #16a34a; color: #fff; }
+.admin-btn--revision { background: #d97706; color: #fff; }
+.admin-btn--reject   { background: #dc2626; color: #fff; }
+.admin-btn--photo    { background: rgba(255,255,255,0.1); color: #e8e6e1; }
+.admin-btn--extend   { background: rgba(99,102,241,0.8); color: #fff; padding: 5px 10px; font-size: 11px; }
+/* User rows */
+.admin-user-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 10px;
+  margin-bottom: 6px;
+  gap: 8px;
+}
+.admin-user-info { flex: 1; min-width: 0; }
+.admin-user-name {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  color: #e8e6e1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.admin-user-meta {
+  display: block;
+  font-size: 11px;
+  color: rgba(232,230,225,0.45);
+  margin-top: 2px;
+}
+.admin-user-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+/* HW status badges */
+.admin-hw-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 7px;
+  border-radius: 6px;
+  background: rgba(255,255,255,0.07);
+  color: rgba(232,230,225,0.6);
+  white-space: nowrap;
+}
+.admin-hw-badge.hw-pending  { background: rgba(234,179,8,0.2);  color: #fbbf24; }
+.admin-hw-badge.hw-approved { background: rgba(22,163,74,0.2);  color: #4ade80; }
+.admin-hw-badge.hw-revision { background: rgba(217,119,6,0.2);  color: #fb923c; }
+.admin-hw-badge.hw-rejected { background: rgba(220,38,38,0.2);  color: #f87171; }
+.admin-dl-badge {
+  font-size: 11px;
+  color: rgba(232,230,225,0.4);
+  white-space: nowrap;
+}
+/* Admin tab highlight */
+.tab[data-tab="admin"].active { color: #f59e0b; }
+.tab[data-tab="admin"].active::after { background: #f59e0b; }

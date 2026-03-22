@@ -327,10 +327,12 @@ class DreamAnswerRequest(BaseModel):
 _cached_admin_ids: set = set()
 
 def _get_admin_ids() -> set:
-    """Parse and cache admin IDs from ADMIN_ID env var."""
+    """Parse and cache admin IDs from ADMIN_ID env var.
+    Expected: ADMIN_ID=445677777,705020259 (comma-separated).
+    """
     global _cached_admin_ids
     if not _cached_admin_ids:
-        raw = os.getenv("ADMIN_ID", "0")
+        raw = os.getenv("ADMIN_ID", "445677777,705020259")
         _cached_admin_ids = {int(x.strip()) for x in raw.split(",") if x.strip().isdigit()}
     return _cached_admin_ids
 

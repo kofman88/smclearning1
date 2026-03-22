@@ -331,7 +331,7 @@
     </div>
 
     <!-- TABS -->
-    <nav class="tabs tabs--4">
+    <nav class="tabs tabs--4" id="mainNav">
       <button class="tab active" data-tab="lessons" onclick="switchTab('lessons')">
         <svg class="tab-icon" viewBox="0 0 20 20" fill="none">
           <rect x="3" y="4" width="14" height="12" rx="2" stroke="currentColor" stroke-width="1.5"/>
@@ -381,6 +381,16 @@
       <div id="leaderboardPodium" class="lb-podium"></div>
       <div id="leaderboardList"></div>
     </div>
+
+    <!-- ADMIN TAB (hidden until admin user detected) -->
+    <button id="adminTabBtn" class="tab hidden" data-tab="admin" onclick="switchTab('admin')">
+      <svg class="tab-icon" viewBox="0 0 20 20" fill="none">
+        <circle cx="10" cy="7" r="3" stroke="currentColor" stroke-width="1.5"/>
+        <path d="M3 17c0-3.3 3.1-6 7-6s7 2.7 7 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        <path d="M15 3l1.5 1.5L13 8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      Админ
+    </button>
 
     <!-- HOMUNCULUS TAB -->
     <div id="tab-homunculus" class="tab-content">
@@ -965,6 +975,24 @@
       <button class="btn-primary" onclick="closeModal('evolutionModal')">
         Потрясающе!
       </button>
+    </div>
+  </div>
+
+  <!-- ADMIN TAB -->
+  <div id="tab-admin" class="tab-content">
+    <div class="admin-panel">
+      <div class="admin-section">
+        <div class="admin-section-title">⏳ Ожидают проверки</div>
+        <div id="adminPendingList" class="admin-pending-list">
+          <div class="admin-empty">Загрузка…</div>
+        </div>
+      </div>
+      <div class="admin-section">
+        <div class="admin-section-title">👥 Все ученики</div>
+        <div id="adminUsersList" class="admin-users-list">
+          <div class="admin-empty">Загрузка…</div>
+        </div>
+      </div>
     </div>
   </div>
 
