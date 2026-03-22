@@ -4987,6 +4987,79 @@ window.closeJournal = closeJournal;
 
 
 // ══════════════════════════════════════════════════════════════════════════════
+// ── IN-APP GUIDE ──────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+
+function openGuide(sectionKeyword) {
+  const modal = document.getElementById("guideModal");
+  if (!modal) return;
+  modal.classList.remove("hidden");
+  document.body.style.overflow = "hidden";
+  // Если передано ключевое слово — открыть нужную секцию и прокрутить к ней
+  if (sectionKeyword) {
+    filterGuide("");
+    const sections = modal.querySelectorAll(".gd-section");
+    for (const sec of sections) {
+      const kw = (sec.dataset.keywords || "").toLowerCase();
+      if (kw.includes(sectionKeyword.toLowerCase())) {
+        const toggle = sec.querySelector(".gd-toggle");
+        const content = sec.querySelector(".gd-content");
+        if (toggle && content && !content.classList.contains("open")) {
+          content.classList.add("open");
+          toggle.classList.add("open");
+        }
+        setTimeout(() => sec.scrollIntoView({ behavior: "smooth", block: "start" }), 80);
+        break;
+      }
+    }
+  }
+  if (tg?.HapticFeedback) tg.HapticFeedback.impactOccurred("light");
+}
+window.openGuide = openGuide;
+
+function closeGuide() {
+  const modal = document.getElementById("guideModal");
+  if (!modal) return;
+  modal.classList.add("hidden");
+  document.body.style.overflow = "";
+}
+window.closeGuide = closeGuide;
+
+function toggleGuideSection(btn) {
+  const content = btn.nextElementSibling;
+  if (!content) return;
+  const isOpen = content.classList.contains("open");
+  content.classList.toggle("open", !isOpen);
+  btn.classList.toggle("open", !isOpen);
+}
+window.toggleGuideSection = toggleGuideSection;
+
+function filterGuide(query) {
+  const q = query.trim().toLowerCase();
+  const sections = document.querySelectorAll("#guideBody .gd-section");
+  sections.forEach(sec => {
+    if (!q) {
+      sec.classList.remove("gd-hidden");
+      return;
+    }
+    const title = sec.querySelector(".gd-toggle-title")?.textContent.toLowerCase() || "";
+    const kw    = (sec.dataset.keywords || "").toLowerCase();
+    const body  = sec.querySelector(".gd-content")?.textContent.toLowerCase() || "";
+    const match = title.includes(q) || kw.includes(q) || body.includes(q);
+    sec.classList.toggle("gd-hidden", !match);
+    // Раскрыть совпадающие секции
+    if (match) {
+      const content = sec.querySelector(".gd-content");
+      const toggle  = sec.querySelector(".gd-toggle");
+      if (content) content.classList.add("open");
+      if (toggle)  toggle.classList.add("open");
+    }
+  });
+}
+window.filterGuide = filterGuide;
+
+
+// ══════════════════════════════════════════════════════════════════════════════
 // ── CLAN RAID ─────────────────────────────────────────────────────────────────
 // ══════════════════════════════════════════════════════════════════════════════
 
