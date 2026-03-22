@@ -249,11 +249,12 @@
 
     <!-- HEADER -->
     <header class="app-header">
+      <!-- LEFT: avatar + имя + ранг -->
       <div class="header-left">
-        <div class="header-avatar">
-          <svg viewBox="0 0 36 36" class="avatar-svg" id="headerAvatarSvg">
-            <!-- заполняется JS через getRankSVG() -->
-          </svg>
+        <div class="header-avatar" onclick="openScholarJournal()">
+          <svg viewBox="0 0 36 36" class="avatar-svg" id="headerAvatarSvg"></svg>
+          <!-- Кольцо уровня -->
+          <div class="avatar-level-ring" id="avatarLevelRing"></div>
         </div>
         <div class="header-user-info">
           <span class="header-username" id="headerUsername">CHM</span>
@@ -261,28 +262,31 @@
         </div>
       </div>
 
+      <!-- RIGHT: только 3 пилла + звук -->
       <div class="header-right">
-        <div class="hud-pill hud-souls" id="hudSouls">
+        <div class="hud-pill hud-souls">
           <span class="hud-icon">⚡</span>
           <span class="hud-val" id="hudSoulsVal">0</span>
         </div>
-        <div class="hud-pill hud-xp" id="hudXP">
+        <div class="hud-pill hud-xp">
           <span class="hud-icon">★</span>
           <span class="hud-val" id="hudXPVal">0</span>
           <span class="hud-label">XP</span>
         </div>
-        <div class="hud-pill hud-level" id="hudLevel">
+        <div class="hud-pill hud-level">
           <span class="hud-label">Lvl</span>
           <span class="hud-val" id="hudLevelVal">1</span>
         </div>
-        <div class="hud-pill hud-actions" id="actionsHUD">
-          <span class="hud-icon">⚡</span>
-          <span id="actionsLeft">?</span>
-        </div>
         <button id="soundBtn" class="hud-sound-btn" onclick="toggleSound()">🔊</button>
-        <button onclick="openScholarJournal()" class="journal-trigger-btn" title="Scholar Journal">📜</button>
       </div>
     </header>
+
+    <!-- XP прогресс-полоска (под хедером, над модулем) -->
+    <div class="xp-strip-wrap">
+      <div class="xp-strip-bg">
+        <div class="xp-strip-fill" id="xpStripFill" style="width:0%"></div>
+      </div>
+    </div>
 
     <!-- Module progress area -->
     <div class="module-progress-area">
@@ -340,37 +344,53 @@
     </div>
 
     <!-- TABS -->
-    <nav class="tabs tabs--4">
-      <button class="tab active" data-tab="lessons" onclick="switchTab('lessons')">
-        <svg class="tab-icon" viewBox="0 0 20 20" fill="none">
-          <rect x="3" y="4" width="14" height="12" rx="2" stroke="currentColor" stroke-width="1.5"/>
-          <line x1="6" y1="8" x2="14" y2="8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-          <line x1="6" y1="11" x2="11" y2="11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-        </svg>
-        Уроки
+    <nav class="tabs-nav" id="tabsNav">
+      <button class="tn-tab active" data-tab="lessons" onclick="switchTab('lessons')">
+        <div class="tn-icon-wrap" id="tnIconLessons">
+          <svg class="tn-svg" viewBox="0 0 20 20" fill="none">
+            <rect x="3" y="4" width="14" height="12" rx="2" stroke="currentColor" stroke-width="1.5"/>
+            <line x1="6" y1="8" x2="14" y2="8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            <line x1="6" y1="11" x2="11" y2="11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <span class="tn-label">Уроки</span>
       </button>
-      <button class="tab" data-tab="quests" onclick="switchTab('quests')">
-        <svg class="tab-icon" viewBox="0 0 20 20" fill="none">
-          <path d="M10 3L12.5 8H18L13.5 11L15.5 16.5L10 13.5L4.5 16.5L6.5 11L2 8H7.5L10 3Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
-        </svg>
-        Квесты
+
+      <button class="tn-tab" data-tab="quests" onclick="switchTab('quests')">
+        <div class="tn-icon-wrap" id="tnIconQuests">
+          <svg class="tn-svg" viewBox="0 0 20 20" fill="none">
+            <path d="M10 3L12.5 8H18L13.5 11L15.5 16.5L10 13.5L4.5 16.5L6.5 11L2 8H7.5L10 3Z"
+                  stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <span class="tn-label">Квесты</span>
       </button>
-      <button class="tab" data-tab="leaderboard" onclick="switchTab('leaderboard')">
-        <svg class="tab-icon" viewBox="0 0 20 20" fill="none">
-          <rect x="2" y="10" width="4" height="8" rx="1" stroke="currentColor" stroke-width="1.5"/>
-          <rect x="8" y="6" width="4" height="12" rx="1" stroke="currentColor" stroke-width="1.5"/>
-          <rect x="14" y="2" width="4" height="16" rx="1" stroke="currentColor" stroke-width="1.5"/>
-        </svg>
-        Рейтинг
+
+      <button class="tn-tab" data-tab="leaderboard" onclick="switchTab('leaderboard')" style="position:relative">
+        <!-- Точка уведомления (управляется JS) -->
+        <span class="tn-badge" id="tnBadgeLeaderboard" style="display:none"></span>
+        <div class="tn-icon-wrap" id="tnIconLeaderboard">
+          <svg class="tn-svg" viewBox="0 0 20 20" fill="none">
+            <rect x="2" y="10" width="4" height="8" rx="1" stroke="currentColor" stroke-width="1.5"/>
+            <rect x="8" y="6" width="4" height="12" rx="1" stroke="currentColor" stroke-width="1.5"/>
+            <rect x="14" y="2" width="4" height="16" rx="1" stroke="currentColor" stroke-width="1.5"/>
+          </svg>
+        </div>
+        <span class="tn-label">Рейтинг</span>
       </button>
-      <button class="tab" data-tab="homunculus" onclick="switchTab('homunculus')">
-        <svg class="tab-icon" viewBox="0 0 20 20" fill="none">
-          <!-- Alchemical flask icon -->
-          <path d="M7 3h6M8 3v5L4 15a2 2 0 001.8 2.9h8.4A2 2 0 0016 15L12 8V3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
-          <circle cx="8.5" cy="13" r="1" fill="currentColor" opacity="0.7"/>
-          <circle cx="11.5" cy="15" r="0.8" fill="currentColor" opacity="0.5"/>
-        </svg>
-        Алхимия
+
+      <button class="tn-tab" data-tab="homunculus" onclick="switchTab('homunculus')" style="position:relative">
+        <!-- Точка если катализатор активен или рейд -->
+        <span class="tn-badge tn-badge-red" id="tnBadgeAlchemy" style="display:none"></span>
+        <div class="tn-icon-wrap" id="tnIconHomunculus">
+          <svg class="tn-svg" viewBox="0 0 20 20" fill="none">
+            <path d="M7 3h6M8 3v5L4 15a2 2 0 001.8 2.9h8.4A2 2 0 0016 15L12 8V3"
+                  stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+            <circle cx="8.5" cy="13" r="1" fill="currentColor" opacity="0.7"/>
+            <circle cx="11.5" cy="15" r="0.8" fill="currentColor" opacity="0.5"/>
+          </svg>
+        </div>
+        <span class="tn-label">Алхимия</span>
       </button>
     </nav>
 
@@ -396,6 +416,18 @@
 
     <!-- HOMUNCULUS TAB (Алхимия) -->
     <div id="tab-homunculus" class="tab-content">
+      <div class="actions-hud-card" id="actionsHUDCard">
+        <div class="ahc-title">Действия на сегодня</div>
+        <div class="ahc-dots" id="ahcDots"></div>
+        <div class="ahc-info">
+          <span id="ahcLabel">? / ? действий</span>
+          <span id="ahcReset" class="ahc-reset"></span>
+        </div>
+        <div class="cat-chance-row" id="catChanceRow" style="display:none">
+          <span>⚗️ Шанс Катализатора:</span>
+          <span class="cat-chance-val" id="catChanceVal">0%</span>
+        </div>
+      </div>
       <div id="catalystWrap"></div>
       <div id="shopWrap"></div>
       <div id="referralWrap"></div>
