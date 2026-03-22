@@ -278,6 +278,7 @@
           <span class="hud-val" id="hudLevelVal">1</span>
         </div>
         <button id="soundBtn" class="hud-sound-btn" onclick="toggleSound()">🔊</button>
+        <button class="hud-help-btn" onclick="openGuide()" title="Как играть">?</button>
       </div>
     </header>
 
@@ -1476,6 +1477,320 @@
       <div class="journal-body"></div>
     </div>
   </div>
+
+  <!-- ══ GUIDE MODAL ═══════════════════════════════════════════════════════ -->
+  <div id="guideModal" class="guide-modal hidden">
+    <div class="guide-backdrop" onclick="closeGuide()"></div>
+    <div class="guide-wrap">
+      <div class="guide-header">
+        <span class="guide-header-icon">📖</span>
+        <span class="guide-header-title">Как играть</span>
+        <button class="guide-close-btn" onclick="closeGuide()">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M1 1L13 13M13 1L1 13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </div>
+
+      <div class="guide-search-wrap">
+        <input class="guide-search" type="text" placeholder="🔍 Поиск по гайду..." oninput="filterGuide(this.value)" />
+      </div>
+
+      <div class="guide-body" id="guideBody">
+
+        <!-- ── 1. ОБЩАЯ МЕХАНИКА ── -->
+        <div class="gd-section" data-keywords="как играть механика правила суть">
+          <button class="gd-toggle" onclick="toggleGuideSection(this)">
+            <span class="gd-toggle-icon">🎮</span>
+            <span class="gd-toggle-title">Как устроена игра</span>
+            <span class="gd-chevron">▾</span>
+          </button>
+          <div class="gd-content open">
+            <p>CHM Academy — это обучение трейдингу в игровом формате. Ты проходишь уроки, отвечаешь на вопросы и зарабатываешь ресурсы.</p>
+            <div class="gd-grid">
+              <div class="gd-card">
+                <div class="gd-card-icon">📚</div>
+                <div class="gd-card-text"><strong>Уроки</strong> — изучай теорию SMC (Smart Money Concepts)</div>
+              </div>
+              <div class="gd-card">
+                <div class="gd-card-icon">⚡</div>
+                <div class="gd-card-text"><strong>Квесты</strong> — отвечай на вопросы, зарабатывай Души и XP</div>
+              </div>
+              <div class="gd-card">
+                <div class="gd-card-icon">🏆</div>
+                <div class="gd-card-text"><strong>Рейтинг</strong> — соревнуйся с другими учениками</div>
+              </div>
+              <div class="gd-card">
+                <div class="gd-card-icon">⚗️</div>
+                <div class="gd-card-text"><strong>Алхимия</strong> — особые механики прокачки и испытания</div>
+              </div>
+            </div>
+            <div class="gd-tip">💡 Тапни на аватар в верхнем левом углу — откроется твой Scholar Journal со статистикой.</div>
+          </div>
+        </div>
+
+        <!-- ── 2. ДУШИ ── -->
+        <div class="gd-section" data-keywords="души soul валюта деньги ресурс потеря смерть">
+          <button class="gd-toggle" onclick="toggleGuideSection(this)">
+            <span class="gd-toggle-icon">⚡</span>
+            <span class="gd-toggle-title">Души — основная валюта</span>
+            <span class="gd-chevron">▾</span>
+          </button>
+          <div class="gd-content">
+            <p>Души (⚡) — это главная валюта академии. Они нужны для покупок в магазине, активации механик и участия в рейтинге.</p>
+            <div class="gd-table">
+              <div class="gd-row gd-row-header"><span>Действие</span><span>Изменение душ</span></div>
+              <div class="gd-row gd-plus"><span>Правильный ответ</span><span>+Souls</span></div>
+              <div class="gd-row gd-plus"><span>Победа над боссом</span><span>+Больше Souls</span></div>
+              <div class="gd-row gd-plus"><span>Квест завершён</span><span>+Бонус</span></div>
+              <div class="gd-row gd-plus"><span>Ежедневный бонус</span><span>+Souls</span></div>
+              <div class="gd-row gd-minus"><span>Неправильный ответ</span><span>−Штраф</span></div>
+              <div class="gd-row gd-minus"><span>Просрочен дедлайн</span><span>−Штраф</span></div>
+            </div>
+            <div class="gd-tip">⚠️ При нулевых душах часть теряется «на земле» — как в Dark Souls. Победи следующего босса, чтобы вернуть!</div>
+          </div>
+        </div>
+
+        <!-- ── 3. XP И УРОВНИ ── -->
+        <div class="gd-section" data-keywords="xp опыт уровень ранг прокачка level up повышение">
+          <button class="gd-toggle" onclick="toggleGuideSection(this)">
+            <span class="gd-toggle-icon">★</span>
+            <span class="gd-toggle-title">XP и уровни трейдера</span>
+            <span class="gd-chevron">▾</span>
+          </button>
+          <div class="gd-content">
+            <p>XP (опыт) накапливается за правильные ответы и растёт быстрее при стриках. Уровень определяет твой ранг и цвет кольца аватара.</p>
+            <div class="gd-levels">
+              <div class="gd-level" style="--lc:#78716c"><span class="gd-lnum">1</span><span>Наблюдатель рынка</span><span class="gd-lxp">0 XP</span></div>
+              <div class="gd-level" style="--lc:#00d4ff"><span class="gd-lnum">2</span><span>Охотник за ликвидностью</span><span class="gd-lxp">300 XP</span></div>
+              <div class="gd-level" style="--lc:#a78bfa"><span class="gd-lnum">3</span><span>Снайпер ордер-блоков</span><span class="gd-lxp">700 XP</span></div>
+              <div class="gd-level" style="--lc:#00e87a"><span class="gd-lnum">4</span><span>SMC Практик</span><span class="gd-lxp">1300 XP</span></div>
+              <div class="gd-level" style="--lc:#f59e0b"><span class="gd-lnum">5</span><span>Smart Money Инсайдер</span><span class="gd-lxp">2100 XP</span></div>
+              <div class="gd-level" style="--lc:#fbbf24"><span class="gd-lnum">6</span><span>Институциональный призрак</span><span class="gd-lxp">3200 XP</span></div>
+              <div class="gd-level" style="--lc:#ff4d6d"><span class="gd-lnum">7</span><span>Архитектор рынка</span><span class="gd-lxp">5000 XP</span></div>
+            </div>
+            <div class="gd-tip">💡 Полоска под шапкой показывает прогресс к следующему уровню в реальном времени.</div>
+          </div>
+        </div>
+
+        <!-- ── 4. СТРИК ── -->
+        <div class="gd-section" data-keywords="стрик комбо серия ответы подряд бонус">
+          <button class="gd-toggle" onclick="toggleGuideSection(this)">
+            <span class="gd-toggle-icon">🔥</span>
+            <span class="gd-toggle-title">Стрики и комбо</span>
+            <span class="gd-chevron">▾</span>
+          </button>
+          <div class="gd-content">
+            <p>Правильные ответы подряд создают <strong>стрик</strong> — чем длиннее, тем больше XP и Душ за каждый ответ.</p>
+            <div class="gd-table">
+              <div class="gd-row gd-row-header"><span>Стрик</span><span>Эффект</span></div>
+              <div class="gd-row"><span>1–9 подряд</span><span>Базовая награда</span></div>
+              <div class="gd-row gd-plus"><span>🔥 10 подряд</span><span>Комбо-бонус + звук</span></div>
+              <div class="gd-row gd-plus"><span>💥 50 подряд</span><span>Усиленный бонус</span></div>
+              <div class="gd-row gd-plus"><span>⚡ 100 подряд</span><span>Максимальный бонус</span></div>
+            </div>
+            <div class="gd-tip">⚠️ Неправильный ответ обнуляет стрик. Думай перед ответом!</div>
+          </div>
+        </div>
+
+        <!-- ── 5. ДЕДЛАЙНЫ ── -->
+        <div class="gd-section" data-keywords="дедлайн время таймер 72 часа просрочка штраф">
+          <button class="gd-toggle" onclick="toggleGuideSection(this)">
+            <span class="gd-toggle-icon">⏱️</span>
+            <span class="gd-toggle-title">Дедлайны модулей (72 часа)</span>
+            <span class="gd-chevron">▾</span>
+          </button>
+          <div class="gd-content">
+            <p>Каждый модуль имеет дедлайн — <strong>72 часа</strong> с момента открытия. Таймер виден под названием модуля.</p>
+            <div class="gd-steps">
+              <div class="gd-step"><span class="gd-step-dot" style="background:#00e87a"></span><span>Зелёный — более 24 часов, всё ок</span></div>
+              <div class="gd-step"><span class="gd-step-dot" style="background:#f59e0b"></span><span>Жёлтый — менее 24 часов, торопись</span></div>
+              <div class="gd-step"><span class="gd-step-dot" style="background:#f97316"></span><span>Оранжевый — менее 6 часов</span></div>
+              <div class="gd-step"><span class="gd-step-dot" style="background:#ff4d6d"></span><span>Красный и мигает — менее 1 часа!</span></div>
+            </div>
+            <p style="margin-top:10px">Если дедлайн истёк:</p>
+            <div class="gd-table">
+              <div class="gd-row"><span>Оплатить штраф</span><span>+48 часов продления</span></div>
+              <div class="gd-row"><span>Перекупить доступ</span><span>Новые 72 часа (если штрафы исчерпаны)</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── 6. ДЕЙСТВИЯ ── -->
+        <div class="gd-section" data-keywords="действия actions пул кружочки сброс катализатор шанс">
+          <button class="gd-toggle" onclick="toggleGuideSection(this)">
+            <span class="gd-toggle-icon">🔄</span>
+            <span class="gd-toggle-title">Действия — ежедневный пул</span>
+            <span class="gd-chevron">▾</span>
+          </button>
+          <div class="gd-content">
+            <p>Каждый день у тебя есть лимит <strong>действий</strong> — они показаны зелёными кружочками во вкладке <strong>Алхимия</strong>.</p>
+            <div class="gd-grid">
+              <div class="gd-card">
+                <div class="gd-card-icon">🟢</div>
+                <div class="gd-card-text"><strong>Зелёный кружок</strong> — действие доступно</div>
+              </div>
+              <div class="gd-card">
+                <div class="gd-card-icon">⚪</div>
+                <div class="gd-card-text"><strong>Пустой кружок</strong> — действие использовано</div>
+              </div>
+            </div>
+            <p style="margin-top:10px">Каждое использованное действие увеличивает <strong>шанс стать Катализатором</strong> (⚗️). Сброс происходит в полночь UTC.</p>
+            <div class="gd-tip">💡 Шанс Катализатора отображается в % под кружочками. Чем выше уровень — тем выше максимальный шанс.</div>
+          </div>
+        </div>
+
+        <!-- ── 7. КАТАЛИЗАТОР ── -->
+        <div class="gd-section" data-keywords="катализатор catalyst изотоп атака нейтрализация активный">
+          <button class="gd-toggle" onclick="toggleGuideSection(this)">
+            <span class="gd-toggle-icon">⚗️</span>
+            <span class="gd-toggle-title">Катализатор Распада</span>
+            <span class="gd-chevron">▾</span>
+          </button>
+          <div class="gd-content">
+            <p>Катализатор — особый режим, когда один игрок становится «боссом» для всего сообщества на определённое время.</p>
+            <div class="gd-steps">
+              <div class="gd-step"><span class="gd-step-num">1</span><span>Накапливай шанс через ежедневные действия</span></div>
+              <div class="gd-step"><span class="gd-step-num">2</span><span>Стань Катализатором — другие атакуют тебя вопросами</span></div>
+              <div class="gd-step"><span class="gd-step-num">3</span><span>Выживи — заработай изотопы и бонусные Души</span></div>
+              <div class="gd-step"><span class="gd-step-num">4</span><span>Сам атакуй чужих катализаторов, используя изотопы</span></div>
+            </div>
+            <div class="gd-tip">🔴 Красная точка на вкладке Алхимия означает, что Катализатор сейчас активен — иди атаковать!</div>
+          </div>
+        </div>
+
+        <!-- ── 8. РЕЙД ── -->
+        <div class="gd-section" data-keywords="рейд raid клан boss совместный атака понедельник">
+          <button class="gd-toggle" onclick="toggleGuideSection(this)">
+            <span class="gd-toggle-icon">⚔️</span>
+            <span class="gd-toggle-title">Клановый Рейд</span>
+            <span class="gd-chevron">▾</span>
+          </button>
+          <div class="gd-content">
+            <p>Раз в неделю (по понедельникам в 10:00 UTC) открывается <strong>Клановый Рейд</strong> — совместный бой с боссом.</p>
+            <div class="gd-steps">
+              <div class="gd-step"><span class="gd-step-num">1</span><span>Открой вкладку <strong>Рейтинг</strong> — увидишь босса рейда</span></div>
+              <div class="gd-step"><span class="gd-step-num">2</span><span>Прочитай вопрос и нажми «Показать ответ»</span></div>
+              <div class="gd-step"><span class="gd-step-num">3</span><span>Честно ответь — знал или нет</span></div>
+              <div class="gd-step"><span class="gd-step-num">4</span><span>Каждый правильный ответ снимает HP с босса</span></div>
+            </div>
+            <div class="gd-tip">🔴 Красная точка на вкладке Рейтинг — рейд активен и ты ещё не атаковал!</div>
+          </div>
+        </div>
+
+        <!-- ── 9. BATTLE PASS ── -->
+        <div class="gd-section" data-keywords="battle pass сезон награды уровень пропуск забрать">
+          <button class="gd-toggle" onclick="toggleGuideSection(this)">
+            <span class="gd-toggle-icon">🎖️</span>
+            <span class="gd-toggle-title">Сезонный Battle Pass</span>
+            <span class="gd-chevron">▾</span>
+          </button>
+          <div class="gd-content">
+            <p>Battle Pass — сезонная система наград. Каждый правильный ответ приносит BP-XP, который повышает уровень пропуска (макс 30).</p>
+            <div class="gd-grid">
+              <div class="gd-card">
+                <div class="gd-card-icon">📈</div>
+                <div class="gd-card-text">Накапливай XP — повышай уровень пропуска</div>
+              </div>
+              <div class="gd-card">
+                <div class="gd-card-icon">🎁</div>
+                <div class="gd-card-text">Каждый уровень открывает новую награду</div>
+              </div>
+              <div class="gd-card">
+                <div class="gd-card-icon">✋</div>
+                <div class="gd-card-text">Нажми «Забрать» — награды не приходят автоматически!</div>
+              </div>
+              <div class="gd-card">
+                <div class="gd-card-icon">📅</div>
+                <div class="gd-card-text">Сезон длится ограниченное время — не пропусти!</div>
+              </div>
+            </div>
+            <div class="gd-tip">🟡 Жёлтая точка на Рейтинге — есть незабранные награды Battle Pass.</div>
+          </div>
+        </div>
+
+        <!-- ── 10. ЭСТУС ── -->
+        <div class="gd-section" data-keywords="эстус колба flask жизнь hp костёр bonfire">
+          <button class="gd-toggle" onclick="toggleGuideSection(this)">
+            <span class="gd-toggle-icon">🧪</span>
+            <span class="gd-toggle-title">Эстус-колбы (жизни)</span>
+            <span class="gd-chevron">▾</span>
+          </button>
+          <div class="gd-content">
+            <p>Эстус-колбы — твои «жизни». Тратятся при определённых ошибках и ситуациях. Восполняются у <strong>Костра (Bonfire)</strong>.</p>
+            <div class="gd-steps">
+              <div class="gd-step"><span class="gd-step-dot" style="background:#f59e0b"></span><span>Колба полная — есть жизнь</span></div>
+              <div class="gd-step"><span class="gd-step-dot" style="background:#334155"></span><span>Колба пустая — потрачена</span></div>
+            </div>
+            <p style="margin-top:10px">Купить дополнительные колбы можно в <strong>Магазине</strong> (вкладка Алхимия).</p>
+          </div>
+        </div>
+
+        <!-- ── 11. МАГАЗИН ── -->
+        <div class="gd-section" data-keywords="магазин shop покупка купить товар колба изотоп">
+          <button class="gd-toggle" onclick="toggleGuideSection(this)">
+            <span class="gd-toggle-icon">🛒</span>
+            <span class="gd-toggle-title">Магазин</span>
+            <span class="gd-chevron">▾</span>
+          </button>
+          <div class="gd-content">
+            <p>Магазин находится в <strong>вкладке Алхимия</strong>. Покупки оплачиваются Душами (⚡).</p>
+            <div class="gd-table">
+              <div class="gd-row gd-row-header"><span>Товар</span><span>Для чего</span></div>
+              <div class="gd-row"><span>🧪 Эстус-колба</span><span>Восстанови жизнь</span></div>
+              <div class="gd-row"><span>⚗️ Изотоп</span><span>Активируй Катализатор</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── 12. РЕФЕРАЛЫ ── -->
+        <div class="gd-section" data-keywords="реферал пригласить друга ссылка бонус приглашение">
+          <button class="gd-toggle" onclick="toggleGuideSection(this)">
+            <span class="gd-toggle-icon">👥</span>
+            <span class="gd-toggle-title">Реферальная система</span>
+            <span class="gd-chevron">▾</span>
+          </button>
+          <div class="gd-content">
+            <p>Приглашай друзей через свою реферальную ссылку в <strong>вкладке Алхимия</strong>. За каждого приглашённого получаешь бонусные Души.</p>
+            <div class="gd-steps">
+              <div class="gd-step"><span class="gd-step-num">1</span><span>Перейди в Алхимию → найди блок «Реферальная Алхимия»</span></div>
+              <div class="gd-step"><span class="gd-step-num">2</span><span>Скопируй ссылку или нажми «Поделиться»</span></div>
+              <div class="gd-step"><span class="gd-step-num">3</span><span>Когда друг зарегистрируется — получишь бонус</span></div>
+            </div>
+            <div class="gd-tip">💡 Чем больше приглашённых — тем лучше вехи (milestones) и награды.</div>
+          </div>
+        </div>
+
+        <!-- ── 13. ЕЖЕДНЕВНЫЙ ВЫЗОВ ── -->
+        <div class="gd-section" data-keywords="вызов daily challenge ежедневный бонус">
+          <button class="gd-toggle" onclick="toggleGuideSection(this)">
+            <span class="gd-toggle-icon">⚔️</span>
+            <span class="gd-toggle-title">Ежедневный Вызов</span>
+            <span class="gd-chevron">▾</span>
+          </button>
+          <div class="gd-content">
+            <p>Кнопка <strong>«⚔️ Вызов»</strong> на главном экране — ежедневное задание. Выполни его раз в день для получения бонусных Душ и XP.</p>
+            <div class="gd-tip">💡 Если кнопка выделена восклицательным знаком (!) — вызов доступен, не упусти!</div>
+          </div>
+        </div>
+
+        <!-- ── 14. ШЕРИНГ ── -->
+        <div class="gd-section" data-keywords="поделиться telegram share победа босс">
+          <button class="gd-toggle" onclick="toggleGuideSection(this)">
+            <span class="gd-toggle-icon">📤</span>
+            <span class="gd-toggle-title">Поделиться победой</span>
+            <span class="gd-chevron">▾</span>
+          </button>
+          <div class="gd-content">
+            <p>После победы над боссом появляется кнопка <strong>«📤 Поделиться победой»</strong>.</p>
+            <p style="margin-top:8px">Нажатие отправляет в Telegram сообщение с твоей статистикой и приглашением для друзей — помогает привлечь новых учеников в Academy.</p>
+            <div class="gd-tip">💡 Из Scholar Journal (тап на аватар) тоже можно поделиться своей статистикой.</div>
+          </div>
+        </div>
+
+      </div><!-- /guide-body -->
+    </div><!-- /guide-wrap -->
+  </div><!-- /guideModal -->
 
   <script src="/static/app.js?v=6"></script>
 </body>
