@@ -42,6 +42,9 @@ smc_quest/
    - `WEBHOOK_URL` = `https://smc-quest-miniapp.onrender.com`
    - `ADMIN_ID` = твой Telegram ID
    - `DATA_DIR` = `/tmp` (или `/data` если есть Render Disk)
+   - `APP_TOKEN_NAME` = название внутриигрового токена (по умолчанию `CHM`)
+   - `APP_TOKEN_SYMBOL` = тикер токена (по умолчанию `CHM`)
+   - `APP_TOKEN_EMOJI` = эмодзи токена (например, `🧪`)
    - `APP_TOKEN_NAME` = название внутриигрового токена (например, `Academy Soul`)
    - `APP_TOKEN_SYMBOL` = тикер токена (например, `ASM`)
    - `APP_TOKEN_EMOJI` = эмодзи токена (например, `🧪`)

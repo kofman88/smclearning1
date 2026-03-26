@@ -17,6 +17,8 @@ class TokenConfig:
 
 def get_token_config() -> TokenConfig:
     return TokenConfig(
+        name=os.getenv("APP_TOKEN_NAME", "CHM"),
+        symbol=os.getenv("APP_TOKEN_SYMBOL", "CHM"),
         name=os.getenv("APP_TOKEN_NAME", "Soul"),
         symbol=os.getenv("APP_TOKEN_SYMBOL", "SOUL"),
         emoji=os.getenv("APP_TOKEN_EMOJI", "⚡"),

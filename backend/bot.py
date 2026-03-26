@@ -28,6 +28,7 @@ bot = telebot.TeleBot(BOT_TOKEN, parse_mode="Markdown", threaded=False)
 
 MINIAPP_URL = f"{WEBHOOK_URL}/static/index.html" if WEBHOOK_URL else ""
 TOKEN_LABELS = get_token_labels()
+TOKEN_SYMBOL = TOKEN_LABELS["symbol"]
 TOKEN_UNIT_RU = TOKEN_LABELS["unit_ru"]
 
 
@@ -76,6 +77,7 @@ def cmd_start(message: types.Message):
                     try:
                         bot.send_message(inviter_id,
                             f"🧪 <b>Новый ученик!</b>\n\n"
+                            f"По твоей ссылке пришёл новый трейдер.\n+100 {TOKEN_SYMBOL}\n"
                             f"По твоей ссылке пришёл новый трейдер.\n+100 {TOKEN_UNIT_RU} тебе!\n"
                             f"Всего приглашено: {len(refs)}",
                             parse_mode="HTML")
@@ -84,6 +86,7 @@ def cmd_start(message: types.Message):
 
                     bot.reply_to(message,
                         "⚗️ <b>Добро пожаловать в CHM Academy!</b>\n\n"
+                        f"Ты пришёл по реферальной ссылке. +50 {TOKEN_SYMBOL}\n"
                         f"Ты пришёл по реферальной ссылке. +50 {TOKEN_UNIT_RU} тебе!\n"
                         "Нажми кнопку ниже чтобы начать обучение:",
                         parse_mode="HTML",
