@@ -42,6 +42,13 @@ smc_quest/
    - `WEBHOOK_URL` = `https://smc-quest-miniapp.onrender.com`
    - `ADMIN_ID` = твой Telegram ID
    - `DATA_DIR` = `/tmp` (или `/data` если есть Render Disk)
+   - `APP_TOKEN_NAME` = название внутриигрового токена (по умолчанию `CHM`)
+   - `APP_TOKEN_SYMBOL` = тикер токена (по умолчанию `CHM`)
+   - `APP_TOKEN_EMOJI` = эмодзи токена (например, `🧪`)
+   - `APP_TOKEN_DECIMALS` = число знаков после запятой ончейн (обычно `9`)
+   - `APP_TOKEN_TOTAL_SUPPLY` = общий объём эмиссии (например, `1000000000`)
+   - `APP_TOKEN_NETWORK` = сеть запуска (`TON`, `BSC`, `Base` и т.д.)
+   - `APP_TOKEN_DEX_PAIR` = основная торговая пара (`TON/USDT`, `USDT/ASM` и т.д.)
 
 ## ⚠️ Важно: прогресс на Render Free
 
@@ -68,3 +75,23 @@ uvicorn main:app --reload --port 8000
 - `/approve user_id quest_id` — принять задание
 - `/reject user_id quest_id [комментарий]` — отклонить
 - `/extend user_id дни` — продлить дедлайн
+
+## Tokenomics API (DEX/CEX readiness)
+
+Добавлены служебные эндпоинты для подготовки к запуску токена и контроля инфляции:
+
+- `GET /api/tokenomics/config` — текущая конфигурация токена из `.env`.
+- `POST /api/tokenomics/launch-plan` — проверка готовности к DEX/CEX по метрикам:
+  - holders
+  - active_users_30d
+  - liquidity_usd
+  - volume_7d_usd
+- `POST /api/tokenomics/emission` — адаптивный дневной cap эмиссии на основе:
+  - active_users_24h
+  - burn_24h
+
+Рекомендуемый безопасный путь:
+1. Закрытая бета + anti-sybil.
+2. DEX листинг только с глубокой ликвидностью и vesting.
+3. Несколько недель стабильного retention/объёмов.
+4. Только после этого переговоры с CEX.

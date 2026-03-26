@@ -154,6 +154,7 @@ from catalyst import (
     drain_hourly as cat_drain_hourly, award_isotope as cat_award_isotope,
     get_player_info as cat_player_info,
 )
+from tokenomics import get_token_config, get_token_labels, build_launch_plan, estimate_daily_emission_cap
 
 @asynccontextmanager
 async def lifespan(application: FastAPI):
@@ -2887,3 +2888,51 @@ async def _weekly_raid_loop():
                         pass
         except Exception as e:
             logger.error("_weekly_raid_loop: %r", e)
+
+
+# ── TOKENOMICS / DEX / CEX READINESS ─────────────────────────────────────────
+
+class TokenLaunchPlanRequest(BaseModel):
+    holders: int
+    active_users_30d: int
+    liquidity_usd: float
+    volume_7d_usd: float
+
+
+class TokenEmissionRequest(BaseModel):
+    active_users_24h: int
+    burn_24h: float
+
+
+@app.get("/api/tokenomics/config")
+async def tokenomics_config():
+    cfg = get_token_config()
+    labels = get_token_labels()
+    return {
+        "name": cfg.name,
+        "symbol": cfg.symbol,
+        "emoji": cfg.emoji,
+        "decimals": cfg.decimals,
+        "total_supply": cfg.total_supply,
+        "launch_network": cfg.launch_network,
+        "dex_pair": cfg.dex_pair,
+        "labels": labels,
+    }
+
+
+@app.post("/api/tokenomics/launch-plan")
+async def tokenomics_launch_plan(req: TokenLaunchPlanRequest):
+    return build_launch_plan(
+        holders=req.holders,
+        active_users_30d=req.active_users_30d,
+        liquidity_usd=req.liquidity_usd,
+        volume_7d_usd=req.volume_7d_usd,
+    )
+
+
+@app.post("/api/tokenomics/emission")
+async def tokenomics_emission(req: TokenEmissionRequest):
+    return estimate_daily_emission_cap(
+        active_users_24h=req.active_users_24h,
+        burn_24h=req.burn_24h,
+    )
