@@ -154,6 +154,7 @@ from catalyst import (
     drain_hourly as cat_drain_hourly, award_isotope as cat_award_isotope,
     get_player_info as cat_player_info,
 )
+from tokenomics import get_token_config, get_token_labels, build_launch_plan, estimate_daily_emission_cap
 
 
 def _token_config() -> dict:
@@ -2982,6 +2983,16 @@ async def tokenomics_config():
         "total_supply": cfg["total_supply"],
         "launch_network": cfg["launch_network"],
         "dex_pair": cfg["dex_pair"],
+    cfg = get_token_config()
+    labels = get_token_labels()
+    return {
+        "name": cfg.name,
+        "symbol": cfg.symbol,
+        "emoji": cfg.emoji,
+        "decimals": cfg.decimals,
+        "total_supply": cfg.total_supply,
+        "launch_network": cfg.launch_network,
+        "dex_pair": cfg.dex_pair,
         "labels": labels,
     }
 
@@ -2989,6 +3000,7 @@ async def tokenomics_config():
 @app.post("/api/tokenomics/launch-plan")
 async def tokenomics_launch_plan(req: TokenLaunchPlanRequest):
     return _build_launch_plan(
+    return build_launch_plan(
         holders=req.holders,
         active_users_30d=req.active_users_30d,
         liquidity_usd=req.liquidity_usd,
@@ -2999,6 +3011,7 @@ async def tokenomics_launch_plan(req: TokenLaunchPlanRequest):
 @app.post("/api/tokenomics/emission")
 async def tokenomics_emission(req: TokenEmissionRequest):
     return _estimate_daily_emission_cap(
+    return estimate_daily_emission_cap(
         active_users_24h=req.active_users_24h,
         burn_24h=req.burn_24h,
     )
