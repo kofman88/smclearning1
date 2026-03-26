@@ -19,6 +19,8 @@ def get_token_config() -> TokenConfig:
     return TokenConfig(
         name=os.getenv("APP_TOKEN_NAME", "CHM"),
         symbol=os.getenv("APP_TOKEN_SYMBOL", "CHM"),
+        name=os.getenv("APP_TOKEN_NAME", "Soul"),
+        symbol=os.getenv("APP_TOKEN_SYMBOL", "SOUL"),
         emoji=os.getenv("APP_TOKEN_EMOJI", "⚡"),
         decimals=int(os.getenv("APP_TOKEN_DECIMALS", "9")),
         total_supply=int(os.getenv("APP_TOKEN_TOTAL_SUPPLY", "1000000000")),
@@ -30,10 +32,12 @@ def get_token_config() -> TokenConfig:
 
 def get_token_labels() -> Dict[str, str]:
     cfg = get_token_config()
+    unit = os.getenv("APP_TOKEN_UNIT_RU", "токенов")
     return {
         "name": cfg.name,
         "symbol": cfg.symbol,
         "emoji": cfg.emoji,
+        "unit_ru": unit,
     }
 
 
