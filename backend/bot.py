@@ -26,6 +26,7 @@ def is_admin(uid: int) -> bool:
 bot = telebot.TeleBot(BOT_TOKEN, parse_mode="Markdown", threaded=False)
 
 MINIAPP_URL = f"{WEBHOOK_URL}/static/index.html" if WEBHOOK_URL else ""
+TOKEN_SYMBOL = os.getenv("APP_TOKEN_SYMBOL", "CHM").strip() or "CHM"
 
 
 def make_main_keyboard():
@@ -73,7 +74,7 @@ def cmd_start(message: types.Message):
                     try:
                         bot.send_message(inviter_id,
                             f"🧪 <b>Новый ученик!</b>\n\n"
-                            f"По твоей ссылке пришёл новый трейдер.\n+100 Душ тебе!\n"
+                            f"По твоей ссылке пришёл новый трейдер.\n+100 {TOKEN_SYMBOL}\n"
                             f"Всего приглашено: {len(refs)}",
                             parse_mode="HTML")
                     except Exception:
@@ -81,7 +82,7 @@ def cmd_start(message: types.Message):
 
                     bot.reply_to(message,
                         "⚗️ <b>Добро пожаловать в CHM Academy!</b>\n\n"
-                        "Ты пришёл по реферальной ссылке. +50 Душ тебе!\n"
+                        f"Ты пришёл по реферальной ссылке. +50 {TOKEN_SYMBOL}\n"
                         "Нажми кнопку ниже чтобы начать обучение:",
                         parse_mode="HTML",
                         reply_markup=make_main_keyboard())
