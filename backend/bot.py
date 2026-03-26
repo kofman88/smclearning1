@@ -27,6 +27,7 @@ def is_admin(uid: int) -> bool:
 bot = telebot.TeleBot(BOT_TOKEN, parse_mode="Markdown", threaded=False)
 
 MINIAPP_URL = f"{WEBHOOK_URL}/static/index.html" if WEBHOOK_URL else ""
+TOKEN_SYMBOL = os.getenv("APP_TOKEN_SYMBOL", "CHM").strip() or "CHM"
 TOKEN_LABELS = get_token_labels()
 TOKEN_SYMBOL = TOKEN_LABELS["symbol"]
 TOKEN_UNIT_RU = TOKEN_LABELS["unit_ru"]
