@@ -8179,4 +8179,20 @@ body, .app-container, .tab-content-area { overflow-x: hidden; max-width: 100vw; 
 .chm-wallet-actions { margin-bottom: 10px; }
 .chm-wallet-save-btn { width: 100%; }
 .chm-wallet-status { font-size: 13px; text-align: center; min-height: 20px; }
+
+/* ── SHOP TAB WALLET BANNER ─────────────────────────────────────────────── */
+.shop-tab-wallet-btn {
+  display: flex; align-items: center; gap: 8px;
+  margin: 12px 12px 4px;
+  padding: 10px 14px;
+  background: rgba(200,168,78,0.08);
+  border: 1px solid rgba(200,168,78,0.25);
+  border-radius: 12px;
+  cursor: pointer;
+  font-size: 14px; color: var(--souls-gold);
+  transition: background 0.2s;
+}
+.shop-tab-wallet-btn:active { background: rgba(200,168,78,0.15); }
+.shop-tab-wallet-arrow { margin-left: auto; font-size: 13px; opacity: 0.6; }
+
 .tn-tab[data-tab="admin"].active .tn-label { color: #f59e0b; }
