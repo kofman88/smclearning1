@@ -4533,15 +4533,15 @@ body.frenzy-mode .bg-overlay {
   margin-top: 1px;
 }
 
-/* ── SOULS FLOAT PARTICLES ───────────────────────────────────────────── */
-.souls-float-layer {
+/* ── CHM FLOAT PARTICLES ─────────────────────────────────────────────── */
+.chm-float-layer {
   position: fixed;
   inset: 0;
   pointer-events: none;
   z-index: 9990;
 }
 
-.soul-particle {
+.chm-particle {
   position: absolute;
   font-size: 13px;
   font-weight: 700;
@@ -4559,7 +4559,7 @@ body.frenzy-mode .bg-overlay {
   100% { transform: translateY(-70px) scale(0.8); opacity: 0; }
 }
 
-.soul-particle.losing {
+.chm-particle.losing {
   color: var(--souls-red2);
   text-shadow: var(--souls-red-glow);
   animation: soulSink 1s ease-in forwards;
@@ -4642,7 +4642,7 @@ body.is-hollow::after {
   margin-bottom: 20px;
 }
 
-.souls-gold { color: var(--souls-gold); font-weight: 700; }
+.chm-gold { color: var(--souls-gold); font-weight: 700; }
 
 .btn-hollow-exit {
   width: 100%;
@@ -4671,8 +4671,8 @@ body.is-hollow::after {
   letter-spacing: 0.03em;
 }
 
-/* ── SOULS DROP OVERLAY ──────────────────────────────────────────────── */
-.souls-drop-overlay {
+/* ── CHM DROP OVERLAY ────────────────────────────────────────────────── */
+.chm-drop-overlay {
   position: fixed;
   inset: 0;
   z-index: 9994;
@@ -4688,13 +4688,13 @@ body.is-hollow::after {
   100% { opacity: 1; background: rgba(0,0,0,0.92); }
 }
 
-.souls-drop-content {
+.chm-drop-content {
   text-align: center;
   padding: 40px 24px;
   max-width: 320px;
 }
 
-.souls-drop-title {
+.chm-drop-title {
   font-size: 52px;
   font-weight: 900;
   letter-spacing: 0.1em;
@@ -4709,7 +4709,7 @@ body.is-hollow::after {
   50%       { opacity: 0.8; text-shadow: 0 0 50px rgba(192,57,43,1); }
 }
 
-.souls-drop-amount {
+.chm-drop-amount {
   font-size: 32px;
   font-weight: 800;
   color: var(--souls-gold);
@@ -4718,23 +4718,23 @@ body.is-hollow::after {
   font-family: var(--font-mono);
 }
 
-.souls-drop-desc {
+.chm-drop-desc {
   font-size: 14px;
   color: rgba(232,230,225,0.7);
   line-height: 1.7;
   margin-bottom: 28px;
 }
 
-.souls-drop-desc em { color: var(--souls-red2); font-style: normal; font-weight: 700; }
+.chm-drop-desc em { color: var(--souls-red2); font-style: normal; font-weight: 700; }
 
-.btn-souls-retry {
+.btn-chm-retry {
   background: linear-gradient(135deg, rgba(200,168,78,0.2), rgba(200,168,78,0.08)) !important;
   border: 1.5px solid rgba(200,168,78,0.4) !important;
   color: var(--souls-gold) !important;
 }
 
-/* ── DROPPED SOULS INDICATOR (on quests) ────────────────────────────── */
-.souls-dropped-banner {
+/* ── DROPPED CHM INDICATOR (on quests) ──────────────────────────────── */
+.chm-dropped-banner {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -4758,7 +4758,7 @@ body.is-hollow::after {
 .dropped-label { font-size: 11px; color: var(--souls-red2); font-weight: 600; letter-spacing: 0.05em; }
 .dropped-amount { font-size: 15px; color: var(--souls-gold); font-weight: 700; font-family: var(--font-mono); }
 
-.btn-retrieve-souls {
+.btn-retrieve-chm {
   padding: 6px 12px;
   background: rgba(200,168,78,0.12);
   border: 1px solid rgba(200,168,78,0.3);
@@ -4769,10 +4769,10 @@ body.is-hollow::after {
   cursor: pointer;
   transition: all 0.2s;
 }
-.btn-retrieve-souls:hover { background: rgba(200,168,78,0.22); }
+.btn-retrieve-chm:hover { background: rgba(200,168,78,0.22); }
 
-/* ── SOULS MULTIPLIER BADGE ──────────────────────────────────────────── */
-.souls-mult-badge {
+/* ── CHM MULTIPLIER BADGE ────────────────────────────────────────────── */
+.chm-mult-badge {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -4808,17 +4808,17 @@ body.is-hollow::after {
   50%       { box-shadow: 0 0 16px rgba(232,117,26,0.3); }
 }
 
-/* ── TAP → SOUL RIPPLE ───────────────────────────────────────────────── */
-.souls-tap-ripple {
+/* ── TAP → CHM RIPPLE ────────────────────────────────────────────────── */
+.chm-tap-ripple {
   position: absolute;
   border-radius: 50%;
   border: 1.5px solid rgba(200,168,78,0.6);
   pointer-events: none;
   transform: translate(-50%, -50%) scale(0);
-  animation: soulsTapRipple 0.6s ease-out forwards;
+  animation: chmTapRipple 0.6s ease-out forwards;
 }
 
-@keyframes soulsTapRipple {
+@keyframes chmTapRipple {
   0%   { transform: translate(-50%, -50%) scale(0);   opacity: 1; }
   100% { transform: translate(-50%, -50%) scale(4);   opacity: 0; }
 }
@@ -4975,7 +4975,7 @@ body.is-hollow::after {
   font-style: italic;
 }
 
-.boss-souls-stake {
+.boss-chm-stake {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -5112,7 +5112,7 @@ body.is-hollow::after {
   50%       { transform: scale(1.15); }
 }
 
-.boss-souls-hud {
+.boss-chm-hud {
   font-family: var(--font-mono);
   font-size: 14px;
   font-weight: 700;
@@ -5284,8 +5284,8 @@ body.is-hollow::after {
   50%       { opacity: 0.75; }
 }
 
-.death-souls-info { margin-bottom: 20px; }
-.death-souls-dropped {
+.death-chm-info { margin-bottom: 20px; }
+.death-chm-dropped {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -5403,7 +5403,7 @@ body.is-hollow::after {
 .vs-label { font-size: 10px; color: rgba(232,230,225,0.4); letter-spacing: 0.08em; }
 .vs-value { font-size: 18px; font-weight: 800; color: var(--souls-gold); font-family: var(--font-mono); }
 
-.victory-souls-earned {
+.victory-chm-earned {
   font-size: 22px;
   font-weight: 800;
   color: var(--souls-gold);
@@ -5411,7 +5411,7 @@ body.is-hollow::after {
   margin-bottom: 8px;
   font-family: var(--font-mono);
 }
-.victory-souls-retrieved {
+.victory-chm-retrieved {
   font-size: 15px;
   color: #00e87a;
   margin-bottom: 20px;
@@ -5869,7 +5869,7 @@ body.is-hollow::after {
   margin-bottom: 16px;
 }
 .daily-reward-label { font-size: 12px; color: rgba(232,230,225,0.5); }
-.daily-reward-souls { font-size: 16px; font-weight: 700; color: #c8a84e; }
+.daily-reward-chm { font-size: 16px; font-weight: 700; color: #c8a84e; }
 .daily-question {
   font-size: 14px; font-weight: 600;
   color: #e8e6e1;
@@ -5902,7 +5902,7 @@ body.is-hollow::after {
 }
 .daily-result-icon { font-size: 36px; margin-bottom: 8px; }
 .daily-result-text { font-size: 15px; font-weight: 600; color: #e8e6e1; margin-bottom: 6px; }
-.daily-souls-won  { font-size: 20px; font-weight: 800; color: #c8a84e; margin-bottom: 6px; }
+.daily-chm-won  { font-size: 20px; font-weight: 800; color: #c8a84e; margin-bottom: 6px; }
 .daily-streak-update { font-size: 12px; color: #f97316; margin-bottom: 14px; }
 .daily-completed { text-align: center; padding: 20px 0; }
 .daily-done-icon { font-size: 32px; margin-bottom: 8px; }
@@ -6095,7 +6095,7 @@ body.is-hollow::after {
   padding: 1px 6px;
 }
 .clan-lb-name { font-size: 13px; color: #e8e6e1; flex: 1; }
-.clan-lb-souls { font-size: 12px; color: #c8a84e; font-weight: 600; }
+.clan-lb-chm { font-size: 12px; color: #c8a84e; font-weight: 600; }
 .clan-lb-members { font-size: 11px; color: rgba(232,230,225,0.35); }
 
 /* ── Contribute Modal ─────────────────────────────────────────────────────── */
@@ -6115,7 +6115,7 @@ body.is-hollow::after {
   text-align: center;
 }
 .contribute-title { font-size: 16px; font-weight: 700; color: #c8a84e; margin-bottom: 8px; }
-.contribute-souls-avail { font-size: 12px; color: rgba(232,230,225,0.5); margin-bottom: 14px; }
+.contribute-chm-avail { font-size: 12px; color: rgba(232,230,225,0.5); margin-bottom: 14px; }
 .contribute-input {
   width: 100%; box-sizing: border-box;
   background: rgba(232,230,225,0.05);
@@ -6214,7 +6214,7 @@ body.is-hollow::after {
   border-color: rgba(200,168,78,0.7);
   box-shadow: 0 0 10px rgba(200,168,78,0.3);
 }
-.roulette-souls-balance {
+.roulette-chm-balance {
   text-align: center; font-size: 12px; color: rgba(232,230,225,0.5);
   margin: 10px 0 6px;
 }
@@ -6474,7 +6474,7 @@ body.is-hollow::after {
   background: rgba(255,255,255,0.04); border-radius: 10px; padding: 12px;
   margin-bottom: 12px;
 }
-.pvp-result-souls { text-align: center; font-size: 16px; font-weight: 700; color: #c8a84e; margin-bottom: 12px; }
+.pvp-result-chm { text-align: center; font-size: 16px; font-weight: 700; color: #c8a84e; margin-bottom: 12px; }
 .pvp-close-btn {
   width: 100%; padding: 10px;
   background: transparent; border: 1px solid rgba(232,230,225,0.1);
@@ -6984,19 +6984,19 @@ body.is-hollow::after {
   font-size: 13px; color: rgba(232,230,225,0.55);
   margin-top: 6px; line-height: 1.5;
 }
-.synth-souls-award {
+.synth-chm-award {
   display: flex; align-items: baseline; gap: 6px;
   margin-top: 16px;
   animation: synth-text-fade 0.5s ease forwards;
   animation-delay: 0.8s; opacity: 0;
 }
-.synth-souls-num {
+.synth-chm-num {
   font-size: 42px; font-weight: 900;
   color: #c8a84e;
   font-family: 'JetBrains Mono', monospace;
   text-shadow: 0 0 20px rgba(200,168,78,0.6);
 }
-.synth-souls-label {
+.synth-chm-label {
   font-size: 18px; color: rgba(200,168,78,0.7);
   font-weight: 600;
 }
@@ -7141,9 +7141,9 @@ body.is-hollow::after {
 .hud-icon { font-size: 11px; }
 .hud-label { font-size: 10px; opacity: 0.7; }
 
-.hud-souls { border-color: rgba(99,102,241,0.4); }
-.hud-souls .hud-icon { color: #818cf8; }
-.hud-souls .hud-val  { color: #c7d2fe; }
+.hud-chm { border-color: rgba(99,102,241,0.4); }
+.hud-chm .hud-icon { color: #818cf8; }
+.hud-chm .hud-val  { color: #c7d2fe; }
 
 .hud-xp { border-color: rgba(251,191,36,0.4); }
 .hud-xp .hud-icon { color: #fbbf24; }
@@ -8062,7 +8062,7 @@ body, .app-container, .tab-content-area { overflow-x: hidden; max-width: 100vw; 
 .j-val{display:block;font-size:20px;font-weight:800;color:#6366f1}
 .j-lbl{display:block;font-size:10px;color:#64748b;margin-top:2px}
 .journal-rank{font-size:13px;color:#94a3b8;margin-bottom:6px;text-align:center}
-.journal-souls{font-size:12px;color:#6366f1;font-weight:600;text-align:center}
+.journal-chm{font-size:12px;color:#6366f1;font-weight:600;text-align:center}
 .journal-share-btn{width:100%;padding:14px;border-radius:12px;border:none;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;font-size:14px;font-weight:700;cursor:pointer;margin-bottom:8px}
 .journal-close-btn{width:100%;padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,.1);background:transparent;color:#64748b;font-size:13px;cursor:pointer}
 
@@ -8126,4 +8126,57 @@ body, .app-container, .tab-content-area { overflow-x: hidden; max-width: 100vw; 
 .admin-hw-badge.hw-revision { background: rgba(217,119,6,0.2);  color: #fb923c; }
 .admin-hw-badge.hw-rejected { background: rgba(220,38,38,0.2);  color: #f87171; }
 .admin-dl-badge { font-size: 11px; color: rgba(232,230,225,0.4); white-space: nowrap; }
+
+/* ── CHM WALLET MODAL ─────────────────────────────────────────────────── */
+.chm-wallet-modal {
+  position: fixed; inset: 0;
+  z-index: 9600;
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+}
+.chm-wallet-backdrop {
+  position: absolute; inset: 0;
+  background: rgba(0,0,0,0.75);
+}
+.chm-wallet-content {
+  position: relative;
+  width: 100%; max-width: 340px;
+  background: #0f0f18;
+  border: 1px solid rgba(200,168,78,0.35);
+  border-radius: 16px;
+  padding: 0;
+  overflow: hidden;
+}
+.chm-wallet-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.chm-wallet-title { font-size: 16px; font-weight: 700; color: #c8a84e; }
+.chm-wallet-close {
+  background: none; border: none; color: rgba(232,230,225,0.4);
+  font-size: 18px; cursor: pointer; line-height: 1; padding: 2px 6px;
+}
+.chm-wallet-body { padding: 20px; }
+.chm-wallet-balance-row {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 18px;
+}
+.chm-wallet-label { font-size: 13px; color: rgba(232,230,225,0.5); }
+.chm-wallet-balance { font-size: 20px; font-weight: 800; color: #c8a84e; font-family: var(--font-mono); }
+.chm-wallet-addr-row { margin-bottom: 16px; }
+.chm-wallet-addr-label { display: block; font-size: 12px; color: rgba(232,230,225,0.5); margin-bottom: 6px; }
+.chm-wallet-addr-input {
+  width: 100%; padding: 10px 12px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(200,168,78,0.25);
+  border-radius: 10px;
+  color: #e8e6e1; font-size: 12px; font-family: var(--font-mono);
+  outline: none; box-sizing: border-box;
+}
+.chm-wallet-addr-input:focus { border-color: rgba(200,168,78,0.6); }
+.chm-wallet-addr-hint { font-size: 10px; color: rgba(232,230,225,0.3); margin-top: 4px; }
+.chm-wallet-actions { margin-bottom: 10px; }
+.chm-wallet-save-btn { width: 100%; }
+.chm-wallet-status { font-size: 13px; text-align: center; min-height: 20px; }
 .tn-tab[data-tab="admin"].active .tn-label { color: #f59e0b; }

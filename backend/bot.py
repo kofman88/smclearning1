@@ -63,11 +63,11 @@ def cmd_start(message: types.Message):
                 st = get_user_state(user_id)
                 if not st.get("referred_by"):
                     st["referred_by"] = inviter_id
-                    st["souls"] = round(st.get("souls", 0) + 50, 1)
+                    st["chm"] = round(st.get("chm", 0) + 50, 1)
 
                     inv_st = get_user_state(inviter_id)
-                    inv_st["souls"] = round(inv_st.get("souls", 0) + 100, 1)
-                    inv_st["referral_souls_earned"] = inv_st.get("referral_souls_earned", 0) + 100
+                    inv_st["chm"] = round(inv_st.get("chm", 0) + 100, 1)
+                    inv_st["referral_chm_earned"] = inv_st.get("referral_chm_earned", 0) + 100
                     refs = inv_st.setdefault("referrals", [])
                     if user_id not in refs:
                         refs.append(user_id)
@@ -78,8 +78,7 @@ def cmd_start(message: types.Message):
                     try:
                         bot.send_message(inviter_id,
                             f"🧪 <b>Новый ученик!</b>\n\n"
-                            f"По твоей ссылке пришёл новый трейдер.\n+100 {TOKEN_SYMBOL}\n"
-                            f"По твоей ссылке пришёл новый трейдер.\n+100 {TOKEN_UNIT_RU} тебе!\n"
+                            f"По твоей ссылке пришёл новый трейдер. +100 CHM тебе!\n"
                             f"Всего приглашено: {len(refs)}",
                             parse_mode="HTML")
                     except Exception:
@@ -87,8 +86,7 @@ def cmd_start(message: types.Message):
 
                     bot.reply_to(message,
                         "⚗️ <b>Добро пожаловать в CHM Academy!</b>\n\n"
-                        f"Ты пришёл по реферальной ссылке. +50 {TOKEN_SYMBOL}\n"
-                        f"Ты пришёл по реферальной ссылке. +50 {TOKEN_UNIT_RU} тебе!\n"
+                        "Ты пришёл по реферальной ссылке. +50 CHM тебе!\n"
                         "Нажми кнопку ниже чтобы начать обучение:",
                         parse_mode="HTML",
                         reply_markup=make_main_keyboard())
@@ -629,11 +627,11 @@ SHOP_ITEMS = [
         "hours": 3,
     },
     {
-        "id": "souls_300",
-        "name": "💀 300 Душ",
-        "desc": "Экстренное пополнение резерва.",
+        "id": "chm_300",
+        "name": "⚡ 300 CHM",
+        "desc": "Экстренное пополнение резерва CHM.",
         "stars": 50,
-        "effect": "souls_bonus",
+        "effect": "chm_bonus",
         "amount": 300,
     },
 ]
@@ -715,17 +713,17 @@ def payment_done(message):
                 st["revival_stored"] = st.get("revival_stored", 0) + 1
 
         elif effect == "estus_refill":
-            st["estus_flasks"] = st.get("estus_flasks", 0) + item["count"]
-            msg = f"⚗️ +{item['count']} Estus-фласки. Используй с умом."
+            st["chm_flasks"] = st.get("chm_flasks", 0) + item["count"]
+            msg = f"⚗️ +{item['count']} подсказки. Используй с умом."
 
         elif effect == "double_tap":
             exp = (datetime.utcnow() + timedelta(hours=item["hours"])).isoformat()
             st["double_tap_until"] = exp
             msg = f"⚡ Множитель ×2 активен на {item['hours']}ч!"
 
-        elif effect == "souls_bonus":
-            st["souls"] = round(st.get("souls", 0) + item["amount"], 2)
-            msg = f"💀 +{item['amount']} Душ зачислено. Баланс: {st['souls']:.0f}"
+        elif effect == "chm_bonus":
+            st["chm"] = round(st.get("chm", 0) + item["amount"], 2)
+            msg = f"⚡ +{item['amount']} CHM зачислено. Баланс: {st['chm']:.0f}"
 
         save_progress()
         bot.send_message(user_id,
