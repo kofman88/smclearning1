@@ -264,7 +264,7 @@
 
       <!-- RIGHT: только 3 пилла + звук -->
       <div class="header-right">
-        <div class="hud-pill hud-chm">
+        <div class="hud-pill hud-chm" onclick="openCHMWallet()" style="cursor:pointer" title="CHM Кошелёк">
           <span class="hud-icon">⚡</span>
           <span class="hud-val" id="hudCHMVal">0</span>
         </div>
@@ -394,6 +394,18 @@
         <span class="tn-label">Алхимия</span>
       </button>
 
+      <button class="tn-tab" data-tab="shop" onclick="switchTab('shop')">
+        <div class="tn-icon-wrap" id="tnIconShop">
+          <svg class="tn-svg" viewBox="0 0 20 20" fill="none">
+            <path d="M3 5h14l-1.5 8H4.5L3 5Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+            <path d="M3 5L2 2H1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            <circle cx="7" cy="17" r="1.2" fill="currentColor"/>
+            <circle cx="13" cy="17" r="1.2" fill="currentColor"/>
+          </svg>
+        </div>
+        <span class="tn-label">Магазин</span>
+      </button>
+
       <!-- ADMIN TAB — hidden until admin UID detected -->
       <button id="adminTabBtn" class="tn-tab hidden" data-tab="admin" onclick="switchTab('admin')">
         <div class="tn-icon-wrap">
@@ -445,6 +457,17 @@
       </div>
     </div>
 
+    <!-- SHOP TAB (Магазин) -->
+    <div id="tab-shop" class="tab-content">
+      <div class="shop-tab-wallet-btn" onclick="openCHMWallet()">
+        <span>⚡</span>
+        <span id="shopTabCHMBal">0 CHM</span>
+        <span class="shop-tab-wallet-arrow">› Кошелёк TON</span>
+      </div>
+      <div id="shopWrap"></div>
+      <div id="referralWrap"></div>
+    </div>
+
     <!-- HOMUNCULUS TAB (Алхимия) -->
     <div id="tab-homunculus" class="tab-content">
       <div class="actions-hud-card" id="actionsHUDCard">
@@ -460,8 +483,6 @@
         </div>
       </div>
       <div id="catalystWrap"></div>
-      <div id="shopWrap"></div>
-      <div id="referralWrap"></div>
       <div class="hom-screen">
 
         <!-- Header: stage name + status badge -->

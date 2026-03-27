@@ -602,11 +602,16 @@ function switchTab(name) {
   }
   if (name === "homunculus") {
     loadHomunculus();
-    loadShop();
-    loadReferral();
     loadCatalyst();
     // Убрать бейдж при открытии
     _clearTabBadge("Alchemy");
+  }
+  if (name === "shop") {
+    loadShop();
+    loadReferral();
+    // Обновить баланс CHM в шапке магазина
+    const shopBal = document.getElementById("shopTabCHMBal");
+    if (shopBal) shopBal.textContent = `${Math.floor(state.chm || 0)} CHM`;
   }
   if (name === "quests") loadQuests();
   if (name === "admin")  loadAdminPanel();
@@ -2895,6 +2900,8 @@ function updateCHMHUD(s) {
   if (!s) return;
   const soulsEl = document.getElementById("hudCHMVal");
   if (soulsEl) soulsEl.textContent = Math.floor(s.chm ?? 0);
+  const shopBal = document.getElementById("shopTabCHMBal");
+  if (shopBal) shopBal.textContent = `${Math.floor(s.chm ?? 0)} CHM`;
   updateEstusHUD(s.estus_flasks ?? 3, s.estus_max ?? 3);
 }
 
