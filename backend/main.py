@@ -90,8 +90,15 @@ def _new_session_token(user_id: int) -> str:
     return token
 
 def _check_session(user_id: int, token: Optional[str]) -> bool:
-    """Return True if token matches stored session for user_id (or no token stored yet)."""
+    """Return True if token matches stored session for user_id.
+
+    When SESSION_STRICT=true, requests without a session token are rejected (403).
+    Default is false (soft enforcement) for backwards compatibility.
+    """
+    strict = os.getenv("SESSION_STRICT", "false").lower() == "true"
     if not token:
+        if strict:
+            return False  # strict mode: reject token-less requests
         return True   # soft enforcement: allow requests without token
     stored = _session_tokens.get(user_id)
     if not stored:
@@ -130,10 +137,12 @@ from progress import (
     PET_LEVEL_XP,
     # Evolution + DNA
     check_and_update_evolution, EVOLUTION_STAGES, update_trader_dna, get_trader_dna,
-    # Souls system
-    add_souls, spend_souls, drop_souls, retrieve_souls, burn_dropped_souls,
+    # CHM system
+    add_chm, spend_chm, drop_chm, retrieve_chm, burn_dropped_chm,
     use_estus_flask, refill_estus, check_hollow, exit_hollow, update_title,
-    get_souls_state, get_streak_multiplier,
+    get_chm_state, get_streak_multiplier,
+    # Back-compat aliases
+    add_souls, spend_souls, drop_souls, retrieve_souls, burn_dropped_souls, get_souls_state,
 )
 from market_feed import refresh_market_data, start_market_feed_loop, get_cached_pulse
 from oracle_engine import generate_oracle
@@ -156,72 +165,6 @@ from catalyst import (
 )
 from tokenomics import get_token_config, get_token_labels, build_launch_plan, estimate_daily_emission_cap
 
-
-def _token_config() -> dict:
-    return {
-        "name": os.getenv("APP_TOKEN_NAME", "CHM"),
-        "symbol": os.getenv("APP_TOKEN_SYMBOL", "CHM"),
-        "emoji": os.getenv("APP_TOKEN_EMOJI", "⚡"),
-        "decimals": int(os.getenv("APP_TOKEN_DECIMALS", "9")),
-        "total_supply": int(os.getenv("APP_TOKEN_TOTAL_SUPPLY", "1000000000")),
-        "launch_network": os.getenv("APP_TOKEN_NETWORK", "TON"),
-        "dex_pair": os.getenv("APP_TOKEN_DEX_PAIR", "TON/USDT"),
-    }
-
-
-def _token_labels() -> dict:
-    cfg = _token_config()
-    return {
-        "name": cfg["name"],
-        "symbol": cfg["symbol"],
-        "emoji": cfg["emoji"],
-    }
-
-
-def _build_launch_plan(*, holders: int, active_users_30d: int, liquidity_usd: float, volume_7d_usd: float) -> dict:
-    dex_ready = holders >= 500 and active_users_30d >= 300 and liquidity_usd >= 25000
-    cex_ready = (
-        holders >= 5000
-        and active_users_30d >= 2500
-        and liquidity_usd >= 250000
-        and volume_7d_usd >= 1000000
-    )
-    return {
-        "dex": {
-            "ready": dex_ready,
-            "requirements": {
-                "min_holders": 500,
-                "min_active_users_30d": 300,
-                "min_liquidity_usd": 25000,
-            },
-        },
-        "cex": {
-            "ready": cex_ready,
-            "requirements": {
-                "min_holders": 5000,
-                "min_active_users_30d": 2500,
-                "min_liquidity_usd": 250000,
-                "min_volume_7d_usd": 1000000,
-            },
-        },
-        "phases": [
-            "Phase 0: closed beta + anti-sybil + testnet airdrop",
-            "Phase 1: DEX listing with deep LP and 6-12 months vesting",
-            "Phase 2: market-maker + risk desk + compliance pack",
-            "Phase 3: CEX listing only after stable retention and organic volume",
-        ],
-    }
-
-
-def _estimate_daily_emission_cap(*, active_users_24h: int, burn_24h: float) -> dict:
-    base_cap = max(1000.0, active_users_24h * 12.0)
-    burn_factor = 1.0 + min(0.5, burn_24h / max(base_cap, 1.0))
-    cap = round(base_cap * burn_factor, 2)
-    return {
-        "emission_cap": cap,
-        "formula": "max(1000, active_users_24h*12) * (1 + min(0.5, burn_24h/base_cap))",
-        "note": "If minted > cap, reduce rewards or increase sinks for the next epoch.",
-    }
 
 @asynccontextmanager
 async def lifespan(application: FastAPI):
@@ -473,6 +416,10 @@ def try_advance_module(user_id: int) -> bool:
     if all(qid in completed for qid in module_quests):
         state["module_index"] += 1
         set_module_deadline(state, hours=DEFAULT_DEADLINE_HOURS)
+        # Award CHM for module completion
+        chm_bonus = float(os.getenv("CHM_MODULE_REWARD", "0.5"))
+        state["chm"] = round(state.get("chm", 0) + chm_bonus, 9)
+        state["chm_total_earned"] = round(state.get("chm_total_earned", 0) + chm_bonus, 9)
         save_progress()
         return True
     return False
@@ -583,11 +530,11 @@ async def user_init(req: UserInitRequest):
     # Update display title
     update_title(user_id)
 
-    # Award daily souls bonus (matches daily XP bonus)
-    souls_bonus = 0
+    # Award daily CHM bonus (matches daily XP bonus)
+    chm_bonus = 0
     if is_new_day:
-        souls_result = add_souls(user_id, 20, source="daily_login")
-        souls_bonus = souls_result.get("delta", 0)
+        chm_result = add_chm(user_id, 20, source="daily_login")
+        chm_bonus = chm_result.get("delta", 0)
 
     # Pulse (non-blocking: return cached if available)
     pulse = get_cached_pulse()
@@ -596,7 +543,7 @@ async def user_init(req: UserInitRequest):
     session_token = _new_session_token(user_id)
 
     # Note: update_streak and claim_daily_bonus already call save_progress() internally.
-    # add_souls also saves. Only save once more to catch name/last_online changes
+    # add_chm also saves. Only save once more to catch name/last_online changes
     # that aren't covered by those helpers.
     if not is_new_day and not got_bonus:
         save_progress()
@@ -611,9 +558,10 @@ async def user_init(req: UserInitRequest):
         "evolution": evo,
         "market_pulse": pulse,
         "hollow": hollow,
-        "souls_state": get_souls_state(user_id),
-        "daily_souls_bonus": souls_bonus,
+        "chm_state": get_chm_state(user_id),
+        "daily_chm_bonus": chm_bonus,
         "onboarding_complete": state.get("onboarding_complete", False),
+        "is_admin": user_id in _get_admin_ids(),
     }
 
 
@@ -627,13 +575,13 @@ class OnboardingRequest(BaseModel):
 
 @app.post("/api/onboarding/complete")
 async def onboarding_complete_api(req: OnboardingRequest):
-    """Mark onboarding as complete and award 50 starting souls."""
+    """Mark onboarding as complete and award 50 starting CHM."""
     state = get_user_state(req.user_id)
     if state.get("onboarding_complete"):
-        return {"ok": True, "already_done": True, "souls": state.get("souls", 0)}
+        return {"ok": True, "already_done": True, "chm": state.get("chm", 0)}
     state["onboarding_complete"] = True
-    # Award 50 starting souls (in addition to the 50 from ritual itself)
-    result = add_souls(req.user_id, 50, source="onboarding")
+    # Award 50 starting CHM (in addition to the 50 from ritual itself)
+    result = add_chm(req.user_id, 50, source="onboarding")
     save_progress()
     # Optionally send a welcome notification
     try:
@@ -641,7 +589,7 @@ async def onboarding_complete_api(req: OnboardingRequest):
         await notification_service.send(req.user_id, "onboarding_welcome")
     except Exception:
         pass
-    return {"ok": True, "souls_awarded": result.get("delta", 50), "total_souls": state.get("souls", 0)}
+    return {"ok": True, "chm_awarded": result.get("delta", 50), "total_chm": state.get("chm", 0)}
 
 
 @app.get("/api/user/{user_id}")
@@ -1367,84 +1315,88 @@ async def user_dna(user_id: int):
     return {"ok": True, **get_trader_dna(user_id)}
 
 
-# ── SOULS SYSTEM ──────────────────────────────────────────────────────────────
+# ── CHM SYSTEM ────────────────────────────────────────────────────────────────
 
-class SoulsSpendRequest(BaseModel):
+class CHMSpendRequest(BaseModel):
     user_id: int
     amount: int
     reason: Optional[str] = "purchase"
 
-class EstusUseRequest(BaseModel):
+class CHMHintUseRequest(BaseModel):
     user_id: int
 
 class HollowExitRequest(BaseModel):
     user_id: int
 
-@app.get("/api/souls/{user_id}")
-async def souls_get(user_id: int):
-    """Return souls summary: balance, dropped, flasks, hollow status, title."""
-    return get_souls_state(user_id)
+class CHMWalletRequest(BaseModel):
+    user_id: int
+    ton_address: str
+
+@app.get("/api/chm/{user_id}")
+async def chm_balance_api(user_id: int):
+    """Return CHM summary: balance, dropped, flasks, hollow status, title."""
+    return get_chm_state(user_id)
 
 
-@app.post("/api/souls/earn")
-async def souls_earn(req: PetTapRequest):
-    """Manually award souls (for testing / admin use). Normally souls come from taps."""
-    result = add_souls(req.user_id, 10, source="admin")
+@app.post("/api/chm/earn")
+async def chm_earn(req: PetTapRequest):
+    """Manually award CHM (for testing / admin use). Normally CHM comes from taps."""
+    result = add_chm(req.user_id, 10, source="admin")
     return {"ok": True, **result}
 
 
-@app.post("/api/souls/spend")
-async def souls_spend(req: SoulsSpendRequest):
-    """Spend souls on a purchase (hint, customization, roulette, etc.)."""
-    result = spend_souls(req.user_id, req.amount, reason=req.reason)
+@app.post("/api/chm/spend")
+async def chm_spend(req: CHMSpendRequest):
+    """Spend CHM on a purchase (hint, customization, roulette, etc.)."""
+    result = spend_chm(req.user_id, req.amount, reason=req.reason)
     return result
 
 
-@app.post("/api/souls/drop/{user_id}")
-async def souls_drop(user_id: int):
-    """Drop souls on boss failure. Returns amount dropped."""
-    result = drop_souls(user_id)
+@app.post("/api/chm/drop/{user_id}")
+async def chm_drop(user_id: int):
+    """Drop CHM on boss failure. Returns amount dropped."""
+    result = drop_chm(user_id)
     return {"ok": True, **result}
 
 
-@app.post("/api/souls/retrieve/{user_id}")
-async def souls_retrieve(user_id: int):
-    """Retrieve dropped souls (one shot). Call after boss retry success."""
-    result = retrieve_souls(user_id)
+@app.post("/api/chm/retrieve/{user_id}")
+async def chm_retrieve(user_id: int):
+    """Retrieve dropped CHM (one shot). Call after boss retry success."""
+    result = retrieve_chm(user_id)
     return result
 
 
-@app.post("/api/souls/burn/{user_id}")
-async def souls_burn(user_id: int):
-    """Permanently burn dropped souls (timeout expired)."""
-    burned = burn_dropped_souls(user_id)
+@app.post("/api/chm/burn-dropped/{user_id}")
+async def chm_burn_dropped(user_id: int):
+    """Permanently burn dropped CHM (timeout expired)."""
+    burned = burn_dropped_chm(user_id)
     return {"ok": True, "burned": burned}
 
 
-@app.post("/api/souls/hollow-exit")
+@app.post("/api/chm/hollow-exit")
 async def hollow_exit(req: HollowExitRequest):
-    """Pay 100 souls to exit hollow state."""
-    result = exit_hollow(req.user_id, souls_cost=100)
+    """Pay 100 CHM to exit hollow state."""
+    result = exit_hollow(req.user_id, chm_cost=100)
     return result
 
 
-@app.get("/api/souls/hollow-check/{user_id}")
+@app.get("/api/chm/hollow-check/{user_id}")
 async def hollow_check(user_id: int):
     """Check & update hollow status. Call on user login."""
     result = check_hollow(user_id)
     return result
 
 
-@app.post("/api/souls/estus-use")
-async def estus_use(req: EstusUseRequest):
-    """Use one Estus flask (consume a hint charge)."""
+@app.post("/api/chm/hint-use")
+async def chm_hint_use(req: CHMHintUseRequest):
+    """Use one CHM flask (consume a hint charge)."""
     result = use_estus_flask(req.user_id)
     return result
 
 
-@app.post("/api/souls/bonfire/{user_id}")
+@app.post("/api/chm/bonfire/{user_id}")
 async def bonfire_rest(user_id: int):
-    """Rest at bonfire: refill Estus flasks, reset module soul tracking, record checkpoint."""
+    """Rest at bonfire: refill CHM flasks, reset module CHM tracking, record checkpoint."""
     from boss import get_bloodstains
     state  = get_user_state(user_id)
     module_idx = state.get("module_index", 0)
@@ -1457,10 +1409,10 @@ async def bonfire_rest(user_id: int):
     flasks = refill_estus(user_id)
     title  = update_title(user_id)
 
-    # Burn any unclaimed dropped souls (expired opportunity)
-    burned = burn_dropped_souls(user_id)
+    # Burn any unclaimed dropped CHM (expired opportunity — only after 24h)
+    burned = burn_dropped_chm(user_id)
     if burned > 0:
-        logger.info("Bonfire: burned %d unclaimed dropped souls for user %d", burned, user_id)
+        logger.info("Bonfire: burned %d unclaimed dropped CHM for user %d", burned, user_id)
 
     # Fetch bloodstains for next module boss (if exists)
     next_module_id = module_idx + 1
@@ -1474,12 +1426,83 @@ async def bonfire_rest(user_id: int):
     return {
         "ok": True,
         "message": "Пламя бонфайра восстановлено. Готовься к следующему испытанию.",
-        "estus_flasks": flasks,
+        "chm_flasks": flasks,
         "current_title": title,
-        "souls": state.get("souls", 0),
+        "chm": state.get("chm", 0),
         "burned_dropped": burned,
         "next_boss_bloodstains": bloodstains,
     }
+
+
+@app.post("/api/chm/wallet")
+async def chm_wallet_api(req: CHMWalletRequest):
+    """Save TON wallet address for CHM withdrawal."""
+    import re
+    if not re.match(r'^[EU]Q[A-Za-z0-9_-]{46}$', req.ton_address):
+        return {"ok": False, "message": "Неверный формат TON-адреса (должен начинаться с EQ или UQ)"}
+    st = get_user_state(req.user_id)
+    st["ton_wallet"] = req.ton_address
+    save_progress()
+    return {"ok": True, "ton_wallet": req.ton_address}
+
+
+_chm_leaderboard_cache: dict = {"data": None, "expires": 0}
+
+@app.get("/api/chm/leaderboard")
+async def chm_leaderboard():
+    """Return top CHM holders (cached 60s)."""
+    now = time.monotonic()
+    if _chm_leaderboard_cache["data"] and now < _chm_leaderboard_cache["expires"]:
+        return _chm_leaderboard_cache["data"]
+    entries = [
+        {"user_id": uid, "name": st.get("name", "?"),
+         "chm": round(st.get("chm", 0), 4),
+         "chm_total_earned": round(st.get("chm_total_earned", 0), 4)}
+        for uid, st in user_progress.items() if st.get("chm", 0) > 0
+    ]
+    entries.sort(key=lambda x: x["chm"], reverse=True)
+    result = {"leaderboard": entries[:50]}
+    _chm_leaderboard_cache.update({"data": result, "expires": now + 60})
+    return result
+
+
+@app.get("/api/chm/global-stats")
+async def chm_global_stats():
+    """Return global CHM token statistics."""
+    total_in_game  = sum(st.get("chm", 0) for st in user_progress.values())
+    total_earned   = sum(st.get("chm_total_earned", 0) for st in user_progress.values())
+    total_burned   = sum(st.get("chm_total_burned", 0) for st in user_progress.values())
+    cfg = get_token_config()
+    return {
+        "total_supply":          cfg.total_supply,
+        "total_in_game":         round(total_in_game, 4),
+        "total_earned_all_time": round(total_earned, 4),
+        "total_burned_all_time": round(total_burned, 4),
+        "holders":               sum(1 for st in user_progress.values() if st.get("chm", 0) > 0),
+    }
+
+
+# ── Back-compat: old /api/souls/* URLs redirect to new /api/chm/* ─────────────
+
+@app.get("/api/souls/{user_id}")
+async def souls_compat_get(user_id: int):
+    return await chm_balance_api(user_id)
+
+@app.post("/api/souls/earn")
+async def souls_compat_earn(req: PetTapRequest):
+    return await chm_earn(req)
+
+@app.post("/api/souls/hollow-exit")
+async def souls_compat_hollow_exit(req: HollowExitRequest):
+    return await hollow_exit(req)
+
+@app.get("/api/souls/hollow-check/{user_id}")
+async def souls_compat_hollow_check(user_id: int):
+    return await hollow_check(user_id)
+
+@app.post("/api/souls/bonfire/{user_id}")
+async def souls_compat_bonfire(user_id: int):
+    return await bonfire_rest(user_id)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1550,7 +1573,7 @@ async def homunculus_tap_api(req: HomunculusTapRequest):
 
 @app.post("/api/homunculus/revive")
 async def homunculus_revive_api(req: HomunculusReviveRequest):
-    """Spend 200 souls to revive dead homunculus. Stage rolls back by 1."""
+    """Spend 200 CHM to revive dead homunculus. Stage rolls back by 1."""
     return _homunculus_revive_fn(req.user_id)
 
 @app.get("/api/homunculus/stages")
@@ -1714,10 +1737,14 @@ async def roulette_spin(req: RouletteSpinRequest):
     if req.bet not in VALID_BETS:
         raise HTTPException(status_code=400, detail=f"Ставка должна быть одной из: {sorted(VALID_BETS)}")
 
-    # Deduct souls upfront
-    result = spend_souls(req.user_id, req.bet, reason="roulette_bet")
+    # Deduct CHM upfront (20% burn on bet)
+    result = spend_chm(req.user_id, req.bet, reason="roulette_bet")
     if not result["ok"]:
-        return {"ok": False, "error": "not_enough_souls", "souls": result.get("total", 0)}
+        return {"ok": False, "error": "not_enough_chm", "chm": result.get("total", 0)}
+    # Burn 20% of bet
+    burn_amount = round(req.bet * float(os.getenv("CHM_ROULETTE_BURN_PCT", "0.2")), 9)
+    st = get_user_state(req.user_id)
+    st["chm_total_burned"] = round(st.get("chm_total_burned", 0) + burn_amount, 9)
 
     # Pick random topic and question
     topic = random.choice(_ROULETTE_TOPICS)
@@ -1750,7 +1777,7 @@ async def roulette_spin(req: RouletteSpinRequest):
         "correct_answer": question_data["a"],
         "bet": req.bet,
         "potential_win": req.bet * 3,
-        "souls_remaining": result.get("total", 0),
+        "chm_remaining": result.get("total", 0),
         "actions_left": action_result["actions_left"],
         "actions_total": action_result["actions_total"],
     }
@@ -1768,13 +1795,13 @@ async def roulette_answer(req: RouletteAnswerRequest):
     if req.is_correct:
         # Win: get back bet + 2x profit = 3x total
         winnings = spin["bet"] * 3
-        result = add_souls(req.user_id, winnings, source="roulette_win")
+        result = add_chm(req.user_id, winnings, source="roulette_win")
         return {
             "ok": True,
             "outcome": "win",
-            "souls_won": winnings,
-            "total_souls": result.get("total", 0),
-            "message": f"⚡ Правильно! +{winnings} душ (x3)",
+            "chm_won": winnings,
+            "total_chm": result.get("total", 0),
+            "message": f"⚡ Правильно! +{winnings} CHM (x3)",
         }
     else:
         # Already deducted. Return confirmation of loss.
@@ -1782,9 +1809,9 @@ async def roulette_answer(req: RouletteAnswerRequest):
         return {
             "ok": True,
             "outcome": "loss",
-            "souls_lost": spin["bet"],
-            "total_souls": state.get("souls", 0),
-            "message": f"💀 Неверно. -{spin['bet']} душ.",
+            "chm_lost": spin["bet"],
+            "total_chm": state.get("chm", 0),
+            "message": f"💀 Неверно. -{spin['bet']} CHM.",
         }
 
 
@@ -1886,8 +1913,8 @@ async def invasion_answer(req: InvasionAnswerRequest):
     inv["answer"] = req.answer_text
     inv["answered_at"] = datetime.utcnow().isoformat()
 
-    souls_reward = inv.get("souls_reward", 50)
-    add_souls(req.user_id, souls_reward, source="invasion_survived")
+    chm_reward = inv.get("souls_reward", 50)
+    add_chm(req.user_id, chm_reward, source="invasion_survived")
     award_badge(req.user_id, "invader_slayer")
 
     # Update invasion stats
@@ -1898,9 +1925,9 @@ async def invasion_answer(req: InvasionAnswerRequest):
     return {
         "ok": True,
         "result": "survived",
-        "souls_earned": souls_reward,
-        "total_souls": state.get("souls", 0),
-        "message": "⚔️ Вторжение отражено! +50 душ",
+        "chm_earned": chm_reward,
+        "total_chm": state.get("chm", 0),
+        "message": f"⚔️ Вторжение отражено! +{chm_reward} CHM",
     }
 
 
@@ -1923,7 +1950,7 @@ async def _send_invasion(user_id: int, task: dict):
             f"⚔️ <b>ВТОРЖЕНИЕ!</b>\n\n"
             f"У тебя <b>30 минут</b> на решение.\n\n"
             f"❓ <b>{task['question']}</b>\n\n"
-            f"Награда: <b>{task['souls_reward']} душ</b>\n"
+            f"Награда: <b>{task['souls_reward']} CHM</b>\n"
             f"Провалишь — потеряешь streak.\n\n"
             f"Открой приложение, чтобы ответить!"
         )
@@ -2092,9 +2119,11 @@ async def pvp_submit(req: PvPSubmitRequest):
         "draw": winner is None,
     }
 
-    # Award souls
+    # Award CHM
+    pvp_win_chm = float(os.getenv("CHM_PVP_WIN_REWARD", "0.1"))
     if winner:
-        add_souls(winner, 30, source="pvp_win")
+        add_chm(winner, 30, source="pvp_win")
+        add_chm(winner, pvp_win_chm, source="pvp_win_chm")
         pvp_stats_w = get_user_state(winner).setdefault("pvp_stats", {"wins": 0, "losses": 0})
         pvp_stats_w["wins"] = pvp_stats_w.get("wins", 0) + 1
         pvp_stats_l = get_user_state(loser).setdefault("pvp_stats", {"wins": 0, "losses": 0})
@@ -2102,7 +2131,7 @@ async def pvp_submit(req: PvPSubmitRequest):
     else:
         # Draw: both get 10
         for pid in [match["p1"], match["p2"]]:
-            add_souls(pid, 10, source="pvp_draw")
+            add_chm(pid, 10, source="pvp_draw")
     save_progress()
 
     is_winner = req.user_id == winner
@@ -2117,7 +2146,7 @@ async def pvp_submit(req: PvPSubmitRequest):
         "result": "win" if is_winner else ("draw" if is_draw else "loss"),
         "my_score": my_score,
         "opponent_score": opp_score,
-        "souls_earned": 30 if is_winner else (10 if is_draw else 0),
+        "chm_earned": 30 if is_winner else (10 if is_draw else 0),
         "match": match["result"],
     }
 
@@ -2466,7 +2495,7 @@ async def _catalyst_drain_loop():
         try:
             result = cat_drain_hourly(user_progress)
             if result.get("drained", 0) > 0:
-                logger.info("Catalyst hourly drain: %.4f souls from %d victims",
+                logger.info("Catalyst hourly drain: %.4f CHM from %d victims",
                             result["drained"], result["victims"])
                 save_progress()
             if result.get("stabilized"):
@@ -2491,33 +2520,40 @@ import random as _random
 from datetime import datetime as _dt, timedelta as _td
 
 SHOP_CATALOG = [
-    # consumable
-    {"id":"estus_1",    "category":"consumable","name":"Estus-фласка",          "icon":"🔶","desc":"Восстановить 1 жизнь гомункула",             "price":50,  "owned_key":None,               "duration_h":None},
-    {"id":"estus_3",    "category":"consumable","name":"Estus ×3",               "icon":"🔷","desc":"Три фласки разом",                           "price":120, "owned_key":None,               "duration_h":None},
-    {"id":"isotope_1",  "category":"consumable","name":"Нестабильный Изотоп",    "icon":"🧪","desc":"Запускает особый квест-катализатор",          "price":200, "owned_key":None,               "duration_h":None},
+    # consumable (priced in CHM game currency)
+    {"id":"estus_1",    "category":"consumable","name":"CHM-фласка",             "icon":"🔶","desc":"Восстановить 1 подсказку",                    "price":50,  "currency":"chm_game","owned_key":None,               "duration_h":None},
+    {"id":"estus_3",    "category":"consumable","name":"CHM-фласки ×3",          "icon":"🔷","desc":"Три подсказки разом",                          "price":120, "currency":"chm_game","owned_key":None,               "duration_h":None},
+    {"id":"isotope_1",  "category":"consumable","name":"Нестабильный Изотоп",    "icon":"🧪","desc":"Запускает особый квест-катализатор",          "price":200, "currency":"chm_game","owned_key":None,               "duration_h":None},
     # boost
-    {"id":"double_tap_1h","category":"boost",   "name":"Двойная реакция 1ч",     "icon":"⚡","desc":"Двойной XP за тапы на 1 час",                "price":80,  "owned_key":"double_tap_until", "duration_h":1},
-    {"id":"double_tap_3h","category":"boost",   "name":"Двойная реакция 3ч",     "icon":"⚡","desc":"Двойной XP за тапы на 3 часа",               "price":200, "owned_key":"double_tap_until", "duration_h":3},
-    {"id":"xp_boost_1h", "category":"boost",   "name":"Буст XP 1ч",             "icon":"🌟","desc":"Двойной XP за уроки и квесты на 1 час",      "price":100, "owned_key":"xp_boost_until",   "duration_h":1},
+    {"id":"double_tap_1h","category":"boost",   "name":"Двойная реакция 1ч",     "icon":"⚡","desc":"Двойной XP за тапы на 1 час",                "price":80,  "currency":"chm_game","owned_key":"double_tap_until", "duration_h":1},
+    {"id":"double_tap_3h","category":"boost",   "name":"Двойная реакция 3ч",     "icon":"⚡","desc":"Двойной XP за тапы на 3 часа",               "price":200, "currency":"chm_game","owned_key":"double_tap_until", "duration_h":3},
+    {"id":"xp_boost_1h", "category":"boost",   "name":"Буст XP 1ч",             "icon":"🌟","desc":"Двойной XP за уроки и квесты на 1 час",      "price":100, "currency":"chm_game","owned_key":"xp_boost_until",   "duration_h":1},
     # protection
-    {"id":"shield_24h",  "category":"protection","name":"Щит Катализатора 24ч", "icon":"🛡","desc":"Блокирует атаки катализатора на 24ч",         "price":150, "owned_key":"catalyst_shield_until","duration_h":24},
-    {"id":"hollow_guard","category":"protection","name":"Стражник Полых 1д",     "icon":"💠","desc":"Защита от штрафа Hollow на 1 день",           "price":300, "owned_key":"hollow_guard_until","duration_h":24},
+    {"id":"shield_24h",  "category":"protection","name":"Щит Катализатора 24ч", "icon":"🛡","desc":"Блокирует атаки катализатора на 24ч",         "price":150, "currency":"chm_game","owned_key":"catalyst_shield_until","duration_h":24},
+    {"id":"hollow_guard","category":"protection","name":"Стражник Полых 1д",     "icon":"💠","desc":"Защита от штрафа Hollow на 1 день",           "price":300, "currency":"chm_game","owned_key":"hollow_guard_until","duration_h":24},
     # emergency
-    {"id":"deadline_ext","category":"emergency","name":"Продление дедлайна",     "icon":"⏳","desc":"Добавить +12 часов к дедлайну модуля",        "price":250, "owned_key":None,               "duration_h":None},
-    {"id":"quest_skip",  "category":"emergency","name":"Пропуск квеста",         "icon":"🎯","desc":"Пропустить текущий квест без штрафа",         "price":500, "owned_key":None,               "duration_h":None},
+    {"id":"deadline_ext","category":"emergency","name":"Продление дедлайна",     "icon":"⏳","desc":"Добавить +12 часов к дедлайну модуля",        "price":250, "currency":"chm_game","owned_key":None,               "duration_h":None},
+    {"id":"quest_skip",  "category":"emergency","name":"Пропуск квеста",         "icon":"🎯","desc":"Пропустить текущий квест без штрафа",         "price":500, "currency":"chm_game","owned_key":None,               "duration_h":None},
     # cosmetic
-    {"id":"tap_fx_gold", "category":"cosmetic", "name":"Эффект тапа: Золото",    "icon":"✨","desc":"Золотые частицы при тапе гомункула",          "price":300, "owned_key":"tap_fx_gold",      "duration_h":None},
-    {"id":"aura_purple", "category":"cosmetic", "name":"Аура: Фиолетовая",       "icon":"💜","desc":"Фиолетовая аура вокруг гомункула",            "price":400, "owned_key":"aura_purple",      "duration_h":None},
+    {"id":"tap_fx_gold", "category":"cosmetic", "name":"Эффект тапа: Золото",    "icon":"✨","desc":"Золотые частицы при тапе гомункула",          "price":300, "currency":"chm_game","owned_key":"tap_fx_gold",      "duration_h":None},
+    {"id":"aura_purple", "category":"cosmetic", "name":"Аура: Фиолетовая",       "icon":"💜","desc":"Фиолетовая аура вокруг гомункула",            "price":400, "currency":"chm_game","owned_key":"aura_purple",      "duration_h":None},
     # title
-    {"id":"title_alchemist","category":"title", "name":"Титул «Алхимик»",        "icon":"⚗️","desc":"Отображается рядом с именем в рейтинге",      "price":600, "owned_key":"title_alchemist",  "duration_h":None},
-    {"id":"title_hunter",  "category":"title",  "name":"Титул «Охотник»",        "icon":"🗡","desc":"Отображается рядом с именем в рейтинге",      "price":600, "owned_key":"title_hunter",     "duration_h":None},
+    {"id":"title_alchemist","category":"title", "name":"Титул «Алхимик»",        "icon":"⚗️","desc":"Отображается рядом с именем в рейтинге",      "price":600, "currency":"chm_game","owned_key":"title_alchemist",  "duration_h":None},
+    {"id":"title_hunter",  "category":"title",  "name":"Титул «Охотник»",        "icon":"🗡","desc":"Отображается рядом с именем в рейтинге",      "price":600, "currency":"chm_game","owned_key":"title_hunter",     "duration_h":None},
+    # CHM token premium items (priced in real CHM tokens)
+    {"id":"chm_xp_boost_7d",  "name":"XP Boost ×2 (7 дней)", "category":"premium","price":5.0,  "currency":"chm","duration_h":168, "owned_key":"xp_boost_until","desc":"Двойной опыт за все активности"},
+    {"id":"chm_boss_revive",  "name":"Воскрешение у Босса",   "category":"premium","price":2.0,  "currency":"chm","duration_h":None,"owned_key":None,             "desc":"Вернуться к боссу без потери CHM"},
+    {"id":"chm_title_custom", "name":"Кастомный титул",       "category":"premium","price":10.0, "currency":"chm","duration_h":None,"owned_key":"custom_title",   "desc":"Задай свой уникальный титул"},
+    {"id":"chm_ng_unlock",    "name":"New Game+ Разблокировка","category":"premium","price":25.0,"currency":"chm","duration_h":None,"owned_key":"ng_plus_unlocked","desc":"Пройди игру заново с бонусами"},
+    {"id":"chm_aura_gold",    "name":"Золотая аура (навсегда)","category":"premium","price":50.0,"currency":"chm","duration_h":None,"owned_key":"aura_gold",       "desc":"Эксклюзивный визуальный эффект"},
 ]
 
 
 @app.get("/api/shop")
 async def shop_catalog(user_id: int):
     st = get_user_state(user_id)
-    souls = st.get("souls", 0)
+    chm_game = st.get("chm", 0)
+    chm_token = st.get("chm", 0)  # same currency for now
     now = _dt.utcnow()
     items = []
     for item in SHOP_CATALOG:
@@ -2538,9 +2574,11 @@ async def shop_catalog(user_id: int):
                         pass
                 else:
                     owned = True
+        currency = item.get("currency", "chm_game")
+        balance = chm_token if currency == "chm" else chm_game
         items.append({**item, "owned": owned, "active_until": active_until,
-                      "can_afford": souls >= item["price"]})
-    return {"items": items, "souls": round(souls, 1)}
+                      "can_afford": balance >= item["price"]})
+    return {"items": items, "chm": round(chm_game, 1)}
 
 
 class ShopBuyRequest(BaseModel):
@@ -2556,20 +2594,43 @@ async def shop_buy(req: ShopBuyRequest):
     item = next((i for i in SHOP_CATALOG if i["id"] == req.item_id), None)
     if not item:
         return {"ok": False, "message": "Товар не найден"}
-    souls = st.get("souls", 0)
-    if souls < item["price"]:
-        return {"ok": False, "message": f"Нужно {item['price']} ⚡, есть {round(souls,1)}"}
 
-    st["souls"] = round(souls - item["price"], 1)
+    currency = item.get("currency", "chm_game")
+    price = item["price"]
+
+    # CHM token premium purchases
+    if currency == "chm":
+        chm_bal = st.get("chm", 0)
+        if chm_bal < price:
+            return {"ok": False, "message": f"Нужно {price} CHM, есть {round(chm_bal, 4)} CHM"}
+        st["chm"] = round(chm_bal - price, 9)
+        st["chm_total_spent"] = round(st.get("chm_total_spent", 0) + price, 9)
+        st["chm_total_burned"] = round(st.get("chm_total_burned", 0) + price, 9)
+        key = item.get("owned_key")
+        dur = item.get("duration_h")
+        now = _dt.utcnow()
+        if key and dur:
+            st[key] = (_dt.utcnow() + _td(hours=dur)).isoformat()
+        elif key:
+            st[key] = True
+        save_progress()
+        return {"ok": True, "message": f"✅ Куплено: {item['name']}", "chm_left": round(st["chm"], 4)}
+
+    # Standard CHM game currency purchases
+    chm = st.get("chm", 0)
+    if chm < price:
+        return {"ok": False, "message": f"Нужно {price} ⚡, есть {round(chm,1)}"}
+
+    st["chm"] = round(chm - price, 1)
     now = _dt.utcnow()
     key = item.get("owned_key")
     dur = item.get("duration_h")
     msg = f"✅ Куплено: {item['name']}"
 
     if item["id"] == "estus_1":
-        st["estus_flasks"] = st.get("estus_flasks", 0) + 1
+        st["chm_flasks"] = st.get("chm_flasks", 0) + 1
     elif item["id"] == "estus_3":
-        st["estus_flasks"] = st.get("estus_flasks", 0) + 3
+        st["chm_flasks"] = st.get("chm_flasks", 0) + 3
     elif item["id"] == "isotope_1":
         st["unstable_isotopes"] = st.get("unstable_isotopes", 0) + 1
     elif item["id"] == "deadline_ext":
@@ -2600,7 +2661,7 @@ async def shop_buy(req: ShopBuyRequest):
         st[key] = True
 
     save_progress()
-    return {"ok": True, "message": msg, "souls_left": round(st["souls"], 1)}
+    return {"ok": True, "message": msg, "chm_left": round(st["chm"], 1)}
 
 
 # ── PERSONAL LEADERBOARD ──────────────────────────────────────────────────────
@@ -2973,16 +3034,6 @@ class TokenEmissionRequest(BaseModel):
 
 @app.get("/api/tokenomics/config")
 async def tokenomics_config():
-    cfg = _token_config()
-    labels = _token_labels()
-    return {
-        "name": cfg["name"],
-        "symbol": cfg["symbol"],
-        "emoji": cfg["emoji"],
-        "decimals": cfg["decimals"],
-        "total_supply": cfg["total_supply"],
-        "launch_network": cfg["launch_network"],
-        "dex_pair": cfg["dex_pair"],
     cfg = get_token_config()
     labels = get_token_labels()
     return {
@@ -2999,7 +3050,6 @@ async def tokenomics_config():
 
 @app.post("/api/tokenomics/launch-plan")
 async def tokenomics_launch_plan(req: TokenLaunchPlanRequest):
-    return _build_launch_plan(
     return build_launch_plan(
         holders=req.holders,
         active_users_30d=req.active_users_30d,
@@ -3010,7 +3060,6 @@ async def tokenomics_launch_plan(req: TokenLaunchPlanRequest):
 
 @app.post("/api/tokenomics/emission")
 async def tokenomics_emission(req: TokenEmissionRequest):
-    return _estimate_daily_emission_cap(
     return estimate_daily_emission_cap(
         active_users_24h=req.active_users_24h,
         burn_24h=req.burn_24h,

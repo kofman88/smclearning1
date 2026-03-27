@@ -201,17 +201,17 @@
         <p class="synth-born-title">Твой Гомункул рождён.</p>
         <p class="synth-born-sub">Он будет расти вместе с тобой.<br/>Или умрёт вместе с тобой.</p>
       </div>
-      <!-- Souls counter animating -->
-      <div class="synth-souls-award" id="srSoulsAward">
-        <span class="synth-souls-num" id="srSoulsNum">0</span>
-        <span class="synth-souls-label">душ</span>
+      <!-- CHM counter animating -->
+      <div class="synth-chm-award" id="srCHMAward">
+        <span class="synth-chm-num" id="srCHMNum">0</span>
+        <span class="synth-chm-label">CHM</span>
       </div>
     </div>
 
     <!-- Phase: transition tooltip -->
     <div class="synth-phase" id="srPhase6" style="display:none">
       <div class="synth-tooltip" id="srTooltip1">
-        <p>⚗️ Тапай Гомункула, чтобы фармить <b>души</b>. Души — твоя валюта.</p>
+        <p>⚗️ Тапай Гомункула, чтобы фармить <b>CHM</b>. CHM — твоя валюта.</p>
         <button class="synth-tooltip-btn" onclick="onRitualTooltip1()">Понял →</button>
       </div>
       <div class="synth-tooltip" id="srTooltip2" style="display:none">
@@ -264,9 +264,9 @@
 
       <!-- RIGHT: только 3 пилла + звук -->
       <div class="header-right">
-        <div class="hud-pill hud-souls">
+        <div class="hud-pill hud-chm">
           <span class="hud-icon">⚡</span>
-          <span class="hud-val" id="hudSoulsVal">0</span>
+          <span class="hud-val" id="hudCHMVal">0</span>
         </div>
         <div class="hud-pill hud-xp">
           <span class="hud-icon">★</span>
@@ -725,7 +725,7 @@
         <div class="hom-evo-section">
           <div class="hom-evo-header">
             <span class="hom-evo-label">Эволюция</span>
-            <span class="hom-evo-vals"><span id="homSoulsFed">0</span> / <span id="homSoulsReq">500</span> душ</span>
+            <span class="hom-evo-vals"><span id="homCHMFed">0</span> / <span id="homCHMReq">500</span> CHM</span>
           </div>
           <div class="hom-evo-bar-wrap">
             <div class="hom-evo-bar" id="homEvoBar" style="width:0%"></div>
@@ -735,7 +735,7 @@
 
         <!-- Revive section (dead state) -->
         <div class="hom-revive-section" id="homReviveSection" style="display:none">
-          <div class="hom-revive-cost">Возрождение: 200 💀 душ</div>
+          <div class="hom-revive-cost">Возрождение: 200 CHM</div>
           <button class="hom-revive-btn" id="homReviveBtn" onclick="homunculusRevive()">
             ⚗️ Воссоздать Гомункула
           </button>
@@ -1056,9 +1056,9 @@
       <div class="boss-warning-text">ВНИМАНИЕ</div>
       <div class="boss-intro-name" id="bossIntroName">Structure Breaker</div>
       <div class="boss-intro-lore" id="bossIntroLore"></div>
-      <div class="boss-souls-stake">
+      <div class="boss-chm-stake">
         <span class="bs-label">НА КОНУ:</span>
-        <span class="bs-amount" id="bossStakeAmount">0 ⚡</span>
+        <span class="bs-amount" id="bossCHMStakeAmount">0 ⚡</span>
       </div>
       <div class="boss-timer-preview">
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
@@ -1100,7 +1100,7 @@
         </div>
       </div>
       <div class="boss-hud-right">
-        <div class="boss-souls-hud">⚡ <span id="bossArenaStake">0</span></div>
+        <div class="boss-chm-hud">⚡ <span id="bossCHMStake">0</span></div>
         <div class="boss-accuracy-hud" id="bossAccuracyHud">0%</div>
       </div>
     </div>
@@ -1121,22 +1121,22 @@
     <div class="death-content">
       <div class="death-big-text">YOU DIED</div>
       <div class="death-sub-text">ЛИКВИДИРОВАН</div>
-      <div class="death-souls-info">
-        <div class="death-souls-dropped" id="deathSoulsDropped">
+      <div class="death-chm-info">
+        <div class="death-chm-dropped" id="deathCHMDropped">
           <span class="ds-icon">💀</span>
-          <span class="ds-amount" id="deathDroppedAmount">0 ⚡</span>
+          <span class="ds-amount" id="deathCHMDroppedAmount">0 ⚡</span>
           <span class="ds-label">упало на землю</span>
         </div>
       </div>
       <div class="death-lore-text">
-        Рынок забрал твои души.<br>
+        Рынок забрал твои CHM.<br>
         Вернись — и у тебя будет <strong>один шанс</strong> их забрать.
       </div>
       <button class="btn-death-retry" onclick="retryBoss()">
         ⚔️ Попробовать снова
       </button>
       <button class="btn-death-leave" onclick="leaveBossArena()">
-        Уйти (души будут ждать)
+        Уйти (CHM будет ждать)
       </button>
     </div>
   </div>
@@ -1148,8 +1148,8 @@
       <div class="victory-title">BOSS DEFEATED</div>
       <div class="victory-boss-name" id="victoryBossName">Structure Breaker</div>
       <div class="victory-stats" id="victoryStats"></div>
-      <div class="victory-souls-earned" id="victorySoulsEarned"></div>
-      <div class="victory-souls-retrieved hidden" id="victorySoulsRetrieved"></div>
+      <div class="victory-chm-earned" id="victoryCHMEarned"></div>
+      <div class="victory-chm-retrieved hidden" id="victoryCHMRetrieved"></div>
       <button class="btn-victory-continue" onclick="afterBossVictory()">
         🔥 К бонфайру
       </button>
@@ -1198,9 +1198,9 @@
         <div class="hollow-desc">
           Ты не заходил слишком долго.<br>
           Рынок продолжал движение без тебя.<br>
-          Множитель душ: <strong>×0.5</strong>
+          Множитель CHM: <strong>×0.5</strong>
         </div>
-        <div class="hollow-cost">Стоимость выхода: <span class="souls-gold">100 ⚡</span></div>
+        <div class="hollow-cost">Стоимость выхода: <span class="chm-gold">100 ⚡</span></div>
         <button class="btn-hollow-exit" id="hollowExitBtn" onclick="exitHollow()">
           Вернуться к огню — 100 ⚡
         </button>
@@ -1209,24 +1209,24 @@
     </div>
   </div>
 
-  <!-- ══ SOULS DROP OVERLAY ══════════════════════════════════════════════ -->
-  <div id="soulsDropOverlay" class="souls-drop-overlay hidden">
-    <div class="souls-drop-content">
-      <div class="souls-drop-title">ЛИКВИДИРОВАН</div>
-      <div class="souls-drop-amount" id="soulsDropAmount">0 ⚡</div>
-      <div class="souls-drop-desc">
-        Рынок забрал твои души.<br>
+  <!-- ══ CHM DROP OVERLAY ════════════════════════════════════════════════ -->
+  <div id="chmDropOverlay" class="chm-drop-overlay hidden">
+    <div class="chm-drop-content">
+      <div class="chm-drop-title">ЛИКВИДИРОВАН</div>
+      <div class="chm-drop-amount" id="chmDropAmount">0 ⚡</div>
+      <div class="chm-drop-desc">
+        Рынок забрал твои CHM.<br>
         У тебя <strong>один шанс</strong> — победи босса и верни их.<br>
         Провалишься снова — они сгорят <em>навсегда.</em>
       </div>
-      <button class="btn-primary btn-souls-retry" onclick="closeSoulsDrop()">
+      <button class="btn-primary btn-chm-retry" onclick="closeCHMDrop()">
         Попробовать снова
       </button>
     </div>
   </div>
 
-  <!-- ══ SOULS FLOAT LAYER ════════════════════════════════════════════════ -->
-  <div id="soulsFloatLayer" class="souls-float-layer"></div>
+  <!-- ══ CHM FLOAT LAYER ══════════════════════════════════════════════════ -->
+  <div id="chmFloatLayer" class="chm-float-layer"></div>
 
   <!-- ══════════════════ PHASE 3: SOCIAL ══════════════════════════════════ -->
 
@@ -1263,7 +1263,7 @@
       </div>
       <div class="daily-reward-row">
         <span class="daily-reward-label">Награда:</span>
-        <span class="daily-reward-souls" id="dailyRewardSouls">500 ⚡</span>
+        <span class="daily-reward-chm" id="dailyRewardCHM">500 ⚡</span>
       </div>
       <div class="daily-question" id="dailyQuestion">Загрузка…</div>
       <div class="daily-options" id="dailyOptions"></div>
@@ -1271,7 +1271,7 @@
       <div class="daily-result hidden" id="dailyResult">
         <div class="daily-result-icon" id="dailyResultIcon"></div>
         <div class="daily-result-text" id="dailyResultText"></div>
-        <div class="daily-souls-won" id="dailySoulsWon"></div>
+        <div class="daily-chm-won" id="dailyCHMWon"></div>
         <div class="daily-streak-update" id="dailyStreakUpdate"></div>
         <button class="btn-daily-close" onclick="closeDaily()">Закрыть</button>
       </div>
@@ -1318,7 +1318,7 @@
       </div>
       <div class="clan-progress-wrap">
         <div class="clan-progress-label">
-          Недельный пул: <span id="clanWeeklySouls">0</span> / <span id="clanWeeklyTarget">1000</span> ⚡
+          Недельный пул: <span id="clanWeeklyCHM">0</span> / <span id="clanWeeklyTarget">1000</span> ⚡
         </div>
         <div class="clan-progress-bar-outer">
           <div class="clan-progress-bar-inner" id="clanProgressBar" style="width:0%"></div>
@@ -1329,7 +1329,7 @@
         ⚠️ <span id="clanHollowCount">0</span> члена клана в Hollow режиме — клан теряет <strong>200 ⚡</strong> за каждого
       </div>
       <div class="clan-mine-actions">
-        <button class="btn-clan-contribute" onclick="showContributeModal()">💎 Пожертвовать души</button>
+        <button class="btn-clan-contribute" onclick="showContributeModal()">💎 Пожертвовать CHM</button>
         <button class="btn-clan-leave" onclick="leaveClan()">Покинуть клан</button>
       </div>
     </div>
@@ -1345,11 +1345,38 @@
   <div id="contributeModal" class="contribute-modal hidden">
     <div class="contribute-content">
       <div class="contribute-title">Пожертвовать клану</div>
-      <div class="contribute-souls-avail">У тебя: <span id="contributeSoulsAvail">0</span> ⚡</div>
-      <input id="contributeAmount" class="contribute-input" type="number" min="10" placeholder="Количество душ">
+      <div class="contribute-chm-avail">У тебя: <span id="contributeCHMAvail">0</span> ⚡</div>
+      <input id="contributeAmount" class="contribute-input" type="number" min="10" placeholder="Количество CHM">
       <div class="contribute-actions">
         <button class="btn-contribute-confirm" onclick="confirmContribute()">Пожертвовать ⚡</button>
         <button class="btn-contribute-cancel" onclick="closeContributeModal()">Отмена</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ CHM WALLET MODAL ═══════════════════════════════════════════════════ -->
+  <div id="chmWalletModal" class="chm-wallet-modal hidden">
+    <div class="chm-wallet-backdrop" onclick="closeModal('chmWalletModal')"></div>
+    <div class="chm-wallet-content">
+      <div class="chm-wallet-header">
+        <div class="chm-wallet-title">⚡ CHM Кошелёк</div>
+        <button class="chm-wallet-close" onclick="closeModal('chmWalletModal')">✕</button>
+      </div>
+      <div class="chm-wallet-body">
+        <div class="chm-wallet-balance-row">
+          <span class="chm-wallet-label">Баланс CHM:</span>
+          <span class="chm-wallet-balance" id="chmWalletBalance">0 ⚡</span>
+        </div>
+        <div class="chm-wallet-addr-row">
+          <label class="chm-wallet-addr-label">TON адрес для вывода:</label>
+          <input id="tonWalletInput" class="chm-wallet-addr-input" type="text"
+                 placeholder="EQB... или UQB..." maxlength="66"/>
+          <div class="chm-wallet-addr-hint">Формат: EQ... или UQ... (48 символов)</div>
+        </div>
+        <div class="chm-wallet-actions">
+          <button class="btn-primary chm-wallet-save-btn" onclick="saveTONWallet()">💾 Сохранить адрес</button>
+        </div>
+        <div class="chm-wallet-status" id="chmWalletStatus"></div>
       </div>
     </div>
   </div>
@@ -1360,7 +1387,7 @@
     <div class="roulette-content">
       <div class="roulette-header">
         <div class="roulette-title">⚡ Рулетка Знаний</div>
-        <div class="roulette-subtitle">Ставь души. Крути. Получи x3 или потеряй всё.</div>
+        <div class="roulette-subtitle">Ставь CHM. Крути. Получи x3 или потеряй всё.</div>
       </div>
 
       <!-- Wheel -->
@@ -1380,7 +1407,7 @@
           <button class="roulette-bet-btn" data-bet="50" onclick="selectBet(50)">50 ⚡</button>
           <button class="roulette-bet-btn" data-bet="100" onclick="selectBet(100)">100 ⚡</button>
         </div>
-        <div class="roulette-souls-balance">Баланс: <span id="rouletteSoulsBalance">0</span> ⚡</div>
+        <div class="roulette-chm-balance">Баланс: <span id="rouletteCHMBalance">0</span> ⚡</div>
         <button class="roulette-spin-btn" id="rouletteSpinBtn" onclick="spinRoulette()" disabled>
           🎰 Крутить
         </button>
@@ -1477,7 +1504,7 @@
         <div class="pvp-result-icon" id="pvpResultIcon">🏆</div>
         <div class="pvp-result-title" id="pvpResultTitle">ПОБЕДА!</div>
         <div class="pvp-result-scores" id="pvpResultScores"></div>
-        <div class="pvp-result-souls" id="pvpResultSouls"></div>
+        <div class="pvp-result-chm" id="pvpResultCHM"></div>
         <button class="pvp-close-btn" onclick="closePvP()">Закрыть</button>
       </div>
     </div>
@@ -1544,7 +1571,7 @@
               </div>
               <div class="gd-card">
                 <div class="gd-card-icon">⚡</div>
-                <div class="gd-card-text"><strong>Квесты</strong> — отвечай на вопросы, зарабатывай Души и XP</div>
+                <div class="gd-card-text"><strong>Квесты</strong> — отвечай на вопросы, зарабатывай CHM и XP</div>
               </div>
               <div class="gd-card">
                 <div class="gd-card-icon">🏆</div>
@@ -1559,25 +1586,25 @@
           </div>
         </div>
 
-        <!-- ── 2. ДУШИ ── -->
-        <div class="gd-section" data-keywords="души soul валюта деньги ресурс потеря смерть">
+        <!-- ── 2. CHM ── -->
+        <div class="gd-section" data-keywords="chm валюта деньги ресурс потеря смерть token">
           <button class="gd-toggle" onclick="toggleGuideSection(this)">
             <span class="gd-toggle-icon">⚡</span>
-            <span class="gd-toggle-title">Души — основная валюта</span>
+            <span class="gd-toggle-title">CHM — основная валюта</span>
             <span class="gd-chevron">▾</span>
           </button>
           <div class="gd-content">
-            <p>Души (⚡) — это главная валюта академии. Они нужны для покупок в магазине, активации механик и участия в рейтинге.</p>
+            <p>CHM (⚡) — это главная валюта академии. Нужна для покупок в магазине, активации механик и участия в рейтинге.</p>
             <div class="gd-table">
-              <div class="gd-row gd-row-header"><span>Действие</span><span>Изменение душ</span></div>
-              <div class="gd-row gd-plus"><span>Правильный ответ</span><span>+Souls</span></div>
-              <div class="gd-row gd-plus"><span>Победа над боссом</span><span>+Больше Souls</span></div>
+              <div class="gd-row gd-row-header"><span>Действие</span><span>Изменение CHM</span></div>
+              <div class="gd-row gd-plus"><span>Правильный ответ</span><span>+CHM</span></div>
+              <div class="gd-row gd-plus"><span>Победа над боссом</span><span>+Больше CHM</span></div>
               <div class="gd-row gd-plus"><span>Квест завершён</span><span>+Бонус</span></div>
-              <div class="gd-row gd-plus"><span>Ежедневный бонус</span><span>+Souls</span></div>
+              <div class="gd-row gd-plus"><span>Ежедневный бонус</span><span>+CHM</span></div>
               <div class="gd-row gd-minus"><span>Неправильный ответ</span><span>−Штраф</span></div>
               <div class="gd-row gd-minus"><span>Просрочен дедлайн</span><span>−Штраф</span></div>
             </div>
-            <div class="gd-tip">⚠️ При нулевых душах часть теряется «на земле» — как в Dark Souls. Победи следующего босса, чтобы вернуть!</div>
+            <div class="gd-tip">⚠️ При нулевом CHM часть теряется «на земле» — как в Dark Souls. Победи следующего босса, чтобы вернуть!</div>
           </div>
         </div>
 
@@ -1611,7 +1638,7 @@
             <span class="gd-chevron">▾</span>
           </button>
           <div class="gd-content">
-            <p>Правильные ответы подряд создают <strong>стрик</strong> — чем длиннее, тем больше XP и Душ за каждый ответ.</p>
+            <p>Правильные ответы подряд создают <strong>стрик</strong> — чем длиннее, тем больше XP и CHM за каждый ответ.</p>
             <div class="gd-table">
               <div class="gd-row gd-row-header"><span>Стрик</span><span>Эффект</span></div>
               <div class="gd-row"><span>1–9 подряд</span><span>Базовая награда</span></div>
@@ -1682,7 +1709,7 @@
             <div class="gd-steps">
               <div class="gd-step"><span class="gd-step-num">1</span><span>Накапливай шанс через ежедневные действия</span></div>
               <div class="gd-step"><span class="gd-step-num">2</span><span>Стань Катализатором — другие атакуют тебя вопросами</span></div>
-              <div class="gd-step"><span class="gd-step-num">3</span><span>Выживи — заработай изотопы и бонусные Души</span></div>
+              <div class="gd-step"><span class="gd-step-num">3</span><span>Выживи — заработай изотопы и бонусные CHM</span></div>
               <div class="gd-step"><span class="gd-step-num">4</span><span>Сам атакуй чужих катализаторов, используя изотопы</span></div>
             </div>
             <div class="gd-tip">🔴 Красная точка на вкладке Алхимия означает, что Катализатор сейчас активен — иди атаковать!</div>
@@ -1764,7 +1791,7 @@
             <span class="gd-chevron">▾</span>
           </button>
           <div class="gd-content">
-            <p>Магазин находится в <strong>вкладке Алхимия</strong>. Покупки оплачиваются Душами (⚡).</p>
+            <p>Магазин находится в <strong>вкладке Алхимия</strong>. Покупки оплачиваются CHM (⚡).</p>
             <div class="gd-table">
               <div class="gd-row gd-row-header"><span>Товар</span><span>Для чего</span></div>
               <div class="gd-row"><span>🧪 Эстус-колба</span><span>Восстанови жизнь</span></div>
@@ -1781,7 +1808,7 @@
             <span class="gd-chevron">▾</span>
           </button>
           <div class="gd-content">
-            <p>Приглашай друзей через свою реферальную ссылку в <strong>вкладке Алхимия</strong>. За каждого приглашённого получаешь бонусные Души.</p>
+            <p>Приглашай друзей через свою реферальную ссылку в <strong>вкладке Алхимия</strong>. За каждого приглашённого получаешь бонусные CHM.</p>
             <div class="gd-steps">
               <div class="gd-step"><span class="gd-step-num">1</span><span>Перейди в Алхимию → найди блок «Реферальная Алхимия»</span></div>
               <div class="gd-step"><span class="gd-step-num">2</span><span>Скопируй ссылку или нажми «Поделиться»</span></div>
@@ -1799,7 +1826,7 @@
             <span class="gd-chevron">▾</span>
           </button>
           <div class="gd-content">
-            <p>Кнопка <strong>«⚔️ Вызов»</strong> на главном экране — ежедневное задание. Выполни его раз в день для получения бонусных Душ и XP.</p>
+            <p>Кнопка <strong>«⚔️ Вызов»</strong> на главном экране — ежедневное задание. Выполни его раз в день для получения бонусных CHM и XP.</p>
             <div class="gd-tip">💡 Если кнопка выделена восклицательным знаком (!) — вызов доступен, не упусти!</div>
           </div>
         </div>

@@ -17,3 +17,17 @@ services:
         sync: false         # set manually in Render dashboard (group/channel ID)
       - key: DATA_DIR
         value: /tmp
+      - key: CHM_MODULE_REWARD
+        value: "50"
+      - key: CHM_BOSS_REWARD
+        value: "200"
+      - key: CHM_DAILY_STREAK_MAX
+        value: "500"
+      - key: CHM_REFERRAL_REWARD
+        value: "100"
+      - key: CHM_PVP_WIN_REWARD
+        value: "30"
+      - key: CHM_ROULETTE_BURN_PCT
+        value: "0.20"
+      - key: SESSION_STRICT
+        value: "false"

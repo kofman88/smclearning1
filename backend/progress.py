@@ -221,18 +221,22 @@ def get_user_state(user_id: int) -> Dict[str, Any]:
             "badges": [],
             "daily_bonus_claimed": None,
             "module_unlocked": [0],  # free module always unlocked
-            # ── SOULS SYSTEM (Phase 1: Souls-like) ──
-            "souls": 0,               # current souls balance
-            "total_souls_earned": 0,  # all-time counter
-            "dropped_souls": 0,       # souls on the ground after failure
-            "dropped_souls_module_id": None,  # which module they dropped from
-            "can_retrieve_souls": False,      # one retrieval attempt allowed
+            # ── CHM SYSTEM (Phase 1: Souls-like) ──
+            "chm": 0,                    # current CHM balance
+            "chm_total_earned": 0,       # all-time counter
+            "chm_total_burned": 0,       # all-time burned counter
+            "chm_total_spent": 0,        # spent in shop
+            "chm_dropped": 0,            # CHM on the ground after failure
+            "chm_dropped_module_id": None,  # which module they dropped from
+            "chm_can_retrieve": False,      # one retrieval attempt allowed
             "hollow_since": None,     # ISO datetime when hollow started (None = not hollow)
             "current_title": "Ликвидность",   # displayed title
             "ng_plus_level": 0,       # 0 = normal, 1 = NG+, 2 = NG++
-            "estus_flasks": 3,        # hint charges (refill at bonfire)
-            "estus_max": 3,           # max flask count
-            "souls_module_earned": 0, # souls earned in current module (at stake)
+            "chm_flasks": 3,             # hint charges (refill at bonfire)
+            "chm_flasks_max": 3,         # max flask count
+            "chm_module_earned": 0,      # CHM earned in current module (at stake)
+            "ton_wallet": None,          # TON wallet for withdrawal
+            "chm_last_snapshot": None,
             # ── ONBOARDING ──
             "onboarding_complete": False,
         }
@@ -243,18 +247,38 @@ def get_user_state(user_id: int) -> Dict[str, Any]:
     state.setdefault("badges", [])
     state.setdefault("daily_bonus_claimed", None)
     state.setdefault("module_unlocked", [0])
-    # Souls system back-compat
-    state.setdefault("souls", 0)
-    state.setdefault("total_souls_earned", 0)
-    state.setdefault("dropped_souls", 0)
-    state.setdefault("dropped_souls_module_id", None)
-    state.setdefault("can_retrieve_souls", False)
+    # CHM system back-compat (with Souls→CHM migration for existing users)
+    if "souls" in state and "chm" not in state:
+        state["chm"] = state.pop("souls")
+    if "total_souls_earned" in state and "chm_total_earned" not in state:
+        state["chm_total_earned"] = state.pop("total_souls_earned")
+    if "dropped_souls" in state and "chm_dropped" not in state:
+        state["chm_dropped"] = state.pop("dropped_souls")
+    if "dropped_souls_module_id" in state and "chm_dropped_module_id" not in state:
+        state["chm_dropped_module_id"] = state.pop("dropped_souls_module_id")
+    if "can_retrieve_souls" in state and "chm_can_retrieve" not in state:
+        state["chm_can_retrieve"] = state.pop("can_retrieve_souls")
+    if "souls_module_earned" in state and "chm_module_earned" not in state:
+        state["chm_module_earned"] = state.pop("souls_module_earned")
+    if "estus_flasks" in state and "chm_flasks" not in state:
+        state["chm_flasks"] = state.pop("estus_flasks")
+    if "estus_max" in state and "chm_flasks_max" not in state:
+        state["chm_flasks_max"] = state.pop("estus_max")
+    state.setdefault("chm", 0)
+    state.setdefault("chm_total_earned", 0)
+    state.setdefault("chm_total_burned", 0)
+    state.setdefault("chm_total_spent", 0)
+    state.setdefault("chm_dropped", 0)
+    state.setdefault("chm_dropped_module_id", None)
+    state.setdefault("chm_can_retrieve", False)
     state.setdefault("hollow_since", None)
     state.setdefault("current_title", "Ликвидность")
     state.setdefault("ng_plus_level", 0)
-    state.setdefault("estus_flasks", 3)
-    state.setdefault("estus_max", 3)
-    state.setdefault("souls_module_earned", 0)
+    state.setdefault("chm_flasks", 3)
+    state.setdefault("chm_flasks_max", 3)
+    state.setdefault("chm_module_earned", 0)
+    state.setdefault("ton_wallet", None)
+    state.setdefault("chm_last_snapshot", None)
     # Onboarding back-compat
     state.setdefault("onboarding_complete", False)
     # Notification state back-compat
@@ -483,10 +507,10 @@ load_progress()
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# ── SOULS SYSTEM (CHM Souls)  ─────────────────────────────────────────
+# ── CHM SYSTEM  ───────────────────────────────────────────────────────────────
 # ══════════════════════════════════════════════════════════════════════════════
 
-# Streak → souls multiplier (like in Duolingo but darker)
+# Streak → CHM multiplier (like in Duolingo but darker)
 _STREAK_MULTIPLIERS: List[Tuple[int, float]] = [
     (30, 5.0),  # 30+ days → x5
     (14, 3.0),  # 14+ days → x3
@@ -495,10 +519,10 @@ _STREAK_MULTIPLIERS: List[Tuple[int, float]] = [
     (0,  1.0),  # default  → x1
 ]
 
-# Souls per tap (base, before multiplier)
-_SOULS_PER_TAP_BASE = 2
-_SOULS_PER_TAP_COMBO5 = 5    # combo 5+
-_SOULS_PER_TAP_COMBO2 = 3    # combo 2-4
+# CHM per tap (base, before multiplier)
+_CHM_PER_TAP_BASE = 2
+_CHM_PER_TAP_COMBO5 = 5    # combo 5+
+_CHM_PER_TAP_COMBO2 = 3    # combo 2-4
 
 
 # Title progression rules (applied in order; first matching rule wins)
@@ -517,17 +541,17 @@ HOLLOW_PENALTY_DAYS   = 14  # if hollow > 14 days → lose 1 module level
 
 
 def get_streak_multiplier(streak: int) -> float:
-    """Return souls-per-tap multiplier based on current streak."""
+    """Return CHM-per-tap multiplier based on current streak."""
     for threshold, mult in _STREAK_MULTIPLIERS:
         if streak >= threshold:
             return mult
     return 1.0
 
 
-def add_souls(user_id: int, amount: int, *, source: str = "tap") -> Dict[str, Any]:
-    """Award souls to user. Returns souls delta info."""
+def add_chm(user_id: int, amount: int, *, source: str = "tap") -> Dict[str, Any]:
+    """Award CHM to user. Returns CHM delta info."""
     if amount <= 0:
-        return {"souls": 0, "delta": 0, "total": 0}
+        return {"chm": 0, "delta": 0, "total": 0}
 
     state = get_user_state(user_id)
     mult  = get_streak_multiplier(state.get("streak", 0))
@@ -536,96 +560,123 @@ def add_souls(user_id: int, amount: int, *, source: str = "tap") -> Dict[str, An
         mult *= 0.5
 
     awarded = round(amount * mult)
-    state["souls"]               = state.get("souls", 0) + awarded
-    state["total_souls_earned"]  = state.get("total_souls_earned", 0) + awarded
-    # Track how many souls earned in current module (at stake for boss fights)
-    state["souls_module_earned"] = state.get("souls_module_earned", 0) + awarded
+    state["chm"]               = state.get("chm", 0) + awarded
+    state["chm_total_earned"]  = state.get("chm_total_earned", 0) + awarded
+    # Track how many CHM earned in current module (at stake for boss fights)
+    state["chm_module_earned"] = state.get("chm_module_earned", 0) + awarded
     save_progress()
-    return {"delta": awarded, "total": state["souls"], "multiplier": mult, "source": source}
+    return {"delta": awarded, "total": state["chm"], "multiplier": mult, "source": source}
+
+# Back-compat alias
+add_souls = add_chm
 
 
-def spend_souls(user_id: int, amount: int, *, reason: str = "purchase") -> Dict[str, Any]:
-    """Spend souls. Returns {ok, delta, total} — fails if insufficient."""
+def spend_chm(user_id: int, amount: int, *, reason: str = "purchase") -> Dict[str, Any]:
+    """Spend CHM. Returns {ok, delta, total} — fails if insufficient."""
     state  = get_user_state(user_id)
-    current = state.get("souls", 0)
+    current = state.get("chm", 0)
     if current < amount:
-        return {"ok": False, "reason": "insufficient_souls", "have": current, "need": amount}
-    state["souls"] = current - amount
+        return {"ok": False, "reason": "insufficient_chm", "have": current, "need": amount}
+    state["chm"] = current - amount
     save_progress()
-    return {"ok": True, "delta": -amount, "total": state["souls"], "reason": reason}
+    return {"ok": True, "delta": -amount, "total": state["chm"], "reason": reason}
+
+# Back-compat alias
+spend_souls = spend_chm
 
 
-def drop_souls(user_id: int) -> Dict[str, Any]:
+def drop_chm(user_id: int) -> Dict[str, Any]:
     """
-    Player failed a module boss: drop all souls earned in this module.
-    The souls land on the ground — one retrieval attempt is allowed.
+    Player failed a module boss: drop all CHM earned in this module.
+    The CHM lands on the ground — one retrieval attempt is allowed.
     Returns the amount dropped.
     """
     state = get_user_state(user_id)
-    earned_in_module = state.get("souls_module_earned", 0)
+    earned_in_module = state.get("chm_module_earned", 0)
     if earned_in_module <= 0:
         return {"dropped": 0, "can_retrieve": False}
 
     # Transfer module earnings to "dropped" pool
-    state["souls"]               = max(0, state.get("souls", 0) - earned_in_module)
-    state["dropped_souls"]       = earned_in_module
-    state["dropped_souls_module_id"] = state.get("module_index", 0)
-    state["can_retrieve_souls"]  = True
-    state["souls_module_earned"] = 0
+    state["chm"]               = max(0, state.get("chm", 0) - earned_in_module)
+    state["chm_dropped"]       = earned_in_module
+    state["chm_dropped_module_id"] = state.get("module_index", 0)
+    state["chm_dropped_expires_at"] = (datetime.utcnow() + timedelta(hours=24)).isoformat()
+    state["chm_can_retrieve"]  = True
+    state["chm_module_earned"] = 0
     save_progress()
     return {"dropped": earned_in_module, "can_retrieve": True}
 
+# Back-compat alias
+drop_souls = drop_chm
 
-def retrieve_souls(user_id: int) -> Dict[str, Any]:
+
+def retrieve_chm(user_id: int) -> Dict[str, Any]:
     """
-    One-shot attempt to recover dropped souls (must retry the boss first).
+    One-shot attempt to recover dropped CHM (must retry the boss first).
     Returns amount recovered or 0 if not available.
     """
     state = get_user_state(user_id)
-    if not state.get("can_retrieve_souls", False):
-        return {"ok": False, "reason": "no_dropped_souls"}
-    if state.get("dropped_souls", 0) <= 0:
+    if not state.get("chm_can_retrieve", False):
+        return {"ok": False, "reason": "no_dropped_chm"}
+    if state.get("chm_dropped", 0) <= 0:
         return {"ok": False, "reason": "nothing_to_retrieve"}
 
-    recovered = state["dropped_souls"]
-    state["souls"]              = state.get("souls", 0) + recovered
-    state["total_souls_earned"] = state.get("total_souls_earned", 0) + recovered
-    state["dropped_souls"]      = 0
-    state["dropped_souls_module_id"] = None
-    state["can_retrieve_souls"] = False
+    recovered = state["chm_dropped"]
+    state["chm"]              = state.get("chm", 0) + recovered
+    state["chm_total_earned"] = state.get("chm_total_earned", 0) + recovered
+    state["chm_dropped"]      = 0
+    state["chm_dropped_module_id"] = None
+    state["chm_dropped_expires_at"] = None
+    state["chm_can_retrieve"] = False
     save_progress()
-    return {"ok": True, "recovered": recovered, "total": state["souls"]}
+    return {"ok": True, "recovered": recovered, "total": state["chm"]}
+
+# Back-compat alias
+retrieve_souls = retrieve_chm
 
 
-def burn_dropped_souls(user_id: int) -> int:
-    """Permanently burn dropped souls (called when opportunity expires)."""
+def burn_dropped_chm(user_id: int) -> int:
+    """Permanently burn dropped CHM (called when opportunity expires)."""
     state = get_user_state(user_id)
-    burned = state.get("dropped_souls", 0)
-    state["dropped_souls"]      = 0
-    state["dropped_souls_module_id"] = None
-    state["can_retrieve_souls"] = False
+    # Check expiry — only burn after 24h
+    expires_at = state.get("chm_dropped_expires_at")
+    if expires_at:
+        try:
+            if datetime.fromisoformat(expires_at) > datetime.utcnow():
+                return 0  # not yet expired — don't burn
+        except Exception:
+            pass
+    burned = state.get("chm_dropped", 0)
+    state["chm_total_burned"]  = round(state.get("chm_total_burned", 0) + burned, 9)
+    state["chm_dropped"]      = 0
+    state["chm_dropped_module_id"] = None
+    state["chm_dropped_expires_at"] = None
+    state["chm_can_retrieve"] = False
     save_progress()
     return burned
 
+# Back-compat alias
+burn_dropped_souls = burn_dropped_chm
+
 
 def use_estus_flask(user_id: int) -> Dict[str, Any]:
-    """Use one Estus flask (hint charge). Returns {ok, remaining}."""
+    """Use one CHM flask (hint charge). Returns {ok, remaining}."""
     state = get_user_state(user_id)
-    flasks = state.get("estus_flasks", 3)
+    flasks = state.get("chm_flasks", 3)
     if flasks <= 0:
         return {"ok": False, "remaining": 0, "reason": "no_flasks"}
-    state["estus_flasks"] = flasks - 1
+    state["chm_flasks"] = flasks - 1
     save_progress()
-    return {"ok": True, "remaining": state["estus_flasks"]}
+    return {"ok": True, "remaining": state["chm_flasks"]}
 
 
 def refill_estus(user_id: int) -> int:
-    """Refill Estus flasks to max (called at bonfire checkpoint)."""
+    """Refill CHM flasks to max (called at bonfire checkpoint)."""
     state = get_user_state(user_id)
-    max_flasks = state.get("estus_max", 3)
-    state["estus_flasks"] = max_flasks
-    # Also reset module earned souls (new module = new session)
-    state["souls_module_earned"] = 0
+    max_flasks = state.get("chm_flasks_max", 3)
+    state["chm_flasks"] = max_flasks
+    # Also reset module earned CHM (new module = new session)
+    state["chm_module_earned"] = 0
     save_progress()
     return max_flasks
 
@@ -685,17 +736,17 @@ def check_hollow(user_id: int) -> Dict[str, Any]:
     }
 
 
-def exit_hollow(user_id: int, souls_cost: int = 100) -> Dict[str, Any]:
-    """Pay souls to exit hollow state. Returns {ok, ..}."""
+def exit_hollow(user_id: int, chm_cost: int = 100) -> Dict[str, Any]:
+    """Pay CHM to exit hollow state. Returns {ok, ..}."""
     state = get_user_state(user_id)
     if not state.get("hollow_since"):
         return {"ok": False, "reason": "not_hollow"}
-    result = spend_souls(user_id, souls_cost, reason="exit_hollow")
+    result = spend_chm(user_id, chm_cost, reason="exit_hollow")
     if not result["ok"]:
         return result
     state["hollow_since"] = None
     save_progress()
-    return {"ok": True, "souls_spent": souls_cost, "total_souls": result["total"]}
+    return {"ok": True, "chm_spent": chm_cost, "total_chm": result["total"]}
 
 
 def update_title(user_id: int) -> str:
@@ -724,22 +775,28 @@ def update_title(user_id: int) -> str:
     return title
 
 
-def get_souls_state(user_id: int) -> Dict[str, Any]:
-    """Return a souls summary for the user."""
+def get_chm_state(user_id: int) -> Dict[str, Any]:
+    """Return a CHM summary for the user."""
     state = get_user_state(user_id)
     return {
-        "souls":           state.get("souls", 0),
-        "total_earned":    state.get("total_souls_earned", 0),
-        "dropped_souls":   state.get("dropped_souls", 0),
-        "can_retrieve":    state.get("can_retrieve_souls", False),
-        "estus_flasks":    state.get("estus_flasks", 3),
-        "estus_max":       state.get("estus_max", 3),
-        "is_hollow":       bool(state.get("hollow_since")),
-        "hollow_since":    state.get("hollow_since"),
-        "current_title":   state.get("current_title", "Ликвидность"),
-        "streak_mult":     get_streak_multiplier(state.get("streak", 0)),
-        "ng_plus_level":   state.get("ng_plus_level", 0),
+        "chm":              state.get("chm", 0),
+        "total_earned":     state.get("chm_total_earned", 0),
+        "chm_total_burned": state.get("chm_total_burned", 0),
+        "chm_total_spent":  state.get("chm_total_spent", 0),
+        "chm_dropped":      state.get("chm_dropped", 0),
+        "can_retrieve":     state.get("chm_can_retrieve", False),
+        "chm_flasks":       state.get("chm_flasks", 3),
+        "chm_flasks_max":   state.get("chm_flasks_max", 3),
+        "is_hollow":        bool(state.get("hollow_since")),
+        "hollow_since":     state.get("hollow_since"),
+        "current_title":    state.get("current_title", "Ликвидность"),
+        "streak_mult":      get_streak_multiplier(state.get("streak", 0)),
+        "ng_plus_level":    state.get("ng_plus_level", 0),
+        "ton_wallet":       state.get("ton_wallet"),
     }
+
+# Back-compat alias
+get_souls_state = get_chm_state
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -747,25 +804,25 @@ def get_souls_state(user_id: int) -> Dict[str, Any]:
 # ══════════════════════════════════════════════════════════════════════════════
 
 HOMUNCULUS_STAGES = [
-    {"id": 1, "name": "Реагент",           "souls_req": 0,      "modules_req": 0,  "mult": 1.0,  "desc": "Мерцающая колба с мутной жидкостью"},
-    {"id": 2, "name": "Зародыш",           "souls_req": 500,    "modules_req": 1,  "mult": 1.2,  "desc": "В колбе появляется силуэт существа"},
-    {"id": 3, "name": "Гомункул",          "souls_req": 2000,   "modules_req": 3,  "mult": 1.5,  "desc": "Существо вылезло из колбы"},
-    {"id": 4, "name": "Фамильяр",          "souls_req": 5000,   "modules_req": 9,  "mult": 2.0,  "desc": "Существо с чертами дракона. Парит в воздухе"},
-    {"id": 5, "name": "Элементаль",        "souls_req": 15000,  "modules_req": 10, "mult": 3.0,  "desc": "Существо из чистой энергии"},
-    {"id": 6, "name": "Архонт",            "souls_req": 50000,  "modules_req": 10, "mult": 5.0,  "desc": "Величественная сущность в тёмной ауре"},
-    {"id": 7, "name": "Философский Камень","souls_req": 100000, "modules_req": 10, "mult": 10.0, "desc": "Абстрактная геометрическая форма"},
+    {"id": 1, "name": "Реагент",           "chm_req": 0,      "modules_req": 0,  "mult": 1.0,  "desc": "Мерцающая колба с мутной жидкостью"},
+    {"id": 2, "name": "Зародыш",           "chm_req": 500,    "modules_req": 1,  "mult": 1.2,  "desc": "В колбе появляется силуэт существа"},
+    {"id": 3, "name": "Гомункул",          "chm_req": 2000,   "modules_req": 3,  "mult": 1.5,  "desc": "Существо вылезло из колбы"},
+    {"id": 4, "name": "Фамильяр",          "chm_req": 5000,   "modules_req": 9,  "mult": 2.0,  "desc": "Существо с чертами дракона. Парит в воздухе"},
+    {"id": 5, "name": "Элементаль",        "chm_req": 15000,  "modules_req": 10, "mult": 3.0,  "desc": "Существо из чистой энергии"},
+    {"id": 6, "name": "Архонт",            "chm_req": 50000,  "modules_req": 10, "mult": 5.0,  "desc": "Величественная сущность в тёмной ауре"},
+    {"id": 7, "name": "Философский Камень","chm_req": 100000, "modules_req": 10, "mult": 10.0, "desc": "Абстрактная геометрическая форма"},
 ]
 
 _HOM_STATUS_MULT = {"active": 1.0, "hungry": 0.8, "dying": 0.3, "dead": 0.1, "enraged": 2.0}
 _HOM_DAILY_CAP   = 1000   # taps per day before efficiency drops
-_HOM_REVIVE_COST = 200    # souls to revive dead homunculus
+_HOM_REVIVE_COST = 200    # CHM to revive dead homunculus
 
 
 def _default_homunculus() -> Dict[str, Any]:
     return {
         "stage":        1,
         "status":       "active",
-        "souls_fed":    0,        # lifetime souls fed (drives evolution)
+        "souls_fed":    0,        # lifetime CHM fed (drives evolution)
         "total_taps":   0,
         "taps_today":   0,
         "last_tap_at":  None,
@@ -822,12 +879,12 @@ def get_homunculus_state(user_id: int) -> Dict[str, Any]:
         "last_tap_at":  hom.get("last_tap_at"),
         "enraged_until": hom.get("enraged_until"),
         "next_stage":   next_stage,
-        "progress_pct": round(min(100, hom.get("souls_fed", 0) / next_stage["souls_req"] * 100)) if next_stage else 100,
+        "progress_pct": round(min(100, hom.get("souls_fed", 0) / next_stage["chm_req"] * 100)) if next_stage else 100,
     }
 
 
 def homunculus_process_taps(user_id: int, tap_count: int, max_combo: int = 0) -> Dict[str, Any]:
-    """Process a batch of taps. Anti-cheat: max 20 per 2s batch. Returns souls earned + evolution info."""
+    """Process a batch of taps. Anti-cheat: max 20 per 2s batch. Returns CHM earned + evolution info."""
     state = get_user_state(user_id)
     if "homunculus" not in state:
         state["homunculus"] = _default_homunculus()
@@ -905,21 +962,21 @@ def homunculus_process_taps(user_id: int, tap_count: int, max_combo: int = 0) ->
     for s in HOMUNCULUS_STAGES:
         if s["id"] <= stage:
             continue
-        if hom["souls_fed"] >= s["souls_req"] and modules_done >= s["modules_req"]:
+        if hom["souls_fed"] >= s["chm_req"] and modules_done >= s["modules_req"]:
             new_stage = s["id"]
             evolved = True
     if evolved:
         hom["stage"] = new_stage
 
-    # Award souls
-    result = add_souls(user_id, souls_earned, source="homunculus_tap")
+    # Award CHM
+    result = add_chm(user_id, souls_earned, source="homunculus_tap")
     save_progress()
 
     next_stage_data = HOMUNCULUS_STAGES[new_stage] if new_stage < 7 else None
     return {
         "ok":           True,
-        "souls_earned": souls_earned,
-        "total_souls":  result.get("total", 0),
+        "chm_earned":   souls_earned,
+        "total_chm":    result.get("total", 0),
         "evolution":    evolved,
         "new_stage":    new_stage,
         "stage_name":   HOMUNCULUS_STAGES[new_stage - 1]["name"],
@@ -928,32 +985,32 @@ def homunculus_process_taps(user_id: int, tap_count: int, max_combo: int = 0) ->
         "taps_today":   hom["taps_today"],
         "combo_best":   hom["combo_best"],
         "souls_fed":    hom["souls_fed"],
-        "progress_pct": round(min(100, hom["souls_fed"] / next_stage_data["souls_req"] * 100)) if next_stage_data else 100,
-        "next_souls_req": next_stage_data["souls_req"] if next_stage_data else None,
+        "progress_pct": round(min(100, hom["souls_fed"] / next_stage_data["chm_req"] * 100)) if next_stage_data else 100,
+        "next_chm_req": next_stage_data["chm_req"] if next_stage_data else None,
     }
 
 
 def homunculus_revive(user_id: int) -> Dict[str, Any]:
-    """Pay 200 souls to revive dead homunculus. Stage goes back by 1."""
+    """Pay 200 CHM to revive dead homunculus. Stage goes back by 1."""
     state = get_user_state(user_id)
     hom = state.get("homunculus", {})
     if hom.get("status") != "dead":
         return {"ok": False, "reason": "not_dead"}
-    result = spend_souls(user_id, _HOM_REVIVE_COST, reason="homunculus_revive")
+    result = spend_chm(user_id, _HOM_REVIVE_COST, reason="homunculus_revive")
     if not result["ok"]:
-        return {"ok": False, "reason": "not_enough_souls", "need": _HOM_REVIVE_COST}
+        return {"ok": False, "reason": "not_enough_chm", "need": _HOM_REVIVE_COST}
     stage = max(1, hom.get("stage", 1) - 1)
     hom["stage"]    = stage
     hom["status"]   = "active"
     hom["died_at"]  = None
     # Reduce souls_fed to match rollback threshold
-    hom["souls_fed"] = max(0, HOMUNCULUS_STAGES[stage - 1]["souls_req"])
+    hom["souls_fed"] = max(0, HOMUNCULUS_STAGES[stage - 1]["chm_req"])
     save_progress()
     return {
         "ok":         True,
         "new_stage":  stage,
         "stage_name": HOMUNCULUS_STAGES[stage - 1]["name"],
-        "total_souls": result.get("total", 0),
+        "total_chm": result.get("total", 0),
     }
 
 
@@ -1168,15 +1225,15 @@ def pet_register_tap(user_id: int) -> Dict[str, Any]:
         data_tap = 2
     pet["coins"] = pet.get("coins", 0) + data_tap
 
-    # ── SOULS per tap (Souls-like farm mechanic) ──────────────────────────
+    # ── CHM per tap (CHM farm mechanic) ──────────────────────────
     if combo >= 5:
-        souls_tap = _SOULS_PER_TAP_COMBO5
+        souls_tap = _CHM_PER_TAP_COMBO5
     elif combo >= 2:
-        souls_tap = _SOULS_PER_TAP_COMBO2
+        souls_tap = _CHM_PER_TAP_COMBO2
     else:
-        souls_tap = _SOULS_PER_TAP_BASE
-    # add_souls handles multiplier (streak, hollow) and module tracking
-    souls_result = add_souls(user_id, souls_tap, source="tap")
+        souls_tap = _CHM_PER_TAP_BASE
+    # add_chm handles multiplier (streak, hollow) and module tracking
+    souls_result = add_chm(user_id, souls_tap, source="tap")
 
     pet["happiness"] = min(100, pet.get("happiness", 0) + 2)
     pet["pet_xp"]    = pet.get("pet_xp", 0) + xp_gain
@@ -1214,10 +1271,10 @@ def pet_register_tap(user_id: int) -> Dict[str, Any]:
         "health":           round(pet["health"]),
         "next_level_xp":    PET_LEVEL_XP[lvl] if lvl < 20 else None,
         "current_level_xp": PET_LEVEL_XP[lvl - 1],
-        # Souls system
-        "souls_earned":     souls_result.get("delta", 0),
-        "total_souls":      souls_result.get("total", 0),
-        "souls_multiplier": souls_result.get("multiplier", 1.0),
+        # CHM system
+        "chm_earned":       souls_result.get("delta", 0),
+        "total_chm":        souls_result.get("total", 0),
+        "chm_multiplier":   souls_result.get("multiplier", 1.0),
     }
 
 

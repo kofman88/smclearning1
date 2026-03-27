@@ -5,10 +5,9 @@ console.log("[CHM] app.js loaded, starting...");
    ═══════════════════════════════════════════════════════════════════════ */
 
 // ── CONFIG ────────────────────────────────────────────────────────────────
-const API     = "/api";
-const tg      = window.Telegram?.WebApp ?? null;
-const DEV_UID   = 445677777;
-const ADMIN_IDS = new Set([445677777, 705020259]);
+const API = "/api";
+const tg  = window.Telegram?.WebApp ?? null;
+const DEV_UID = window.location.hostname === "localhost" ? 445677777 : null;
 
 // ══════════════════════════════════════════════════════════════════════
 // ── SOUND ENGINE v2 — Web Audio API, zero files ──────────────────────
@@ -54,8 +53,8 @@ const SOUNDS = {
   xp:           () => { _sfx.t(880,"sine",0.07,0.14); _sfx.t(1100,"sine",0.07,0.12,0.08); },
   levelup:      () => { [440,550,660,880,1100,1320].forEach((f,i)=>_sfx.t(f,"triangle",0.28,0.34,i*.07)); _sfx.n(0.26,0.04); },
   questdone:    () => [523,659,784,1047].forEach((f,i)=>_sfx.t(f,"sine",0.22,0.30,i*.08)),
-  soulsgain:    () => { _sfx.t(660,"sine",0.09,0.17); _sfx.t(880,"sine",0.09,0.13,0.06); },
-  soulslost:    () => { _sfx.t(330,"sawtooth",0.12,0.19); _sfx.t(220,"sawtooth",0.12,0.17,0.07); },
+  chmgain:    () => { _sfx.t(660,"sine",0.09,0.17); _sfx.t(880,"sine",0.09,0.13,0.06); },
+  chmlost:    () => { _sfx.t(330,"sawtooth",0.12,0.19); _sfx.t(220,"sawtooth",0.12,0.17,0.07); },
   hit:          () => { _sfx.n(0.07,0.26); _sfx.t(150,"sawtooth",0.09,0.20); },
   catalyst_on:  () => {
     [200,180,160,140,120].forEach((f,i)=>_sfx.t(f,"sawtooth",0.14,0.30,i*.04));
@@ -89,6 +88,7 @@ const state = {
   userId: null,
   sessionToken: null,   // set after /api/user/init; sent with write requests
   userState: null,
+  isAdmin: false,       // set from server is_admin field in /api/user/init
   quizData: null,
   currentQuestId: null,
   lessonsMetaCache: {},
@@ -97,6 +97,9 @@ const state = {
   deadlineInfo: null,
   _catalystInterval: null,   // guard against duplicate setInterval on init() retry
   _actionsInterval: null,    // guard against duplicate setInterval on init() retry
+  chm: 0,
+  chmTotalEarned: 0,
+  tonWallet: null,
 };
 
 // ── SMC TRADER LEVELS (7 levels) ──────────────────────────────────────────
@@ -270,7 +273,7 @@ function _runRitualPhase5() {
   p5.style.display = "flex";
   // Animate souls counter from 0 to 50
   let count = 0;
-  const numEl = $("#srSoulsNum");
+  const numEl = $("#srCHMNum");
   const interval = setInterval(() => {
     count += 2;
     if (numEl) numEl.textContent = count;
@@ -316,9 +319,9 @@ async function onRitualComplete() {
         body:    JSON.stringify({user_id: state.userId}),
       });
       const data = await res.json();
-      if (data.total_souls != null) {
-        state.souls = data.total_souls;
-        _updateSoulsDisplay(state.souls);
+      if (data.total_chm != null) {
+        state.chm = data.total_chm;
+        _updateCHMDisplay(state.chm);
       }
     }
   } catch(e) { console.warn("onboarding/complete error:", e); }
@@ -676,8 +679,8 @@ function renderHeader(s) {
   if (rankEl) rankEl.textContent = s.rank || "Наблюдатель рынка";
 
   // HUD пиллы
-  const soulsEl = document.getElementById("hudSoulsVal");
-  if (soulsEl) soulsEl.textContent = Math.floor(s.souls || 0);
+  const soulsEl = document.getElementById("hudCHMVal");
+  if (soulsEl) soulsEl.textContent = Math.floor(s.chm || 0);
   const xpEl = document.getElementById("hudXPVal");
   if (xpEl) xpEl.textContent = s.xp || 0;
   const lvlEl = document.getElementById("hudLevelVal");
@@ -1990,11 +1993,6 @@ async function init() {
 
     const userId = state.userId || DEV_UID;
     state.userId = userId;
-    // Show admin tab for admin users
-    if (ADMIN_IDS.has(userId)) {
-      const adminBtn = document.getElementById("adminTabBtn");
-      if (adminBtn) adminBtn.classList.remove("hidden");
-    }
     if (_dbgLabel) _dbgLabel.textContent = `v6 | загрузка данных uid=${userId}…`;
     const LOAD_TIMEOUT = 60000; // 60s to handle Render.com cold starts
     const [userRes, modulesRes, questsRes, metaRes, lbRes] = await Promise.all([
@@ -2044,20 +2042,27 @@ async function init() {
     // Evolution badge from init response (only show when user actually evolved)
     if (initData.evolution?.evolved) showToast(`⚗️ Эволюция! ${initData.evolution.info?.name || "Новая стадия"}`, "info");
 
-    // ── SOULS SYSTEM: update HUD from init response ─────────────────────
-    if (initData.souls_state) {
-      updateSoulsHUD(initData.souls_state);
+    // ── Admin tab visibility (server-side check only) ────────────────────
+    if (initData.is_admin) {
+      state.isAdmin = true;
+      const adminBtn = document.getElementById("adminTabBtn");
+      if (adminBtn) adminBtn.classList.remove("hidden");
+    }
+
+    // ── CHM SYSTEM: update HUD from init response ─────────────────────
+    if (initData.chm_state) {
+      updateCHMHUD(initData.chm_state);
       // Check hollow status
       if (initData.hollow) {
         applyHollowState(initData.hollow);
       }
-      // Show daily souls bonus
-      if (initData.daily_souls_bonus > 0) {
-        spawnSoulParticle(`+${initData.daily_souls_bonus} ⚡`, true);
+      // Show daily CHM bonus
+      if (initData.daily_chm_bonus > 0) {
+        spawnCHMParticle(`+${initData.daily_chm_bonus} ⚡`, true);
       }
-      // Show dropped souls banner if any
-      if (initData.souls_state.dropped_souls > 0 && initData.souls_state.can_retrieve) {
-        showDroppedSoulsBanner(initData.souls_state.dropped_souls);
+      // Show dropped CHM banner if any
+      if (initData.chm_state.chm_dropped > 0 && initData.chm_state.can_retrieve) {
+        showDroppedCHMBanner(initData.chm_state.chm_dropped);
       }
     }
 
@@ -2183,17 +2188,17 @@ function renderHomunculus(data) {
   const comboMaxVal = document.getElementById("homComboMaxVal");
   if (comboMaxVal) comboMaxVal.textContent = data.combo_best || 0;
 
-  const soulsFed = document.getElementById("homSoulsFed");
-  if (soulsFed) soulsFed.textContent = data.souls_fed || 0;
+  const chmFed = document.getElementById("homCHMFed");
+  if (chmFed) chmFed.textContent = data.chm_fed || 0;
 
-  const soulsReq   = document.getElementById("homSoulsReq");
+  const chmReq   = document.getElementById("homCHMReq");
   const evoBar     = document.getElementById("homEvoBar");
   const moduleNote = document.getElementById("homModuleNote");
 
   if (data.next_stage) {
-    const req = data.next_stage.souls_req || 0;
-    if (soulsReq) soulsReq.textContent = req;
-    if (evoBar) evoBar.style.width = (req > 0 ? Math.min(100, ((data.souls_fed||0)/req)*100) : 100) + "%";
+    const req = data.next_stage.chm_req || 0;
+    if (chmReq) chmReq.textContent = req;
+    if (evoBar) evoBar.style.width = (req > 0 ? Math.min(100, ((data.chm_fed||0)/req)*100) : 100) + "%";
     if (moduleNote && data.next_stage.modules_req != null) {
       const curMod = data.module_index || 0;
       const reqMod = data.next_stage.modules_req;
@@ -2202,7 +2207,7 @@ function renderHomunculus(data) {
         : `📚 Нужно пройти ещё ${reqMod - curMod} модул(ей)`;
     }
   } else {
-    if (soulsReq) soulsReq.textContent = "MAX";
+    if (chmReq) chmReq.textContent = "MAX";
     if (evoBar) evoBar.style.width = "100%";
     if (moduleNote) moduleNote.textContent = "🏆 Максимальная стадия!";
   }
@@ -2262,12 +2267,12 @@ async function onHomunculusTap(e) {
     }
 
     if (data.ok !== false) {
-      if (data.souls_earned != null) {
-        state.souls = (state.souls || 0) + data.souls_earned;
-        _updateSoulsDisplay(state.souls);
-        if (data.souls_earned > 0) {
-          _spawnHomFloat(e, `+${data.souls_earned.toFixed ? data.souls_earned.toFixed(2) : data.souls_earned}`);
-          playSound("soulsgain");
+      if (data.chm_earned != null) {
+        state.chm = (state.chm || 0) + data.chm_earned;
+        _updateCHMDisplay(state.chm);
+        if (data.chm_earned > 0) {
+          _spawnHomFloat(e, `+${data.chm_earned.toFixed ? data.chm_earned.toFixed(2) : data.chm_earned}`);
+          playSound("chmgain");
         }
       }
       // Обновить пул действий
@@ -2363,7 +2368,7 @@ async function homunculusRevive() {
       body:    JSON.stringify({user_id: state.userId}),
     });
     const data = await res.json();
-    if (data.ok === false) { showToast(data.error || "Недостаточно душ", "error"); return; }
+    if (data.ok === false) { showToast(data.error || "Недостаточно CHM", "error"); return; }
     showToast("⚗️ Гомункул возрождён!", "success");
     renderHomunculus(data);
   } catch(e) { console.error("homunculusRevive:", e); }
@@ -2852,7 +2857,7 @@ function _renderHomunculusStagesList(stages, currentStage) {
     if (s.id === currentStage) cls += " current";
     return `<div class="${cls}">
       <span class="evo-stage-emoji">${stageIcons[i] || "⚗️"}</span>
-      <span><strong>Ст.${s.id} ${s.name}</strong> — ${s.souls_req} душ / ${s.modules_req} мод.</span>
+      <span><strong>Ст.${s.id} ${s.name}</strong> — ${s.chm_req} CHM / ${s.modules_req} мод.</span>
       ${s.id === currentStage ? "<span style='margin-left:auto'>← Сейчас</span>" : ""}
       ${s.id < currentStage   ? "<span style='margin-left:auto'>✓</span>" : ""}
     </div>`;
@@ -2886,10 +2891,10 @@ function _spawnEvolutionParticles() {
  * Update the souls HUD (counter + flasks) from a souls_state object.
  * @param {object} s - souls_state from /api/souls/{user_id} or /api/user/init
  */
-function updateSoulsHUD(s) {
+function updateCHMHUD(s) {
   if (!s) return;
-  const soulsEl = document.getElementById("hudSoulsVal");
-  if (soulsEl) soulsEl.textContent = Math.floor(s.souls ?? 0);
+  const soulsEl = document.getElementById("hudCHMVal");
+  if (soulsEl) soulsEl.textContent = Math.floor(s.chm ?? 0);
   updateEstusHUD(s.estus_flasks ?? 3, s.estus_max ?? 3);
 }
 
@@ -2911,11 +2916,11 @@ function updateEstusHUD(current, max) {
  * @param {string} text - e.g. "+5 ⚡"
  * @param {boolean} gaining - true for gain, false for loss
  */
-function spawnSoulParticle(text, gaining = true) {
-  const layer = document.getElementById("soulsFloatLayer");
+function spawnCHMParticle(text, gaining = true) {
+  const layer = document.getElementById("chmFloatLayer");
   if (!layer) return;
   const p = document.createElement("div");
-  p.className = "soul-particle" + (gaining ? "" : " losing");
+  p.className = "chm-particle" + (gaining ? "" : " losing");
   p.textContent = text;
   // Random position in center area
   p.style.left = (35 + Math.random() * 30) + "%";
@@ -2948,20 +2953,20 @@ function applyHollowState(hollowData) {
  * Show the dropped souls banner below the header.
  * @param {number} amount - number of dropped souls
  */
-function showDroppedSoulsBanner(amount) {
+function showDroppedCHMBanner(amount) {
   // Remove existing banner if any
-  const existing = document.querySelector(".souls-dropped-banner");
+  const existing = document.querySelector(".chm-dropped-banner");
   if (existing) existing.remove();
 
   const banner = document.createElement("div");
-  banner.className = "souls-dropped-banner";
+  banner.className = "chm-dropped-banner";
   banner.innerHTML = `
     <span class="dropped-icon">💀</span>
     <div class="dropped-info">
-      <div class="dropped-label">ДУШИ НА ЗЕМЛЕ</div>
+      <div class="dropped-label">CHM НА ЗЕМЛЕ</div>
       <div class="dropped-amount">${amount} ⚡</div>
     </div>
-    <button class="btn-retrieve-souls" onclick="showSoulsDrop(${amount})">
+    <button class="btn-retrieve-chm" onclick="showCHMDrop(${amount})">
       Забрать →
     </button>
   `;
@@ -2975,17 +2980,17 @@ function showDroppedSoulsBanner(amount) {
  * Show the ЛИКВИДИРОВАН (souls drop) overlay.
  * @param {number} dropped - souls dropped
  */
-function showSoulsDrop(dropped) {
-  const overlay = document.getElementById("soulsDropOverlay");
-  const amountEl = document.getElementById("soulsDropAmount");
+function showCHMDrop(dropped) {
+  const overlay = document.getElementById("chmDropOverlay");
+  const amountEl = document.getElementById("chmDropAmount");
   if (!overlay) return;
   if (amountEl) amountEl.textContent = `${dropped} ⚡`;
   overlay.classList.remove("hidden");
 }
 
-/** Close the souls-drop overlay. */
-function closeSoulsDrop() {
-  const overlay = document.getElementById("soulsDropOverlay");
+/** Close the chm-drop overlay. */
+function closeCHMDrop() {
+  const overlay = document.getElementById("chmDropOverlay");
   if (overlay) overlay.classList.add("hidden");
 }
 
@@ -2993,7 +2998,7 @@ function closeSoulsDrop() {
 async function exitHollow() {
   if (!state.userId) return;
   try {
-    const res  = await fetch(`${API}/souls/hollow-exit`, {
+    const res  = await fetch(`${API}/chm/hollow-exit`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ user_id: state.userId }),
@@ -3002,12 +3007,12 @@ async function exitHollow() {
     if (data.ok) {
       document.body.classList.remove("is-hollow");
       document.getElementById("hollowOverlay")?.classList.add("hidden");
-      updateSoulsHUD({ souls: data.total_souls });
+      updateCHMHUD({ chm: data.total_chm });
       showToast("Hollow отступил. Огонь бонфайра возвращён.", "success", "🔥");
-      spawnSoulParticle(`-100 ⚡`, false);
+      spawnCHMParticle(`-100 ⚡`, false);
     } else {
-      const msg = data.reason === "insufficient_souls"
-        ? `Недостаточно душ. Нужно 100, у тебя ${data.have}.`
+      const msg = data.reason === "insufficient_chm"
+        ? `Недостаточно CHM. Нужно 100, у тебя ${data.have}.`
         : data.reason || "Ошибка";
       showToast(msg, "error", "💀");
     }
@@ -3018,8 +3023,52 @@ async function exitHollow() {
 }
 
 window.exitHollow      = exitHollow;
-window.closeSoulsDrop  = closeSoulsDrop;
-window.showSoulsDrop   = showSoulsDrop;
+window.closeCHMDrop  = closeCHMDrop;
+window.showCHMDrop   = showCHMDrop;
+
+function openCHMWallet() {
+  const modal = document.getElementById("chmWalletModal");
+  if (!modal) return;
+  const balEl = document.getElementById("chmWalletBalance");
+  if (balEl) balEl.textContent = `${Math.floor(state.chm || 0)} ⚡`;
+  const inp = document.getElementById("tonWalletInput");
+  if (inp && state.tonWallet) inp.value = state.tonWallet;
+  modal.classList.remove("hidden");
+}
+window.openCHMWallet = openCHMWallet;
+
+async function saveTONWallet() {
+  const inp = document.getElementById("tonWalletInput");
+  const statusEl = document.getElementById("chmWalletStatus");
+  if (!inp || !statusEl) return;
+  const address = inp.value.trim();
+  const TON_ADDR_RE = /^[EU]Q[A-Za-z0-9_-]{46}$/;
+  if (!TON_ADDR_RE.test(address)) {
+    statusEl.textContent = "❌ Неверный формат TON адреса";
+    statusEl.style.color = "#f87171";
+    return;
+  }
+  try {
+    const res = await fetch(`${API}/chm/wallet`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user_id: state.userId, address })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      state.tonWallet = address;
+      statusEl.textContent = "✅ Адрес сохранён";
+      statusEl.style.color = "#4ade80";
+    } else {
+      statusEl.textContent = `❌ ${data.error || "Ошибка"}`;
+      statusEl.style.color = "#f87171";
+    }
+  } catch (e) {
+    statusEl.textContent = "❌ Ошибка соединения";
+    statusEl.style.color = "#f87171";
+  }
+}
+window.saveTONWallet = saveTONWallet;
 
 // ══════════════════════════════════════════════════════════════════════════
 // ── PHASE 2: BOSS, BONFIRE, BLOODSTAINS, ESTUS HINTS ─────────────────────
@@ -3036,7 +3085,7 @@ const bossState = {
   timerLeft:   0,
   timerMax:    120,
   startedAt:   null,
-  soulsAtStake: 0,
+  chmAtStake: 0,
 };
 
 // ── Open boss intro (called when user clicks boss quest) ─────────────────
@@ -3053,11 +3102,11 @@ async function openBossIntro(moduleId) {
     bossState.moduleId     = moduleId;
     bossState.config       = data;
     bossState.questions    = data.questions || [];
-    bossState.soulsAtStake = data.souls_at_stake || 0;
+    bossState.chmAtStake = data.chm_at_stake || 0;
 
     document.getElementById("bossIntroName").textContent  = data.name || "Босс";
     document.getElementById("bossIntroLore").textContent  = data.lore || "";
-    document.getElementById("bossStakeAmount").textContent= `${bossState.soulsAtStake} ⚡`;
+    document.getElementById("bossCHMStakeAmount").textContent= `${bossState.chmAtStake} ⚡`;
     document.getElementById("bossTimerPreview").textContent = `${data.timer_secs} сек`;
 
     document.getElementById("bossIntroOverlay").classList.remove("hidden");
@@ -3085,7 +3134,7 @@ function startBossFight() {
 
   // Update HUD
   document.getElementById("bossArenaName").textContent = bossState.config?.name ?? "Босс";
-  document.getElementById("bossArenaStake").textContent = bossState.soulsAtStake;
+  document.getElementById("bossCHMStake").textContent = bossState.chmAtStake;
   _updateBossProgress();
 
   arena.classList.remove("hidden");
@@ -3219,11 +3268,11 @@ async function _finishBossFight() {
 function _showBossDeath(data) {
   const screen = document.getElementById("bossDeathScreen");
   if (!screen) return;
-  document.getElementById("deathDroppedAmount").textContent = `${data.dropped_souls ?? 0} ⚡`;
+  document.getElementById("deathCHMDroppedAmount").textContent = `${data.chm_dropped ?? 0} ⚡`;
   screen.classList.remove("hidden");
   if (tg?.HapticFeedback) tg.HapticFeedback.notificationOccurred("error");
   // Update souls HUD
-  spawnSoulParticle(`-${data.dropped_souls ?? 0} ⚡`, false);
+  spawnCHMParticle(`-${data.chm_dropped ?? 0} ⚡`, false);
 }
 
 function retryBoss() {
@@ -3257,13 +3306,13 @@ function _showBossVictory(data) {
     `;
   }
 
-  const soulsEl = document.getElementById("victorySoulsEarned");
-  if (soulsEl) soulsEl.textContent = `+${data.souls_earned ?? 0} ⚡`;
-  spawnSoulParticle(`+${data.souls_earned ?? 0} ⚡`, true);
+  const chmEarnedEl = document.getElementById("victoryCHMEarned");
+  if (chmEarnedEl) chmEarnedEl.textContent = `+${data.chm_earned ?? 0} ⚡`;
+  spawnCHMParticle(`+${data.chm_earned ?? 0} ⚡`, true);
 
-  const retrievedEl = document.getElementById("victorySoulsRetrieved");
-  if (retrievedEl && data.souls_retrieved > 0) {
-    retrievedEl.textContent = `+${data.souls_retrieved} ⚡ душ подобрано с земли!`;
+  const retrievedEl = document.getElementById("victoryCHMRetrieved");
+  if (retrievedEl && data.chm_retrieved > 0) {
+    retrievedEl.textContent = `+${data.chm_retrieved} ⚡ CHM подобрано с земли!`;
     retrievedEl.classList.remove("hidden");
   }
 
@@ -3272,13 +3321,13 @@ function _showBossVictory(data) {
   if (tg?.HapticFeedback) tg.HapticFeedback.notificationOccurred("success");
 
   // Добавить кнопку шеринга
-  _addShareToBossVictory(data.boss_name || "Босс", data.souls_earned ?? 0, data.accuracy ?? 0);
+  _addShareToBossVictory(data.boss_name || "Босс", data.chm_earned ?? 0, data.accuracy ?? 0);
 
   // Refresh header souls
   setTimeout(() => { refreshHeader(); loadQuests(); }, 500);
 }
 
-function _addShareToBossVictory(bossName, souls, accuracy) {
+function _addShareToBossVictory(bossName, chm, accuracy) {
   const screen = document.getElementById("bossVictoryScreen");
   if (!screen) return;
 
@@ -3291,7 +3340,7 @@ function _addShareToBossVictory(bossName, souls, accuracy) {
     else screen.appendChild(shareBlock);
   }
 
-  const text = `⚔️ Я победил ${bossName} в CHM Academy!\n${accuracy}% точности · ${souls} душ заработано\n\nПрисоединяйся → t.me/CHM_smcbot`;
+  const text = `⚔️ Я победил ${bossName} в CHM Academy!\n${accuracy}% точности · ${chm} CHM заработано\n\nПрисоединяйся → t.me/CHM_smcbot`;
   shareBlock.innerHTML = `<button class="boss-share-btn" onclick="shareBossVictory(\`${text.replace(/`/g,'\\`')}\`)">📤 Поделиться победой</button>`;
 }
 
@@ -3336,7 +3385,7 @@ function _spawnVictoryParticles() {
 // ── Bonfire screen ───────────────────────────────────────────────────────
 async function showBonfire() {
   try {
-    const res  = await fetch(`${API}/souls/bonfire/${state.userId}`, { method: "POST" });
+    const res  = await fetch(`${API}/chm/bonfire/${state.userId}`, { method: "POST" });
     const data = await res.json();
 
     const screen = document.getElementById("bonfireScreen");
@@ -3357,8 +3406,8 @@ async function showBonfire() {
           <div class="bf-stat-value">${data.estus_flasks}/3</div>
         </div>
         <div class="bf-stat">
-          <div class="bf-stat-label">ДУШИ</div>
-          <div class="bf-stat-value">${data.souls} ⚡</div>
+          <div class="bf-stat-label">CHM</div>
+          <div class="bf-stat-value">${data.chm} ⚡</div>
         </div>
       `;
     }
@@ -3469,7 +3518,7 @@ async function useEstusHint() {
   if (!q) return;
 
   try {
-    const res  = await fetch(`${API}/souls/estus-use`, {
+    const res  = await fetch(`${API}/chm/estus-use`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ user_id: state.userId }),
@@ -3657,7 +3706,7 @@ async function _loadDailyChallenge() {
 
     $("#dailyDate").textContent       = _dailyData.date || "";
     $("#dailyStreakBadge").textContent = `🔥 ${_dailyData.streak || 0} дней`;
-    $("#dailyRewardSouls").textContent = `${_dailyData.souls_reward || 0} ⚡`;
+    $("#dailyRewardCHM").textContent = `${_dailyData.chm_reward || 0} ⚡`;
     $("#dailyQuestion").textContent   = _dailyData.question || "";
 
     const optEl = $("#dailyOptions");
@@ -3715,17 +3764,17 @@ async function _submitDailyAnswer(answerIdx) {
       if (result.correct) {
         $("#dailyResultIcon").textContent  = "⚔️";
         $("#dailyResultText").textContent  = "Правильно! Рынок поклоняется тебе.";
-        $("#dailySoulsWon").textContent    = `+${result.souls_won} ⚡`;
+        $("#dailyCHMWon").textContent    = `+${result.chm_won} ⚡`;
         $("#dailyStreakUpdate").textContent = `🔥 Серия: ${result.streak} дней`;
         // Update HUD
         if (state.userState) {
-          state.userState.souls = (state.userState.souls || 0) + result.souls_won;
-          updateSoulsHUD({ souls: state.userState.souls });
+          state.userState.chm = (state.userState.chm || 0) + result.chm_won;
+          updateCHMHUD({ chm: state.userState.chm });
         }
       } else {
         $("#dailyResultIcon").textContent  = "💀";
         $("#dailyResultText").textContent  = "Ликвидирован. Рынок безжалостен.";
-        $("#dailySoulsWon").textContent    = "0 ⚡";
+        $("#dailyCHMWon").textContent    = "0 ⚡";
         $("#dailyStreakUpdate").textContent = "Серия прервана.";
       }
     }, 600);
@@ -3793,9 +3842,9 @@ function _renderMyClan(clan) {
   $("#clanMineTag").textContent  = `[${clan.tag}]`;
   $("#clanMineName").textContent = clan.name;
 
-  const weeklySouls  = clan.weekly_souls || 0;
+  const weeklySouls  = clan.weekly_chm || 0;
   const weeklyTarget = clan.weekly_target || 1000;
-  $("#clanWeeklySouls").textContent  = weeklySouls;
+  $("#clanWeeklyCHM").textContent  = weeklySouls;
   $("#clanWeeklyTarget").textContent = weeklyTarget;
   $("#clanProgressBar").style.width  = `${clan.progress_pct || 0}%`;
 
@@ -3840,7 +3889,7 @@ function _renderClanLeaderboard(clans) {
       <span class="clan-lb-rank">${i + 1}</span>
       <span class="clan-lb-tag">[${c.tag}]</span>
       <span class="clan-lb-name">${_esc(c.name)}</span>
-      <span class="clan-lb-souls">${c.souls_pool} ⚡</span>
+      <span class="clan-lb-chm">${c.chm_pool} ⚡</span>
       <span class="clan-lb-members">${c.member_count}/5</span>
     `;
     lb.appendChild(row);
@@ -3917,8 +3966,8 @@ async function leaveClan() {
 function showContributeModal() {
   const modal = $("#contributeModal");
   modal.classList.remove("hidden");
-  const avail = state.userState?.souls || 0;
-  $("#contributeSoulsAvail").textContent = avail;
+  const avail = state.userState?.chm || 0;
+  $("#contributeCHMAvail").textContent = avail;
   $("#contributeAmount").value = "";
 }
 
@@ -3928,7 +3977,7 @@ function closeContributeModal() {
 
 async function confirmContribute() {
   const amount = parseInt($("#contributeAmount").value);
-  if (!amount || amount < 10) { alert("Минимум 10 душ"); return; }
+  if (!amount || amount < 10) { alert("Минимум 10 CHM"); return; }
 
   try {
     const res  = await fetch("/api/social/clans/contribute", {
@@ -3940,13 +3989,13 @@ async function confirmContribute() {
     if (data.ok) {
       closeContributeModal();
       if (state.userState) {
-        state.userState.souls = data.souls_remaining;
-        updateSoulsHUD({ souls: data.souls_remaining });
+        state.userState.chm = data.chm_remaining;
+        updateCHMHUD({ chm: data.chm_remaining });
       }
       _clanData = data.clan;
       _renderMyClan(data.clan);
     } else {
-      alert(data.detail || "Недостаточно душ");
+      alert(data.detail || "Недостаточно CHM");
     }
   } catch(e) { alert("Ошибка сети"); }
 }
@@ -4001,8 +4050,8 @@ function openRoulette() {
   if (!modal) return;
   modal.classList.remove("hidden");
   // Refresh balance
-  const soulsEl = document.getElementById("rouletteSoulsBalance");
-  if (soulsEl && state.userState) soulsEl.textContent = state.userState.souls ?? 0;
+  const soulsEl = document.getElementById("rouletteCHMBalance");
+  if (soulsEl && state.userState) soulsEl.textContent = state.userState.chm ?? 0;
   // Reset state
   document.getElementById("rouletteBetSection").classList.remove("hidden");
   document.getElementById("rouletteQuestionSection").classList.add("hidden");
@@ -4097,7 +4146,7 @@ async function spinRoulette() {
     });
     const data = await res.json();
     if (!data.ok) {
-      showToast(data.error === "not_enough_souls" ? "Недостаточно душ!" : "Ошибка", "error");
+      showToast(data.error === "not_enough_chm" ? "Недостаточно CHM!" : "Ошибка", "error");
       _roulette.spinning = false;
       document.getElementById("rouletteSpinBtn").disabled = false;
       return;
@@ -4108,11 +4157,11 @@ async function spinRoulette() {
     _roulette.allTopics = data.all_topics || [];
 
     // Update balance
-    if (state.userState) state.userState.souls = data.souls_remaining;
-    const soulsEl = document.getElementById("rouletteSoulsBalance");
-    if (soulsEl) soulsEl.textContent = data.souls_remaining;
-    const hudEl = document.getElementById("hudSoulsVal");
-    if (hudEl) hudEl.textContent = data.souls_remaining;
+    if (state.userState) state.userState.chm = data.chm_remaining;
+    const soulsEl = document.getElementById("rouletteCHMBalance");
+    if (soulsEl) soulsEl.textContent = data.chm_remaining;
+    const hudEl = document.getElementById("hudCHMVal");
+    if (hudEl) hudEl.textContent = data.chm_remaining;
 
     // Draw wheel with real topics
     _drawRouletteWheel(_roulette.allTopics);
@@ -4165,10 +4214,10 @@ async function submitRouletteAnswer(isCorrect) {
     });
     const data = await res.json();
     if (data.ok) {
-      if (state.userState) state.userState.souls = data.total_souls;
-      const hudEl = document.getElementById("hudSoulsVal");
-      if (hudEl) hudEl.textContent = data.total_souls;
-      spawnSoulParticle(data.message, isCorrect);
+      if (state.userState) state.userState.chm = data.total_chm;
+      const hudEl = document.getElementById("hudCHMVal");
+      if (hudEl) hudEl.textContent = data.total_chm;
+      spawnCHMParticle(data.message, isCorrect);
       showToast(data.message, isCorrect ? "success" : "error");
       setTimeout(() => closeRoulette(), 2000);
     }
@@ -4201,7 +4250,7 @@ function _showInvasionModal(inv, minutesLeft) {
   _invasion.id = inv.id;
   _invasion.deadline = new Date(Date.now() + (minutesLeft || 30) * 60000);
   document.getElementById("invasionQuestion").textContent = inv.question;
-  document.getElementById("invasionReward").textContent = inv.souls_reward || 50;
+  document.getElementById("invasionReward").textContent = inv.chm_reward || 50;
   document.getElementById("invasionModal").classList.remove("hidden");
   document.getElementById("invasionResult").classList.add("hidden");
   document.getElementById("invasionAnswerInput").value = "";
@@ -4251,12 +4300,12 @@ async function submitInvasion() {
     clearInterval(_invasion.timerInterval);
     const resEl = document.getElementById("invasionResult");
     if (data.ok) {
-      resEl.textContent = `⚔️ Вторжение отражено! +${data.souls_earned} ⚡`;
+      resEl.textContent = `⚔️ Вторжение отражено! +${data.chm_earned} ⚡`;
       resEl.className = "invasion-result survived";
-      if (state.userState) state.userState.souls = data.total_souls;
-      const hudEl = document.getElementById("hudSoulsVal");
-      if (hudEl) hudEl.textContent = data.total_souls;
-      spawnSoulParticle(`+${data.souls_earned} ⚡`, true);
+      if (state.userState) state.userState.chm = data.total_chm;
+      const hudEl = document.getElementById("hudCHMVal");
+      if (hudEl) hudEl.textContent = data.total_chm;
+      spawnCHMParticle(`+${data.chm_earned} ⚡`, true);
     } else {
       resEl.textContent = "❌ " + (data.error || "Ошибка");
       resEl.className = "invasion-result defeated";
@@ -4423,24 +4472,24 @@ function _showPvPResult(data) {
   const icon = document.getElementById("pvpResultIcon");
   const title = document.getElementById("pvpResultTitle");
   const scores = document.getElementById("pvpResultScores");
-  const souls = document.getElementById("pvpResultSouls");
+  const chmEl = document.getElementById("pvpResultCHM");
 
   const resultMap = {
-    win: {icon:"🏆", text:"ПОБЕДА!", cls:"win", msg:`+${data.souls_earned || 30} ⚡ душ`},
+    win: {icon:"🏆", text:"ПОБЕДА!", cls:"win", msg:`+${data.chm_earned || 30} ⚡ CHM`},
     loss: {icon:"💀", text:"ПОРАЖЕНИЕ", cls:"loss", msg:"Тренируйся — и возвращайся!"},
-    draw: {icon:"🤝", text:"НИЧЬЯ", cls:"draw", msg:`+${data.souls_earned || 10} ⚡ душ`},
+    draw: {icon:"🤝", text:"НИЧЬЯ", cls:"draw", msg:`+${data.chm_earned || 10} ⚡ CHM`},
   };
   const r = resultMap[data.result] || resultMap.draw;
   if (icon) icon.textContent = r.icon;
   if (title) { title.textContent = r.text; title.className = `pvp-result-title ${r.cls}`; }
   if (scores) scores.innerHTML = `Твой счёт: <b>${data.my_score}%</b><br>Соперник: <b>${data.opponent_score}%</b>`;
-  if (souls) souls.textContent = r.msg;
+  if (chmEl) chmEl.textContent = r.msg;
 
-  if (state.userState && data.souls_earned) {
-    state.userState.souls = (state.userState.souls || 0) + data.souls_earned;
-    const hudEl = document.getElementById("hudSoulsVal");
-    if (hudEl) hudEl.textContent = state.userState.souls;
-    if (data.souls_earned > 0) spawnSoulParticle(`+${data.souls_earned} ⚡`, true);
+  if (state.userState && data.chm_earned) {
+    state.userState.chm = (state.userState.chm || 0) + data.chm_earned;
+    const hudEl = document.getElementById("hudCHMVal");
+    if (hudEl) hudEl.textContent = state.userState.chm;
+    if (data.chm_earned > 0) spawnCHMParticle(`+${data.chm_earned} ⚡`, true);
   }
 }
 
@@ -4489,14 +4538,14 @@ async function loadShop() {
 function _renderShop(d) {
   const wrap = document.getElementById("shopWrap");
   if (!wrap) return;
-  const souls = d.souls || 0;
+  const chm = d.chm || 0;
   wrap.innerHTML = `
     <div class="shop-hdr">
       <span class="shop-ttl">⚗️ Лаборатория Алхимика</span>
       <div class="shop-bal">
         <span>⚡</span>
-        <span id="shopSouls">${Math.floor(souls)}</span>
-        <span class="shop-bal-lbl">душ</span>
+        <span id="shopCHM">${Math.floor(chm)}</span>
+        <span class="shop-bal-lbl">CHM</span>
       </div>
     </div>
     <div class="shop-cats" id="shopCats">
@@ -4506,7 +4555,7 @@ function _renderShop(d) {
     </div>
     <div id="shopItems"></div>
     <div class="shop-stars-row">
-      Мало душ? <button class="shop-stars-btn" onclick="openBotShop()">Купить за ⭐ Stars</button>
+      Мало CHM? <button class="shop-stars-btn" onclick="openBotShop()">Купить за ⭐ Stars</button>
     </div>`;
   _renderShopItems(d);
 }
@@ -4551,8 +4600,8 @@ function _renderShopItems(d) {
 }
 
 async function buyItem(id, name, price) {
-  if ((_shopData?.souls||0) < price) {
-    showToast(`Нужно ${price} ⚡. Есть ${Math.floor(_shopData?.souls||0)}.`,"error"); return;
+  if ((_shopData?.chm||0) < price) {
+    showToast(`Нужно ${price} ⚡. Есть ${Math.floor(_shopData?.chm||0)}.`,"error"); return;
   }
   if (!confirm(`Купить «${name}» за ${price} ⚡?`)) return;
   try {
@@ -4564,11 +4613,11 @@ async function buyItem(id, name, price) {
       playSound("buy");
       if (tg?.HapticFeedback) tg.HapticFeedback.notificationOccurred("success");
       showToast(d.message,"success");
-      if (_shopData) _shopData.souls = d.souls_left;
-      const el = document.getElementById("shopSouls");
-      if (el) el.textContent = Math.floor(d.souls_left);
-      const hud = document.getElementById("hudSoulsVal");
-      if (hud) hud.textContent = Math.floor(d.souls_left);
+      if (_shopData) _shopData.chm = d.chm_left;
+      const el = document.getElementById("shopCHM");
+      if (el) el.textContent = Math.floor(d.chm_left);
+      const hud = document.getElementById("hudCHMVal");
+      if (hud) hud.textContent = Math.floor(d.chm_left);
       setTimeout(loadShop, 400);
     } else { showToast(d.message||"Ошибка","error"); }
   } catch(e) { showToast("Ошибка","error"); }
@@ -4679,22 +4728,22 @@ async function tapMysteryBox() {
         const rewardEl = modal.querySelector(".mb-reward");
         rewardEl.innerHTML = `
           <div class="mb-rarity" style="color:${col}">${r.rarity.toUpperCase()}</div>
-          <div class="mb-reward-icon">${r.type==="souls"?"💀":r.type==="isotope"?"🧪":r.type==="boost"?"⚡":"✨"}</div>
+          <div class="mb-reward-icon">${r.type==="chm"?"⚡":r.type==="isotope"?"🧪":r.type==="boost"?"⚡":"✨"}</div>
           <div class="mb-reward-msg" style="color:${col}">${r.message}</div>`;
         rewardEl.classList.remove("hidden");
         modal.querySelector(".mb-tap-hint").classList.add("hidden");
         if (r.rarity==="legendary") playSound("bosswin");
         else if (r.rarity==="epic") playSound("levelup");
         else if (r.rarity==="rare") playSound("questdone");
-        else playSound("soulsgain");
+        else playSound("chmgain");
         if (tg?.HapticFeedback) {
           if (r.rarity==="legendary") tg.HapticFeedback.notificationOccurred("success");
           else tg.HapticFeedback.impactOccurred("medium");
         }
-        if (r.type==="souls" && state.userState) {
-          state.userState.souls = (state.userState.souls||0) + r.amount;
-          const hud = document.getElementById("hudSoulsVal");
-          if (hud) hud.textContent = Math.floor(state.userState.souls);
+        if (r.type==="chm" && state.userState) {
+          state.userState.chm = (state.userState.chm||0) + r.amount;
+          const hud = document.getElementById("hudCHMVal");
+          if (hud) hud.textContent = Math.floor(state.userState.chm);
         }
       }
     }, 800);
@@ -4896,8 +4945,8 @@ function _renderReferral(d) {
         <span class="ref-stat-lbl">приглашено</span>
       </div>
       <div class="ref-stat">
-        <span class="ref-stat-val">${d.souls_earned || 0}</span>
-        <span class="ref-stat-lbl">Душ заработано</span>
+        <span class="ref-stat-val">${d.chm_earned || 0}</span>
+        <span class="ref-stat-lbl">CHM заработано</span>
       </div>
     </div>
     <div class="ref-milestones">
@@ -4921,7 +4970,7 @@ window.copyRefLink = copyRefLink;
 
 function shareRefLink(link) {
   if (tg) {
-    const text = encodeURIComponent("Крипто Химия — Souls-like обучение SMC. Присоединяйся:");
+    const text = encodeURIComponent("Крипто Химия — CHM обучение SMC. Присоединяйся:");
     tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(link)}&text=${text}`);
   } else {
     copyRefLink(link);
@@ -4972,7 +5021,7 @@ async function openScholarJournal() {
         </div>
         <div class="journal-divider"></div>
         <div class="journal-rank">${d.rank}</div>
-        <div class="journal-souls">💀 ${(d.souls_total||0).toLocaleString()} Душ накоплено</div>
+        <div class="journal-chm">⚡ ${(d.chm_total||0).toLocaleString()} CHM заработано</div>
       </div>
       <button class="journal-share-btn" id="journalShareBtn">📤 Поделиться в Telegram</button>
       <button class="journal-close-btn" onclick="closeJournal()">Закрыть</button>`;
@@ -5136,14 +5185,14 @@ function _renderRaid(d) {
           <div class="raid-ans-text">${boss.answer || ''}</div>
           <div class="raid-confirm-row">
             <span>Ты знал ответ?</span>
-            <button class="raid-yes-btn" onclick="submitRaid(true)">✓ Да (+${boss.souls_reward || 0} душ)</button>
+            <button class="raid-yes-btn" onclick="submitRaid(true)">✓ Да (+${boss.chm_reward || 0} CHM)</button>
             <button class="raid-no-btn"  onclick="submitRaid(false)">✕ Нет</button>
           </div>
         </div>
       </div>` : `
       <div class="raid-done-badge">
         ✓ Ты уже атаковал в этом рейде!
-        ${myEntry?.is_correct ? `<br>+${boss.souls_reward || 0} душ получено.` : '<br>Урон всё равно нанесён.'}
+        ${myEntry?.is_correct ? `<br>+${boss.chm_reward || 0} CHM получено.` : '<br>Урон всё равно нанесён.'}
       </div>`}
       <div class="raid-participants">
         Участников: ${Object.keys(d.participants || {}).length}
@@ -5171,7 +5220,7 @@ async function submitRaid(isCorrect) {
       playSound(d.boss_defeated ? "bosswin" : isCorrect ? "questdone" : "hit");
       if (tg?.HapticFeedback) tg.HapticFeedback.impactOccurred(d.boss_defeated?"heavy":"medium");
       if (d.boss_defeated) showToast("💥 БОСС ПОВЕРЖЕН! Клан победил!", "success");
-      else if (isCorrect) showToast(`⚔️ Урон ${d.damage}! +${d.souls_reward} душ`, "success");
+      else if (isCorrect) showToast(`⚔️ Урон ${d.damage}! +${d.chm_reward} CHM`, "success");
       else showToast(`⚔️ Урон ${d.damage} (ошибка). Учись!`, "info");
       setTimeout(loadRaid, 500);
     } else {
@@ -5194,7 +5243,7 @@ const HW_STATUS_LABEL = {
 };
 
 async function loadAdminPanel() {
-  if (!ADMIN_IDS.has(state.userId)) return;
+  if (!state.isAdmin) return;
   const pendingEl = document.getElementById("adminPendingList");
   const usersEl   = document.getElementById("adminUsersList");
   if (!pendingEl || !usersEl) return;
