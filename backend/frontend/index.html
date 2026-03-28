@@ -141,6 +141,84 @@
       <button class="synth-skip-btn" onclick="onRitualComplete()">Пропустить →</button>
     </div>
 
+    <!-- Phase 3.5: Gender selection -->
+    <div class="synth-phase" id="srPhase3_5" style="display:none">
+      <p class="synth-question-title" id="srGenderTitle"></p>
+      <div class="synth-card-row">
+        <div class="synth-choice-card" id="srGenderMale" onclick="onSelectGender('male')">
+          <div class="synth-choice-icon">
+            <svg viewBox="0 0 60 60" fill="none" width="48" height="48">
+              <circle cx="30" cy="18" r="13" stroke="#00d4ff" stroke-width="2" fill="rgba(0,212,255,0.08)"/>
+              <path d="M22 32 Q30 58 38 32" stroke="#00d4ff" stroke-width="2" fill="none"/>
+              <path d="M20 40 Q30 44 40 40" stroke="#00d4ff" stroke-width="1.5" fill="none"/>
+              <circle cx="27" cy="16" r="1.5" fill="#00d4ff"/>
+              <circle cx="33" cy="16" r="1.5" fill="#00d4ff"/>
+            </svg>
+          </div>
+          <div class="synth-choice-label">Мужской</div>
+        </div>
+        <div class="synth-choice-card" id="srGenderFemale" onclick="onSelectGender('female')">
+          <div class="synth-choice-icon">
+            <svg viewBox="0 0 60 60" fill="none" width="48" height="48">
+              <circle cx="30" cy="18" r="13" stroke="#a855f7" stroke-width="2" fill="rgba(168,85,247,0.08)"/>
+              <path d="M22 32 Q30 58 38 32" stroke="#a855f7" stroke-width="2" fill="none"/>
+              <path d="M18 42 Q30 47 42 42" stroke="#a855f7" stroke-width="1.5" fill="none"/>
+              <circle cx="26" cy="15" r="2" fill="#a855f7"/>
+              <circle cx="34" cy="15" r="2" fill="#a855f7"/>
+              <path d="M24 20 Q30 24 36 20" stroke="#a855f7" stroke-width="1" fill="none"/>
+            </svg>
+          </div>
+          <div class="synth-choice-label">Женский</div>
+        </div>
+        <div class="synth-choice-card" id="srGenderNeutral" onclick="onSelectGender('neutral')">
+          <div class="synth-choice-icon">
+            <svg viewBox="0 0 60 60" fill="none" width="48" height="48">
+              <circle cx="30" cy="18" r="13" stroke="#fbbf24" stroke-width="2" fill="rgba(251,191,36,0.08)"/>
+              <path d="M22 32 Q30 58 38 32" stroke="#fbbf24" stroke-width="2" fill="none"/>
+              <rect x="16" y="36" width="28" height="2" rx="1" fill="#fbbf24"/>
+              <circle cx="26" cy="16" r="1.5" fill="#fbbf24"/>
+              <circle cx="34" cy="16" r="1.5" fill="#fbbf24"/>
+              <path d="M27 21 L33 21" stroke="#fbbf24" stroke-width="1.5"/>
+            </svg>
+          </div>
+          <div class="synth-choice-label">Нейтральный</div>
+        </div>
+      </div>
+      <button class="synth-next-btn hidden" id="srGenderNext" onclick="_runRitualPhase3_7()">Далее →</button>
+    </div>
+
+    <!-- Phase 3.7: Class selection -->
+    <div class="synth-phase" id="srPhase3_7" style="display:none">
+      <p class="synth-question-title" id="srClassTitle"></p>
+      <div class="synth-class-grid">
+        <div class="synth-class-card" id="srClass_ob_sniper" onclick="onSelectClass('ob_sniper')">
+          <div class="synth-class-icon">🎯</div>
+          <div class="synth-class-name">OB-Снайпер</div>
+          <div class="synth-class-desc">Мастер ордер-блоков.<br>Точные входы, узкие стопы.</div>
+          <div class="synth-class-bonus">Бонус: +25% к модулям 2, 5</div>
+        </div>
+        <div class="synth-class-card" id="srClass_liq_hunter" onclick="onSelectClass('liq_hunter')">
+          <div class="synth-class-icon">🌊</div>
+          <div class="synth-class-name">Ликвидити-Хантер</div>
+          <div class="synth-class-desc">Охотник за ликвидностью.<br>Читает ловушки маркетмейкера.</div>
+          <div class="synth-class-bonus">Бонус: +25% к модулям 1, 4</div>
+        </div>
+        <div class="synth-class-card" id="srClass_struct_mage" onclick="onSelectClass('struct_mage')">
+          <div class="synth-class-icon">🔮</div>
+          <div class="synth-class-name">Структурный Маг</div>
+          <div class="synth-class-desc">Видит структуру рынка.<br>BOS и CHOCH — его оружие.</div>
+          <div class="synth-class-bonus">Бонус: +25% к модулям 0, 6</div>
+        </div>
+        <div class="synth-class-card" id="srClass_fvg_alchemist" onclick="onSelectClass('fvg_alchemist')">
+          <div class="synth-class-icon">⚗️</div>
+          <div class="synth-class-name">FVG-Алхимик</div>
+          <div class="synth-class-desc">Мастер дисбалансов.<br>Находит FVG раньше всех.</div>
+          <div class="synth-class-bonus">Бонус: +25% к модулям 3, 7</div>
+        </div>
+      </div>
+      <button class="synth-next-btn hidden" id="srClassNext" onclick="_startSynthesis()">Начать путь →</button>
+    </div>
+
     <!-- Phase: synthesis animation (after tap) -->
     <div class="synth-phase" id="srPhase4" style="display:none">
       <div class="synth-flask-wrap synth-flask--shaking" id="srFlaskShaking">
@@ -257,7 +335,7 @@
           <div class="avatar-level-ring" id="avatarLevelRing"></div>
         </div>
         <div class="header-user-info">
-          <span class="header-username" id="headerUsername">CHM</span>
+          <span class="header-username" id="headerUsername">CHM</span><span class="header-class-badge" id="headerClassBadge"></span>
           <span class="header-rank-name" id="headerRankName">Наблюдатель рынка</span>
         </div>
       </div>
@@ -380,6 +458,18 @@
         <span class="tn-label">Рейтинг</span>
       </button>
 
+      <button class="tn-tab" data-tab="inventory" onclick="switchTab('inventory')" style="position:relative">
+        <span class="tn-badge" id="tnBadgeInventory" style="display:none"></span>
+        <div class="tn-icon-wrap" id="tnIconInventory">
+          <svg class="tn-svg" viewBox="0 0 20 20" fill="none">
+            <rect x="2" y="7" width="16" height="11" rx="2" stroke="currentColor" stroke-width="1.5"/>
+            <path d="M7 7V5a3 3 0 016 0v2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            <circle cx="10" cy="12" r="1.5" fill="currentColor" opacity="0.7"/>
+          </svg>
+        </div>
+        <span class="tn-label">Инвентарь</span>
+      </button>
+
       <button class="tn-tab" data-tab="homunculus" onclick="switchTab('homunculus')" style="position:relative">
         <!-- Точка если катализатор активен или рейд -->
         <span class="tn-badge tn-badge-red" id="tnBadgeAlchemy" style="display:none"></span>
@@ -437,6 +527,33 @@
       <div id="leaderboardContent"></div>
       <div id="battlePassWrap"></div>
       <div id="raidWrap"></div>
+    </div>
+
+    <!-- INVENTORY TAB -->
+    <div id="tab-inventory" class="tab-content">
+      <div class="inv-header">
+        <div class="inv-title">🎒 Инвентарь</div>
+        <div class="inv-subtitle" id="invSubtitle">Загрузка…</div>
+      </div>
+      <div class="inv-active-effects" id="invActiveEffects" style="display:none">
+        <div class="inv-section-label">⚡ Активные эффекты</div>
+        <div class="inv-effects-list" id="invEffectsList"></div>
+      </div>
+      <div class="inv-section-label" id="invItemsLabel">Предметы</div>
+      <div class="inv-grid" id="invGrid">
+        <div class="inv-empty">Загрузка…</div>
+      </div>
+    </div>
+
+    <!-- LOOT DROP OVERLAY -->
+    <div id="lootDropOverlay" class="loot-overlay" style="display:none">
+      <div class="loot-overlay-bg" id="lootOverlayBg"></div>
+      <div class="loot-drop-card" id="lootDropCard">
+        <div class="loot-drop-icon" id="lootDropIcon"></div>
+        <div class="loot-drop-rarity" id="lootDropRarity"></div>
+        <div class="loot-drop-name" id="lootDropName"></div>
+        <div class="loot-drop-desc" id="lootDropDesc"></div>
+      </div>
     </div>
 
     <!-- ADMIN TAB -->
@@ -720,11 +837,20 @@
           </div>
         </div>
 
+        <!-- Tap Chart Section -->
+        <div class="tap-chart-section" id="tapChartSection">
+          <div class="tap-chart-question" id="tapChartQuestion">Загрузка графика...</div>
+          <div class="tap-chart-wrap">
+            <canvas id="tapChartCanvas" class="tap-chart-canvas" width="340" height="180"></canvas>
+          </div>
+          <div class="tap-chart-feedback" id="tapChartFeedback"></div>
+        </div>
+
         <!-- Combo meter bar -->
         <div class="hom-combo-bar-wrap">
           <div class="hom-combo-bar" id="homComboBar" style="width:0%"></div>
         </div>
-        <div class="hom-combo-label" id="homComboLabel">Комбо: 0</div>
+        <div class="hom-combo-label" id="homComboLabel">Комбо: 0 <span id="tapStreakBadge" style="display:none">🔥</span></div>
 
         <!-- Stats HUD -->
         <div class="hom-hud">
@@ -739,6 +865,10 @@
           <div class="hom-hud-item">
             <div class="hom-hud-val" id="homComboMaxVal">0</div>
             <div class="hom-hud-key">Лучшее комбо</div>
+          </div>
+          <div class="hom-hud-item">
+            <div class="hom-hud-val" id="homSessionCHM">0</div>
+            <div class="hom-hud-key">CHM сессии</div>
           </div>
         </div>
 
@@ -1005,22 +1135,6 @@
       </svg>
     </button>
     <div class="cl-hint">Щипок для масштаба · двойной тап для сброса</div>
-  </div>
-
-  <!-- ══ DREAM MODAL ════════════════════════════════════════════════════ -->
-  <div id="dreamModal" class="modal hidden">
-    <div class="modal-backdrop"></div>
-    <div class="modal-content dream-content">
-      <div class="dream-header">
-        <div class="dream-fox-icon">🧬⚡</div>
-        <div class="dream-tag">ПРОТОКОЛ СНОВИДЕНИЙ</div>
-      </div>
-      <div class="dream-setup" id="dreamSetup"></div>
-      <div class="dream-offline" id="dreamOfflineText"></div>
-      <div class="dream-question" id="dreamQuestion"></div>
-      <div class="dream-choices" id="dreamChoices"></div>
-      <div class="dream-result hidden" id="dreamResult"></div>
-    </div>
   </div>
 
   <!-- ══ ORACLE MODAL ════════════════════════════════════════════════════ -->

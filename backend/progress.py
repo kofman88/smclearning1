@@ -286,6 +286,21 @@ def get_user_state(user_id: int) -> Dict[str, Any]:
     # Boss system back-compat
     state.setdefault("boss_attempts", [])
     state.setdefault("bonfire_rested", [])  # list of module_ids where bonfire was rested
+    # Gender / class back-compat
+    state.setdefault("gender", None)
+    state.setdefault("character_class", None)
+    # Loot / inventory
+    state.setdefault("inventory", [])
+    state.setdefault("active_effects", [])
+    # Tap chart system
+    state.setdefault("current_tap_chart", None)
+    state.setdefault("tap_correct_streak", 0)
+    state.setdefault("tap_session_chm", 0)
+    # Oracle / evolution fields (migrated from pet sub-dict)
+    _pet_legacy = state.get("pet", {})
+    state.setdefault("oracle_correct", _pet_legacy.get("oracle_correct", 0))
+    state.setdefault("evolution_stage", _pet_legacy.get("evolution_stage", 1))
+    state.setdefault("oracle_viewed_today", False)
 
     # ── Timed boost expiry cleanup ────────────────────────────────────────
     # Clear expired timed boosts so they don't persist after expiry
@@ -1063,261 +1078,6 @@ def check_homunculus_health(user_id: int) -> Dict[str, Any]:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# ── PET SYSTEM (SMC Fox companion) ───────────────────────────────────────────
-# ══════════════════════════════════════════════════════════════════════════════
-
-# 20 pet levels — XP thresholds
-PET_LEVEL_XP: List[int] = [
-    0, 50, 120, 220, 350, 510, 700, 920, 1170, 1450,
-    1760, 2100, 2470, 2870, 3300, 3760, 4250, 4770, 5320, 5900,
-]
-
-# Lesson completion → pet stat bonuses
-LESSON_PET_EFFECTS: Dict[str, Dict[str, int]] = {
-    # Module 1: Basics
-    "what_is_smc":        {"happiness": 10, "hunger": 5},
-    "timeframes":         {"happiness": 8,  "hunger": 5},
-    "market_structure":   {"hunger": 15,    "health": 5},
-    # Module 2: Liquidity
-    "liquidity":          {"happiness": 15, "pet_xp": 10},
-    "liquidity_pools":    {"happiness": 12, "hunger": 8},
-    # Module 3: OB & FVG
-    "order_blocks":       {"hunger": 20,    "health": 5,  "pet_xp": 15},
-    "fvg":                {"health": 15,    "happiness": 8},
-    # Module 4: Inducement
-    "inducement":         {"happiness": 10, "hunger": 10},
-    "stop_hunting":       {"health": 10,    "pet_xp": 10},
-    # Module 5: Breakers
-    "breaker_blocks":     {"hunger": 15,    "happiness": 10},
-    "mitigation_blocks":  {"health": 12,    "pet_xp": 10},
-    # Module 6: Entries
-    "ote":                {"happiness": 12, "hunger": 12, "pet_xp": 15},
-    "premium_discount":   {"health": 10,    "hunger": 10},
-    # Module 7: Sessions
-    "killzones":          {"happiness": 15, "pet_xp": 12},
-    "amd_model":          {"hunger": 18,    "health": 8},
-    "power_of_three":     {"happiness": 15, "pet_xp": 15},
-    # Module 8: Risk
-    "risk_management":    {"health": 20,    "happiness": 10, "pet_xp": 20},
-    "psychology":         {"happiness": 20, "health": 15},
-    # Module 9: Advanced
-    "market_maker_model": {"hunger": 20,    "health": 10, "pet_xp": 25},
-    "ict_2022_model":     {"happiness": 18, "pet_xp": 20},
-    "live_trade_btc":     {"hunger": 15,    "happiness": 15, "pet_xp": 20},
-    "live_trade_eth":     {"health": 15,    "happiness": 12, "pet_xp": 20},
-    # Module 10: Exam / Certification
-    "session_sweep_model":{"happiness": 20, "pet_xp": 25},
-    "exam_overview":      {"hunger": 15,    "health": 10},
-    "certification":      {"happiness": 30, "health": 20, "pet_xp": 50, "coins": 100},
-}
-
-_PET_DECAY_PER_HOUR = {"hunger": 3.0, "happiness": 2.5, "health": 1.0}
-_COMBO_WINDOW_SECS = 5    # consecutive taps within this window count as combo
-_MAX_COMBO = 10
-
-
-def _default_pet() -> Dict[str, Any]:
-    now = datetime.utcnow().isoformat()
-    return {
-        "hunger":          80,
-        "happiness":       80,
-        "health":          100,
-        "pet_xp":          0,
-        "pet_level":       1,
-        "coins":           0,
-        "last_updated":    now,
-        "last_tap":        None,
-        "tap_combo":       0,
-        "tap_combo_start": None,
-        "total_taps":      0,
-    }
-
-
-def decay_pet_stats(pet: Dict[str, Any]) -> Dict[str, Any]:
-    """Apply time-based stat decay since last_updated. Modifies in-place."""
-    now = datetime.utcnow()
-    last = pet.get("last_updated")
-    if last:
-        try:
-            delta_hours = (now - datetime.fromisoformat(last)).total_seconds() / 3600
-            for stat, rate in _PET_DECAY_PER_HOUR.items():
-                pet[stat] = max(0.0, pet.get(stat, 0) - rate * delta_hours)
-        except Exception:
-            pass
-    pet["last_updated"] = now.isoformat()
-    return pet
-
-
-def _get_pet_level(pet_xp: int) -> int:
-    level = 1
-    for i, threshold in enumerate(PET_LEVEL_XP):
-        if pet_xp >= threshold:
-            level = i + 1
-    return min(level, 20)
-
-
-def get_pet_visual_state(pet: Dict[str, Any]) -> str:
-    """Returns one of: idle | happy | hungry | sick | excited"""
-    hp  = pet.get("health",    100)
-    h   = pet.get("hunger",    100)
-    hap = pet.get("happiness", 100)
-    if hp < 30:
-        return "sick"
-    if h < 25:
-        return "hungry"
-    if hap > 80 and h > 70:
-        return "excited"
-    if hap > 55:
-        return "happy"
-    return "idle"
-
-
-def get_pet_state(user_id: int) -> Dict[str, Any]:
-    """Get full pet state with decay applied. Creates default pet if missing."""
-    state = get_user_state(user_id)
-    if "pet" not in state:
-        state["pet"] = _default_pet()
-    pet = state["pet"]
-    for k, v in _default_pet().items():
-        pet.setdefault(k, v)
-    decay_pet_stats(pet)
-    pet["pet_level"] = _get_pet_level(pet.get("pet_xp", 0))
-    pet["visual_state"] = get_pet_visual_state(pet)
-    lvl = pet["pet_level"]
-    pet["next_level_xp"] = PET_LEVEL_XP[lvl] if lvl < 20 else None
-    pet["current_level_xp"] = PET_LEVEL_XP[lvl - 1]
-    save_progress()
-    return pet
-
-
-def pet_register_tap(user_id: int) -> Dict[str, Any]:
-    """Register a pet tap. Returns tap result dict."""
-    pet = get_pet_state(user_id)
-    now = datetime.utcnow()
-
-    last_tap = pet.get("tap_combo_start")
-    combo_active = False
-    if last_tap:
-        try:
-            elapsed = (now - datetime.fromisoformat(last_tap)).total_seconds()
-            combo_active = elapsed <= _COMBO_WINDOW_SECS
-        except Exception:
-            pass
-
-    if combo_active:
-        pet["tap_combo"] = min(pet.get("tap_combo", 0) + 1, _MAX_COMBO)
-    else:
-        pet["tap_combo"] = 1
-        pet["tap_combo_start"] = now.isoformat()
-
-    pet["last_tap"] = now.isoformat()
-    pet["total_taps"] = pet.get("total_taps", 0) + 1
-
-    combo = pet["tap_combo"]
-    xp_gain = max(1, round(1 + (combo - 1) * 0.5))
-
-    # DATA UNITS awarded per tap (scaled by combo) — kept for pet system
-    if combo >= 5:
-        data_tap = 10
-    elif combo >= 2:
-        data_tap = 4
-    else:
-        data_tap = 2
-    pet["coins"] = pet.get("coins", 0) + data_tap
-
-    # ── CHM per tap (CHM farm mechanic) ──────────────────────────
-    if combo >= 5:
-        souls_tap = _CHM_PER_TAP_COMBO5
-    elif combo >= 2:
-        souls_tap = _CHM_PER_TAP_COMBO2
-    else:
-        souls_tap = _CHM_PER_TAP_BASE
-    # add_chm handles multiplier (streak, hollow) and module tracking
-    souls_result = add_chm(user_id, souls_tap, source="tap")
-
-    pet["happiness"] = min(100, pet.get("happiness", 0) + 2)
-    pet["pet_xp"]    = pet.get("pet_xp", 0) + xp_gain
-
-    old_level = pet.get("pet_level", 1)
-    new_level = _get_pet_level(pet["pet_xp"])
-    pet["pet_level"] = new_level
-    level_up = new_level > old_level
-
-    # Milestone bonus coins (stacks on top of per-tap)
-    coins_earned = 0
-    total = pet["total_taps"]
-    milestone_map = {100: 10, 500: 25, 1000: 50, 5000: 100}
-    if total in milestone_map:
-        coins_earned = milestone_map[total]
-        pet["coins"] = pet.get("coins", 0) + coins_earned
-
-    pet["visual_state"] = get_pet_visual_state(pet)
-    save_progress()
-
-    lvl = pet["pet_level"]
-    return {
-        "xp_gained":        xp_gain,
-        "combo":            combo,
-        "pet_xp":           pet["pet_xp"],
-        "pet_level":        new_level,
-        "level_up":         level_up,
-        "coins_earned":     coins_earned,
-        "data_awarded":     data_tap,
-        "total_data":       pet["coins"],
-        "coins":            pet["coins"],
-        "visual_state":     pet["visual_state"],
-        "hunger":           round(pet["hunger"]),
-        "happiness":        round(pet["happiness"]),
-        "health":           round(pet["health"]),
-        "next_level_xp":    PET_LEVEL_XP[lvl] if lvl < 20 else None,
-        "current_level_xp": PET_LEVEL_XP[lvl - 1],
-        # CHM system
-        "chm_earned":       souls_result.get("delta", 0),
-        "total_chm":        souls_result.get("total", 0),
-        "chm_multiplier":   souls_result.get("multiplier", 1.0),
-    }
-
-
-def apply_lesson_pet_effect(user_id: int, lesson_key: str, score_pct: float = 100.0) -> Dict[str, Any]:
-    """Apply pet bonuses when a quiz/lesson is completed."""
-    effects = LESSON_PET_EFFECTS.get(lesson_key, {"happiness": 5})
-    pet = get_pet_state(user_id)
-    applied: Dict[str, int] = {}
-
-    for stat, val in effects.items():
-        if stat == "coins":
-            pet["coins"] = pet.get("coins", 0) + val
-            applied["coins"] = val
-        elif stat == "pet_xp":
-            bonus = max(1, round(val * score_pct / 100))
-            pet["pet_xp"] = pet.get("pet_xp", 0) + bonus
-            applied["pet_xp"] = bonus
-        elif stat in ("hunger", "happiness", "health"):
-            pet[stat] = min(100, pet.get(stat, 0) + val)
-            applied[stat] = val
-
-    old_level = pet.get("pet_level", 1)
-    pet["pet_level"] = _get_pet_level(pet["pet_xp"])
-    pet["visual_state"] = get_pet_visual_state(pet)
-    save_progress()
-
-    return {
-        "applied":      applied,
-        "pet_level":    pet["pet_level"],
-        "level_up":     pet["pet_level"] > old_level,
-        "visual_state": pet["visual_state"],
-    }
-
-
-def add_pet_coins(user_id: int, amount: int) -> int:
-    """Add coins to pet wallet. Returns new total."""
-    pet = get_pet_state(user_id)
-    pet["coins"] = pet.get("coins", 0) + amount
-    save_progress()
-    return pet["coins"]
-
-
-# ══════════════════════════════════════════════════════════════════════════════
 # ── EVOLUTION SYSTEM ──────────────────────────────────────────────────────────
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -1333,10 +1093,9 @@ EVOLUTION_STAGES: List[Dict[str, Any]] = [
 
 
 def _calc_evolution_stage(state: Dict[str, Any]) -> int:
-    pet       = state.get("pet", {})
     completed = set(state.get("completed_quests", []))
     streak    = state.get("streak", 0)
-    oracle_ok = pet.get("oracle_correct", 0)
+    oracle_ok = state.get("oracle_correct", 0)
     lb_rank   = state.get("leaderboard_rank", 9999)
 
     stage = 1
@@ -1365,11 +1124,10 @@ def _calc_evolution_stage(state: Dict[str, Any]) -> int:
 def check_and_update_evolution(user_id: int) -> Dict[str, Any]:
     """Compute new evolution stage, persist, return result."""
     state     = get_user_state(user_id)
-    pet       = state.setdefault("pet", {})
     new_stage = _calc_evolution_stage(state)
-    old_stage = pet.get("evolution_stage", 1)
+    old_stage = state.get("evolution_stage", 1)
 
-    pet["evolution_stage"] = new_stage
+    state["evolution_stage"] = new_stage
     evolved = new_stage > old_stage
     if evolved:
         save_progress()
@@ -1382,6 +1140,27 @@ def check_and_update_evolution(user_id: int) -> Dict[str, Any]:
         "info":       info,
         "next_stage": nxt,
     }
+
+
+# ── CLASS SYSTEM ─────────────────────────────────────────────────────────────
+
+CLASS_DEFINITIONS: Dict[str, Dict[str, Any]] = {
+    "ob_sniper":     {"name": "OB-Снайпер",        "icon": "🎯", "desc": "Мастер ордер-блоков. Точные входы, узкие стопы.", "bonus_modules": [2, 5]},
+    "liq_hunter":    {"name": "Ликвидити-Хантер",  "icon": "🌊", "desc": "Охотник за ликвидностью. Читает ловушки маркетмейкера.", "bonus_modules": [1, 4]},
+    "struct_mage":   {"name": "Структурный Маг",   "icon": "🔮", "desc": "Видит структуру рынка. BOS и CHOCH — его оружие.", "bonus_modules": [0, 6]},
+    "fvg_alchemist": {"name": "FVG-Алхимик",       "icon": "⚗️", "desc": "Мастер дисбалансов. Находит FVG раньше всех.", "bonus_modules": [3, 7]},
+}
+
+
+def get_class_bonus(user_id: int, module_index: int) -> float:
+    """Возвращает множитель CHM для модуля: 1.25 если модуль совпадает с классом, иначе 1.0"""
+    state = get_user_state(user_id)
+    cls = state.get("character_class")
+    if not cls or cls not in CLASS_DEFINITIONS:
+        return 1.0
+    if module_index in CLASS_DEFINITIONS[cls]["bonus_modules"]:
+        return 1.25
+    return 1.0
 
 
 # ── TRADER DNA ────────────────────────────────────────────────────────────────

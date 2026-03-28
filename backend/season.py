@@ -23,37 +23,52 @@ CURRENT_SEASON = {
 }
 
 # ── Награды Battle Pass (30 уровней) ─────────────────────────────────────────
+# Levels 5, 10, 15, 20, 25, 30 include loot item drops
 BATTLE_PASS_REWARDS: List[Dict[str, Any]] = [
     {"level":  1, "type":"souls",   "amount":   50, "label":"50 Душ"},
     {"level":  2, "type":"estus",   "amount":    1, "label":"Estus-фласка"},
     {"level":  3, "type":"souls",   "amount":  100, "label":"100 Душ"},
     {"level":  4, "type":"boost",   "amount":    1, "label":"Буст тапов 1ч"},
-    {"level":  5, "type":"souls",   "amount":  150, "label":"150 Душ"},
+    {"level":  5, "type":"loot",    "amount":    1, "label":"Предмет: Необычный лут", "loot_source": "bp_5",  "loot_rarity_min": "uncommon"},
     {"level":  6, "type":"estus",   "amount":    2, "label":"Estus ×2"},
     {"level":  7, "type":"souls",   "amount":  200, "label":"200 Душ"},
     {"level":  8, "type":"isotope", "amount":    1, "label":"Нестабильный Изотоп"},
     {"level":  9, "type":"souls",   "amount":  300, "label":"300 Душ"},
-    {"level": 10, "type":"frame",   "amount":    1, "label":"Рамка «Волатильность»"},
+    {"level": 10, "type":"loot",    "amount":    1, "label":"Предмет: Редкий лут",    "loot_source": "bp_10", "loot_rarity_min": "rare"},
     {"level": 11, "type":"souls",   "amount":  300, "label":"300 Душ"},
     {"level": 12, "type":"boost",   "amount":    3, "label":"Буст XP 1ч"},
     {"level": 13, "type":"souls",   "amount":  400, "label":"400 Душ"},
     {"level": 14, "type":"estus",   "amount":    3, "label":"Estus ×3"},
-    {"level": 15, "type":"souls",   "amount":  500, "label":"500 Душ"},
+    {"level": 15, "type":"loot",    "amount":    1, "label":"Предмет: Редкий лут",    "loot_source": "bp_15", "loot_rarity_min": "rare"},
     {"level": 16, "type":"souls",   "amount":  500, "label":"500 Душ"},
     {"level": 17, "type":"isotope", "amount":    1, "label":"Нестабильный Изотоп"},
     {"level": 18, "type":"souls",   "amount":  600, "label":"600 Душ"},
     {"level": 19, "type":"boost",   "amount":    1, "label":"Буст тапов 3ч"},
-    {"level": 20, "type":"skin",    "amount":    1, "label":"Скин Гомункула «Пламенный»"},
+    {"level": 20, "type":"loot",    "amount":    1, "label":"Предмет: Эпический лут", "loot_source": "bp_20", "loot_rarity_min": "epic",
+     "cosmetic": {"type":"skin", "label":"Скин Гомункула «Пламенный»"}},
     {"level": 21, "type":"souls",   "amount":  700, "label":"700 Душ"},
     {"level": 22, "type":"souls",   "amount":  700, "label":"700 Душ"},
     {"level": 23, "type":"estus",   "amount":    5, "label":"Estus ×5"},
     {"level": 24, "type":"souls",   "amount":  800, "label":"800 Душ"},
-    {"level": 25, "type":"souls",   "amount": 1000, "label":"1000 Душ"},
+    {"level": 25, "type":"loot",    "amount":    1, "label":"Предмет: Эпический лут", "loot_source": "bp_25", "loot_rarity_min": "epic"},
     {"level": 26, "type":"boost",   "amount":    1, "label":"Двойная реакция 24ч"},
     {"level": 27, "type":"souls",   "amount": 1000, "label":"1000 Душ"},
     {"level": 28, "type":"isotope", "amount":    2, "label":"Изотопы ×2"},
     {"level": 29, "type":"souls",   "amount": 1500, "label":"1500 Душ"},
-    {"level": 30, "type":"title",   "amount":    1, "label":"Титул «Выживший» + 2000 душ"},
+    {"level": 30, "type":"loot",    "amount":    1, "label":"Легендарный предмет + Титул «Выживший»",
+     "loot_source": "bp_30", "loot_rarity_min": "legendary",
+     "cosmetic": {"type":"title", "label":"Титул «Выживший»"}},
+]
+
+# ── VIP Battle Pass (дополнительные награды для VIP пользователей) ────────────
+BATTLE_PASS_VIP_REWARDS: List[Dict[str, Any]] = [
+    {"level":  1, "type":"souls",   "amount":  100, "label":"VIP: 100 Душ"},
+    {"level":  5, "type":"loot",    "amount":    1, "label":"VIP: Редкий лут",         "loot_source": "bp_vip_5",  "loot_rarity_min": "rare"},
+    {"level": 10, "type":"loot",    "amount":    1, "label":"VIP: Эпический лут",       "loot_source": "bp_vip_10", "loot_rarity_min": "epic"},
+    {"level": 15, "type":"boost",   "amount":   24, "label":"VIP: Буст XP 24ч"},
+    {"level": 20, "type":"loot",    "amount":    1, "label":"VIP: Эпический лут",       "loot_source": "bp_vip_20", "loot_rarity_min": "epic"},
+    {"level": 25, "type":"isotope", "amount":    3, "label":"VIP: Изотопы ×3"},
+    {"level": 30, "type":"loot",    "amount":    1, "label":"VIP: Легендарный предмет", "loot_source": "bp_vip_30", "loot_rarity_min": "legendary"},
 ]
 
 
@@ -123,6 +138,7 @@ def claim_bp_reward(user_id: int, level: int, user_progress: dict) -> Dict[str, 
     claimed.append(level)
     rtype = reward["type"]
     now = datetime.utcnow()
+    loot_drop = None
 
     if rtype == "souls":
         st["souls"] = round(st.get("souls", 0) + reward["amount"], 1)
@@ -136,5 +152,20 @@ def claim_bp_reward(user_id: int, level: int, user_progress: dict) -> Dict[str, 
         st.setdefault("owned_cosmetics", []).append(f"bp_s1_{rtype}")
         if rtype == "title":
             st["souls"] = round(st.get("souls", 0) + 2000, 1)
+    elif rtype == "loot":
+        # Roll guaranteed loot drop with rarity floor
+        try:
+            from loot import roll_loot
+            min_rarity = reward.get("loot_rarity_min", "uncommon")
+            loot_drop = roll_loot(user_id, reward.get("loot_source", "bp"), rarity_floor=min_rarity)
+        except Exception as e:
+            logger.warning("bp loot roll failed: %r", e)
+        # Also apply any cosmetic from the reward definition
+        cosmetic = reward.get("cosmetic")
+        if cosmetic:
+            ctype = cosmetic.get("type", "")
+            st.setdefault("owned_cosmetics", []).append(f"bp_s1_{ctype}")
+            if ctype == "title":
+                st["souls"] = round(st.get("souls", 0) + 2000, 1)
 
-    return {"ok": True, "reward": reward, "label": reward["label"]}
+    return {"ok": True, "reward": reward, "label": reward["label"], "loot_drop": loot_drop}

@@ -6,7 +6,7 @@ Providers (tried in order):
   2. Kraken     – /0/public/OHLC (US exchange, no geo-block)
 
 Fetches every 60 s, caches in memory.
-Computes: price_change_1h, volatility_index, market_state → pet_mood.
+Computes: price_change_1h, volatility_index, market_state → market_mood.
 """
 import asyncio
 import logging
@@ -60,7 +60,7 @@ def _classify(price_change_1h: float, volatility: float) -> str:
     return "neutral"
 
 
-def _build_pet_mood(state: str, change: float, vol: float) -> Dict[str, Any]:
+def _build_market_mood(state: str, change: float, vol: float) -> Dict[str, Any]:
     m = dict(_MOOD_MAP.get(state, _MOOD_MAP["neutral"]))
     m["market_state"]     = state
     m["price_change_1h"]  = round(change, 2)
@@ -204,8 +204,8 @@ async def refresh_market_data() -> Dict[str, Any]:
             fallback = dict(_cache.get("pulse") or {})
             fallback["ok"]    = False
             fallback["error"] = str(last_err)
-            if "pet_mood" not in fallback:
-                fallback["pet_mood"] = _build_pet_mood("neutral", 0.0, 50.0)
+            if "market_mood" not in fallback:
+                fallback["market_mood"] = _build_market_mood("neutral", 0.0, 50.0)
             return fallback
 
         state = _classify(raw["price_change_1h"], raw["volatility_index"])
@@ -216,7 +216,7 @@ async def refresh_market_data() -> Dict[str, Any]:
             "price_change_24h": raw["price_change_24h"],
             "volatility_index": raw["volatility_index"],
             "market_state":     state,
-            "pet_mood":         _build_pet_mood(state, raw["price_change_1h"], raw["volatility_index"]),
+            "market_mood":      _build_market_mood(state, raw["price_change_1h"], raw["volatility_index"]),
             "_fetched_at":      now,
         }
         _cache["pulse"] = result
@@ -265,7 +265,7 @@ def detect_live_signal(pulse: dict) -> "dict | None":
     pattern = LIVE_SIGNAL_PATTERNS.get(state, LIVE_SIGNAL_PATTERNS["neutral"])
     btc = pulse.get("btc_price", 0)
     change = pulse.get("price_change_1h", 0)
-    mood_label = pulse.get("pet_mood", {}).get("label", "")
+    mood_label = pulse.get("market_mood", {}).get("label", "")
 
     return {
         "active": True,
