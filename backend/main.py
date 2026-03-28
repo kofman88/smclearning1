@@ -132,11 +132,10 @@ from progress import (
     get_deadline_hours_remaining, apply_penalty_extension,
     MODULE_PENALTIES, MODULE_FULL_REPURCHASE,
     BADGE_DEFS, SMC_LEVELS, get_level_and_rank,
-    # Pet system
-    get_pet_state, pet_register_tap, apply_lesson_pet_effect, add_pet_coins,
-    PET_LEVEL_XP,
     # Evolution + DNA
     check_and_update_evolution, EVOLUTION_STAGES, update_trader_dna, get_trader_dna,
+    # Class system
+    CLASS_DEFINITIONS, get_class_bonus,
     # CHM system
     add_chm, spend_chm, drop_chm, retrieve_chm, burn_dropped_chm,
     use_estus_flask, refill_estus, check_hollow, exit_hollow, update_title,
@@ -146,7 +145,6 @@ from progress import (
 )
 from market_feed import refresh_market_data, start_market_feed_loop, get_cached_pulse
 from oracle_engine import generate_oracle
-from dream_generator import generate_dream
 from lessons import LESSONS, MODULES
 from quests import QUESTS, QUIZZES
 def generate_chart(lesson_key):  # lazy proxy — defers heavy matplotlib import to first chart request
@@ -341,11 +339,6 @@ class OracleAnswerRequest(BaseModel):
     correct: bool
 
 
-class DreamAnswerRequest(BaseModel):
-    user_id: int
-    correct: bool
-    concept: Optional[str] = None
-
 
 # ── UTILS ─────────────────────────────────────────────────────────────────────
 
@@ -535,6 +528,8 @@ async def user_init(req: UserInitRequest):
     if is_new_day:
         chm_result = add_chm(user_id, 20, source="daily_login")
         chm_bonus = chm_result.get("delta", 0)
+    # Daily quest: login
+    update_daily_progress(user_id, "login")
 
     # Pulse (non-blocking: return cached if available)
     pulse = get_cached_pulse()
@@ -573,6 +568,26 @@ def _state_safe(state: dict) -> dict:
 class OnboardingRequest(BaseModel):
     user_id: int
 
+
+class OnboardingSetupRequest(BaseModel):
+    user_id: int
+    gender: str        # "male" | "female" | "neutral"
+    character_class: str  # "ob_sniper" | "liq_hunter" | "struct_mage" | "fvg_alchemist"
+
+
+@app.post("/api/onboarding/setup")
+async def onboarding_setup(req: OnboardingSetupRequest):
+    """Set gender and class during onboarding (called once before /onboarding/complete)."""
+    state = get_user_state(req.user_id)
+    if state.get("gender") and state.get("character_class"):
+        return {"ok": True, "already_set": True}
+    state["gender"] = req.gender
+    state["character_class"] = req.character_class
+    save_progress()
+    cls_info = CLASS_DEFINITIONS.get(req.character_class, {})
+    return {"ok": True, "gender": req.gender, "character_class": req.character_class, "class_info": cls_info}
+
+
 @app.post("/api/onboarding/complete")
 async def onboarding_complete_api(req: OnboardingRequest):
     """Mark onboarding as complete and award 50 starting CHM."""
@@ -596,7 +611,10 @@ async def onboarding_complete_api(req: OnboardingRequest):
 async def get_user(user_id: int):
     """Return user state (excluding large binary fields)."""
     state = get_user_state(user_id)
-    return _state_safe(state)
+    result = _state_safe(state)
+    cls = state.get("character_class")
+    result["class_info"] = CLASS_DEFINITIONS.get(cls) if cls else None
+    return result
 
 
 @app.get("/api/user/{user_id}/full")
@@ -642,6 +660,18 @@ async def get_lesson(lesson_key: str):
         "article": lesson["article"],
         "video": lesson.get("video", ""),
     }
+
+
+class LessonTrackRequest(BaseModel):
+    user_id: int
+    lesson_key: str
+
+
+@app.post("/api/lesson/track")
+async def track_lesson_open(req: LessonTrackRequest):
+    """Called by frontend when a lesson is opened — tracks daily progress."""
+    update_daily_progress(req.user_id, "lesson_open")
+    return {"ok": True}
 
 
 # ── CHARTS ───────────────────────────────────────────────────────────────────
@@ -804,33 +834,39 @@ async def quiz_answer(req: QuizAnswerRequest):
 
                 advanced = try_advance_module(req.user_id)
 
-                # Pet effect: boost fox stats based on quiz topic
-                quiz_ref = quest.get("quiz_ref", "")
-                lesson_key = _QUIZ_REF_TO_LESSON.get(quiz_ref, "")
-                pet_effect = {}
-                if lesson_key:
-                    try:
-                        pet_effect = apply_lesson_pet_effect(req.user_id, lesson_key, round(score * 100))
-                    except Exception as pe:
-                        logger.warning(f"Pet effect error: {pe}")
+                # Award CHM with class bonus
+                base_chm = max(10, round(score * 50))
+                module_idx = state.get("module_index", 0)
+                class_mult = get_class_bonus(req.user_id, module_idx)
+                chm_earned = int(base_chm * class_mult)
+                chm_result = add_chm(req.user_id, chm_earned, source="quiz_pass")
 
                 # Battle Pass XP for completing a quest
                 _add_bp_xp(req.user_id, 20, user_progress)
+                # Daily quest progress
+                update_daily_progress(req.user_id, "quiz_count")
                 # Mark mystery box available
                 state.setdefault("pending_mystery_boxes", []).append(quest_id)
+                # Loot roll on quiz completion
+                loot_drop = None
+                try:
+                    from loot import roll_loot
+                    loot_drop = roll_loot(req.user_id, "quiz")
+                except ImportError:
+                    pass
                 save_progress()
-                # add_xp, award_badge, try_advance_module already save;
-                # no extra save_progress() needed here
                 return {
                     "ok": True, "finished": True, "passed": True,
                     "score": round(score * 100), "correct": qstate["correct"], "total": total,
                     "xp_earned": quest["xp_reward"],
+                    "chm_earned": chm_earned,
+                    "class_bonus": class_mult > 1.0,
                     "new_level": level, "leveled_up": leveled_up,
                     "module_advanced": advanced,
                     "rank": get_user_state(req.user_id)["rank"],
-                    "pet_effect": pet_effect,
                     "mystery_box_available": True,
                     "mystery_box_quest": quest_id,
+                    "loot_drop": loot_drop,
                 }
         else:
             state["quiz_state"] = None
@@ -1090,19 +1126,30 @@ async def admin_approve(req: AdminApproveRequest):
         if all_done:
             award_badge(req.user_id, "chm_legend")
 
-    # Give pet coins for approved homework
+    # Give CHM for approved homework
     try:
         coin_reward = 50 if req.quest_id.endswith("_boss") else 30
-        add_pet_coins(req.user_id, coin_reward)
+        add_chm(req.user_id, coin_reward, source="homework_approved")
     except Exception as ce:
-        logger.warning(f"Pet coins error on approval: {ce}")
+        logger.warning(f"CHM award error on approval: {ce}")
 
-    # Battle Pass XP for approved quest
-    _add_bp_xp(req.user_id, 20, user_progress)
+    # Battle Pass XP for approved quest (boss = +50, lesson = +10)
+    bp_xp_amount = 50 if req.quest_id.endswith("_boss") else 10
+    _add_bp_xp(req.user_id, bp_xp_amount, user_progress)
     state.setdefault("pending_mystery_boxes", []).append(req.quest_id)
+    # Loot roll: boss quests get better loot
+    loot_drop = None
+    try:
+        from loot import roll_loot
+        src = "boss" if req.quest_id.endswith("_boss") else "lesson_complete"
+        diff = 2.0 if req.quest_id.endswith("_boss") else 1.0
+        loot_drop = roll_loot(req.user_id, src, diff)
+    except ImportError:
+        pass
     save_progress()
     return {"ok": True, "new_level": level, "leveled_up": leveled_up, "module_advanced": advanced,
-            "mystery_box_available": True, "mystery_box_quest": req.quest_id}
+            "mystery_box_available": True, "mystery_box_quest": req.quest_id,
+            "loot_drop": loot_drop}
 
 
 @app.post("/api/admin/reject")
@@ -1235,8 +1282,7 @@ async def oracle_daily(user_id: int):
     oracle = await generate_oracle()
     # Mark that user viewed the oracle today
     state = get_user_state(user_id)
-    pet   = state.setdefault("pet", {})
-    pet["oracle_viewed_today"] = True
+    state["oracle_viewed_today"] = True
     save_progress()
     return oracle
 
@@ -1244,11 +1290,9 @@ async def oracle_daily(user_id: int):
 @app.post("/api/oracle/answer")
 async def oracle_answer(req: OracleAnswerRequest):
     state = get_user_state(req.user_id)
-    pet   = state.setdefault("pet", {})
     if req.correct:
-        pet["oracle_correct"] = pet.get("oracle_correct", 0) + 1
-        add_pet_coins(req.user_id, 25)
-        pet["happiness"] = min(100, pet.get("happiness", 0) + 15)
+        state["oracle_correct"] = state.get("oracle_correct", 0) + 1
+        add_chm(req.user_id, 25, source="oracle")
         update_trader_dna(req.user_id, "prediction_correct")
     else:
         update_trader_dna(req.user_id, "prediction_wrong")
@@ -1256,48 +1300,11 @@ async def oracle_answer(req: OracleAnswerRequest):
     evo = check_and_update_evolution(req.user_id)
     return {
         "ok":            True,
-        "oracle_correct":pet.get("oracle_correct", 0),
+        "oracle_correct":state.get("oracle_correct", 0),
         "coins_earned":  25 if req.correct else 0,
         "evolution":     evo,
     }
 
-
-# ── DREAM SYSTEM ──────────────────────────────────────────────────────────────
-
-@app.get("/api/pet/dream/{user_id}")
-async def pet_dream_get(user_id: int):
-    state = get_user_state(user_id)
-    dream = await generate_dream(user_id, state)
-    # Update last_online AFTER dream check (dream check uses the old value)
-    state["last_online"] = datetime.utcnow().isoformat()
-    save_progress()
-    if not dream:
-        return {"ok": True, "has_dream": False}
-    return dream
-
-
-@app.post("/api/pet/dream/answer")
-async def pet_dream_answer(req: DreamAnswerRequest):
-    state = get_user_state(req.user_id)
-    pet   = state.setdefault("pet", {})
-    pet["last_dream_shown"] = datetime.utcnow().isoformat()
-
-    coins = 0
-    xp_   = 0
-    if req.correct:
-        coins = 20
-        xp_   = 12
-        add_pet_coins(req.user_id, coins)
-        pet["happiness"] = min(100, pet.get("happiness", 0) + 20)
-        pet["hunger"]    = min(100, pet.get("hunger", 0) + 10)
-        if req.concept:
-            update_trader_dna(req.user_id, "quiz_correct")
-    else:
-        if req.concept:
-            update_trader_dna(req.user_id, "quiz_wrong")
-
-    save_progress()
-    return {"ok": True, "correct": req.correct, "coins_earned": coins, "xp_earned": xp_}
 
 
 # ── EVOLUTION ─────────────────────────────────────────────────────────────────
@@ -1553,6 +1560,9 @@ async def homunculus_tap_api(req: HomunculusTapRequest):
     result = homunculus_process_taps(req.user_id, 1, max_combo)
     result["actions_left"]  = action_result["actions_left"]
     result["actions_total"] = action_result["actions_total"]
+    # Daily quest: combo_reach
+    if max_combo > 0:
+        update_daily_progress(req.user_id, "combo_reach", max_combo)
     save_progress()
 
     if result.get("evolution"):
@@ -1582,6 +1592,154 @@ async def homunculus_stages_api():
     return {"ok": True, "stages": HOMUNCULUS_STAGES}
 
 
+# ── TAP CHART SYSTEM ─────────────────────────────────────────────────────────
+
+from tap_chart import generate_tap_chart, check_tap_answer as _check_tap_answer
+
+
+class TapAnswerRequest(BaseModel):
+    user_id: int
+    session_token: Optional[str] = None
+    zone_id: str
+    chart_id: str
+
+
+@app.get("/api/tap/chart/{user_id}")
+async def get_tap_chart(user_id: int):
+    """Получить текущий или сгенерировать новый мини-график."""
+    state = get_user_state(user_id)
+    current = state.get("current_tap_chart")
+    # Generate new chart if none or already answered
+    if not current or current.get("answered"):
+        level = state.get("level", 1)
+        chart = generate_tap_chart(user_id, level)
+        state["current_tap_chart"] = chart
+        save_progress()
+        current = chart
+    # Return without correct_zone_id
+    public = {k: v for k, v in current.items() if k != "correct_zone_id"}
+    return {"ok": True, **public}
+
+
+@app.post("/api/tap/answer")
+async def tap_answer(req: TapAnswerRequest):
+    """Обработать тап по зоне графика."""
+    state = get_user_state(req.user_id)
+    chart = state.get("current_tap_chart")
+    if not chart or chart.get("chart_id") != req.chart_id:
+        return {"ok": False, "error": "chart_not_found"}
+
+    # Consume 1 action
+    from progress import spend_action
+    action_result = spend_action(req.user_id, "tap", user_progress)
+    if not action_result["ok"]:
+        return action_result
+
+    result = _check_tap_answer(chart, req.zone_id)
+    is_correct = result["correct"]
+
+    # Update streak
+    if is_correct:
+        state["tap_correct_streak"] = state.get("tap_correct_streak", 0) + 1
+        update_daily_progress(req.user_id, "tap_correct")
+    else:
+        state["tap_correct_streak"] = 0
+
+    streak = state.get("tap_correct_streak", 0)
+
+    # Combo multiplier
+    if streak >= 20:
+        combo_mult = 3.0
+    elif streak >= 10:
+        combo_mult = 2.0
+    elif streak >= 5:
+        combo_mult = 1.5
+    elif streak >= 3:
+        combo_mult = 1.25
+    else:
+        combo_mult = 1.0
+
+    # Base CHM from tap (use homunculus stage multiplier)
+    from progress import HOMUNCULUS_STAGES
+    hom = state.setdefault("homunculus", {})
+    hom_stage = hom.get("stage", 1)
+    stage_mult = HOMUNCULUS_STAGES[hom_stage - 1]["mult"]
+
+    base_chm = max(1, int(5 * stage_mult * result["chm_multiplier"] * combo_mult))
+    # Apply class bonus for correct zone type → module mapping
+    zone_module_map = {"order_block": 2, "fvg": 3, "liquidity_sweep": 1, "bos": 0}
+    module_idx = zone_module_map.get(result.get("correct_type", ""), state.get("module_index", 0))
+    class_mult = get_class_bonus(req.user_id, module_idx)
+    chm_earned = int(base_chm * class_mult)
+
+    # Feed homunculus and award CHM
+    hom["souls_fed"] = hom.get("souls_fed", 0) + chm_earned
+    hom["total_taps"] = hom.get("total_taps", 0) + 1
+    chm_result = add_chm(req.user_id, chm_earned, source="tap_chart")
+    state["tap_session_chm"] = state.get("tap_session_chm", 0) + chm_earned
+
+    # Mark chart as answered → next GET will generate new one
+    chart["answered"] = True
+    state["current_tap_chart"] = chart
+
+    # Update DNA
+    if is_correct:
+        update_trader_dna(req.user_id, "quiz_correct")
+    else:
+        update_trader_dna(req.user_id, "quiz_wrong")
+
+    # Loot chance on combo milestones
+    loot_drop = None
+    if streak == 10 or streak == 20:
+        try:
+            from loot import roll_loot
+            mult = 1.5 if streak == 20 else 1.0
+            loot_drop = roll_loot(req.user_id, f"tap_combo_{streak}", mult)
+        except ImportError:
+            pass
+
+    # BP XP for combo milestones
+    if streak >= 10:
+        _add_bp_xp(req.user_id, 15, user_progress)
+
+    save_progress()
+
+    return {
+        "ok":            True,
+        "correct":       is_correct,
+        "zone_type":     result.get("zone_type"),
+        "correct_type":  result.get("correct_type"),
+        "chm_earned":    chm_earned,
+        "combo":         streak,
+        "combo_mult":    combo_mult,
+        "total_chm":     chm_result.get("total", 0),
+        "actions_left":  action_result["actions_left"],
+        "loot_drop":     loot_drop,
+    }
+
+
+# ── INVENTORY / LOOT SYSTEM ──────────────────────────────────────────────────
+
+class UseItemRequest(BaseModel):
+    user_id: int
+    item_id: str
+
+
+@app.get("/api/inventory/{user_id}")
+async def inventory_get(user_id: int):
+    """Return user's inventory and active effects."""
+    from loot import get_inventory
+    return get_inventory(user_id)
+
+
+@app.post("/api/inventory/use")
+async def inventory_use(req: UseItemRequest):
+    """Use/activate an item from inventory."""
+    from loot import use_item
+    result = use_item(req.user_id, req.item_id)
+    return result
+
+
 # ── PET SYSTEM ────────────────────────────────────────────────────────────────
 
 # Map quiz_ref → lesson_key for pet effects on quiz completion
@@ -1598,28 +1756,6 @@ _QUIZ_REF_TO_LESSON: Dict[str, str] = {
 }
 
 
-@app.get("/api/pet/{user_id}")
-async def get_pet(user_id: int):
-    pet = get_pet_state(user_id)
-    return {
-        "ok": True,
-        "hunger":           round(pet["hunger"]),
-        "happiness":        round(pet["happiness"]),
-        "health":           round(pet["health"]),
-        "pet_xp":           pet["pet_xp"],
-        "pet_level":        pet["pet_level"],
-        "coins":            pet["coins"],
-        "visual_state":     pet["visual_state"],
-        "total_taps":       pet["total_taps"],
-        "next_level_xp":    pet["next_level_xp"],
-        "current_level_xp": pet["current_level_xp"],
-    }
-
-
-@app.post("/api/pet/tap")
-async def pet_tap(req: PetTapRequest):
-    result = pet_register_tap(req.user_id)
-    return {"ok": True, **result}
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -2124,6 +2260,8 @@ async def pvp_submit(req: PvPSubmitRequest):
     if winner:
         add_chm(winner, 30, source="pvp_win")
         add_chm(winner, pvp_win_chm, source="pvp_win_chm")
+        _add_bp_xp(winner, 25, user_progress)
+        update_daily_progress(winner, "quiz_count")  # PvP win counts as completing a challenge
         pvp_stats_w = get_user_state(winner).setdefault("pvp_stats", {"wins": 0, "losses": 0})
         pvp_stats_w["wins"] = pvp_stats_w.get("wins", 0) + 1
         pvp_stats_l = get_user_state(loser).setdefault("pvp_stats", {"wins": 0, "losses": 0})
@@ -3064,3 +3202,23 @@ async def tokenomics_emission(req: TokenEmissionRequest):
         active_users_24h=req.active_users_24h,
         burn_24h=req.burn_24h,
     )
+
+
+# ── DAILY QUESTS ───────────────────────────────────────────────────────────────
+
+from daily import get_daily_quests, update_daily_progress, claim_daily_reward as _claim_daily
+
+
+@app.get("/api/daily/{user_id}")
+async def daily_quests_get(user_id: int):
+    return get_daily_quests(user_id)
+
+
+class DailyClaimRequest(BaseModel):
+    user_id: int
+    quest_id: str
+
+
+@app.post("/api/daily/claim")
+async def daily_claim(req: DailyClaimRequest):
+    return _claim_daily(req.user_id, req.quest_id)

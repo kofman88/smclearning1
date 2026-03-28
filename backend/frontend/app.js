@@ -177,6 +177,10 @@ function getUserInfo() {
   return { id: DEV_UID, username: "dev_user", first_name: "Dev", last_name: null };
 }
 
+// ── CLASS HELPERS ─────────────────────────────────────────────────────────
+const CLASS_ICONS = {ob_sniper:"🎯", liq_hunter:"🌊", struct_mage:"🔮", fvg_alchemist:"⚗️"};
+function _getClassIcon(cls) { return CLASS_ICONS[cls] || ""; }
+
 // ── DOM HELPERS ───────────────────────────────────────────────────────────
 const $ = s => document.querySelector(s);
 function el(tag, cls, text) {
@@ -192,6 +196,8 @@ function el(tag, cls, text) {
 // Called from init() — checks server flag first, then runs ritual if needed.
 // `onboardingDone` is set from initData.onboarding_complete in init().
 let _ritualActive = false;
+let _selectedGender = null;
+let _selectedClass = null;
 
 function initOnboarding(onboardingComplete) {
   // Already done (server flag takes precedence over localStorage)
@@ -242,13 +248,70 @@ function _runRitualPhase3() {
   setTimeout(() => { if (_ritualActive) onRitualFlaskTap(); }, 10000);
 }
 
-// ── Phase 4: Tap on flask → synthesis ──────────────────────────────────
+// ── Phase 3.5: Gender selection ─────────────────────────────────────────
 function onRitualFlaskTap() {
   if (!_ritualActive) return;
   if (tg?.HapticFeedback) tg.HapticFeedback.impactOccurred("heavy");
   const p3 = $("#srPhase3");
-  const p4 = $("#srPhase4");
   if (p3) p3.style.display = "none";
+  _runRitualPhase3_5();
+}
+window.onRitualFlaskTap = onRitualFlaskTap;
+
+function _runRitualPhase3_5() {
+  const p = $("#srPhase3_5");
+  if (!p) { _startSynthesis(); return; }
+  p.style.display = "flex";
+  p.style.opacity = "0";
+  p.style.transition = "opacity 0.6s ease";
+  requestAnimationFrame(() => { p.style.opacity = "1"; });
+  _typewriter("srGenderTitle", "Кто ты, Алхимик?", 45, null);
+}
+
+function onSelectGender(gender) {
+  _selectedGender = gender;
+  ["male","female","neutral"].forEach(g => {
+    const card = $(`#srGenderMale`).closest ? null : null; // just update via id
+    const c = document.getElementById(`srGender${g.charAt(0).toUpperCase()+g.slice(1)}`);
+    if (c) c.classList.toggle("synth-choice-card--selected", g === gender);
+  });
+  const nextBtn = $("#srGenderNext");
+  if (nextBtn) nextBtn.classList.remove("hidden");
+  if (tg?.HapticFeedback) tg.HapticFeedback.selectionChanged();
+}
+window.onSelectGender = onSelectGender;
+
+// ── Phase 3.7: Class selection ──────────────────────────────────────────
+function _runRitualPhase3_7() {
+  const p35 = $("#srPhase3_5");
+  const p37 = $("#srPhase3_7");
+  if (p35) p35.style.display = "none";
+  if (!p37) { _startSynthesis(); return; }
+  p37.style.display = "flex";
+  p37.style.opacity = "0";
+  p37.style.transition = "opacity 0.6s ease";
+  requestAnimationFrame(() => { p37.style.opacity = "1"; });
+  _typewriter("srClassTitle", "Выбери свой Путь", 45, null);
+}
+window._runRitualPhase3_7 = _runRitualPhase3_7;
+
+function onSelectClass(cls) {
+  _selectedClass = cls;
+  ["ob_sniper","liq_hunter","struct_mage","fvg_alchemist"].forEach(c => {
+    const card = document.getElementById(`srClass_${c}`);
+    if (card) card.classList.toggle("synth-class-card--selected", c === cls);
+  });
+  const nextBtn = $("#srClassNext");
+  if (nextBtn) nextBtn.classList.remove("hidden");
+  if (tg?.HapticFeedback) tg.HapticFeedback.selectionChanged();
+}
+window.onSelectClass = onSelectClass;
+
+// ── Synthesis start (after class chosen) ────────────────────────────────
+function _startSynthesis() {
+  const p37 = $("#srPhase3_7");
+  const p4 = $("#srPhase4");
+  if (p37) p37.style.display = "none";
   if (!p4) return;
   p4.style.display = "flex";
   // Flash effect
@@ -261,7 +324,9 @@ function onRitualFlaskTap() {
   }
   setTimeout(_runRitualPhase5, 1800);
 }
-window.onRitualFlaskTap = onRitualFlaskTap;
+window._startSynthesis = _startSynthesis;
+
+// ── Phase 4: Tap on flask → synthesis ──────────────────────────────────
 
 // ── Phase 5: Homunculus born, souls counter ─────────────────────────────
 function _runRitualPhase5() {
@@ -310,9 +375,22 @@ async function onRitualComplete() {
     setTimeout(() => overlay.classList.add("hidden"), 650);
   }
   localStorage.setItem("smc_ritual_done", "1");
-  // Tell server onboarding is complete (awards +50 souls)
-  try {
-    if (state.userId) {
+  if (state.userId) {
+    // Save gender + class choice
+    if (_selectedGender || _selectedClass) {
+      try {
+        await fetch(`${API}/onboarding/setup`, {
+          method: "POST", headers: {"Content-Type":"application/json"},
+          body: JSON.stringify({
+            user_id: state.userId,
+            gender: _selectedGender || "neutral",
+            character_class: _selectedClass || "ob_sniper",
+          }),
+        });
+      } catch(e) { console.warn("onboarding/setup error:", e); }
+    }
+    // Tell server onboarding is complete (awards +50 CHM)
+    try {
       const res  = await fetch(`${API}/onboarding/complete`, {
         method:  "POST",
         headers: {"Content-Type": "application/json"},
@@ -323,8 +401,17 @@ async function onRitualComplete() {
         state.chm = data.total_chm;
         _updateCHMDisplay(state.chm);
       }
-    }
-  } catch(e) { console.warn("onboarding/complete error:", e); }
+      if (_selectedClass) {
+        state.character_class = _selectedClass;
+        state.gender = _selectedGender || "neutral";
+        if (state.userState) {
+          state.userState.character_class = _selectedClass;
+          state.userState.gender = _selectedGender || "neutral";
+          renderHeader(state.userState);
+        }
+      }
+    } catch(e) { console.warn("onboarding/complete error:", e); }
+  }
 }
 window.onRitualComplete = onRitualComplete;
 
@@ -603,6 +690,7 @@ function switchTab(name) {
   if (name === "homunculus") {
     loadHomunculus();
     loadCatalyst();
+    loadTapChart();
     // Убрать бейдж при открытии
     _clearTabBadge("Alchemy");
   }
@@ -613,8 +701,9 @@ function switchTab(name) {
     const shopBal = document.getElementById("shopTabCHMBal");
     if (shopBal) shopBal.textContent = `${Math.floor(state.chm || 0)} CHM`;
   }
-  if (name === "quests") loadQuests();
-  if (name === "admin")  loadAdminPanel();
+  if (name === "quests")    loadQuests();
+  if (name === "inventory") loadInventory();
+  if (name === "admin")     loadAdminPanel();
 
   if (tg?.HapticFeedback) tg.HapticFeedback.selectionChanged();
 }
@@ -679,7 +768,13 @@ function renderHeader(s) {
 
   // Имя и ранг
   const nameEl = document.getElementById("headerUsername");
-  if (nameEl) nameEl.textContent = (s.name || "CHM").slice(0, 14);
+  if (nameEl) {
+    const classIcon = _getClassIcon(s.character_class);
+    nameEl.textContent = (s.name || "CHM").slice(0, 14);
+    // Add class badge if available
+    const badgeEl = document.getElementById("headerClassBadge");
+    if (badgeEl) badgeEl.textContent = classIcon || "";
+  }
   const rankEl = document.getElementById("headerRankName");
   if (rankEl) rankEl.textContent = s.rank || "Наблюдатель рынка";
 
@@ -1026,6 +1121,11 @@ async function openLesson(key) {
     const res  = await fetch(`${API}/lesson/${key}`);
     if (!res.ok) throw new Error("404");
     const data = await res.json();
+    // Track lesson open for daily quests (fire-and-forget)
+    fetch(`${API}/lesson/track`, {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({user_id: state.userId, lesson_key: key}),
+    }).catch(() => {});
 
     $("#lessonTitle").textContent = data.title;
     $("#lessonArticle").innerHTML = renderMarkdown(data.article || "");
@@ -1590,11 +1690,90 @@ function showDailyBonus(xp, streak) {
 async function loadQuests() {
   if (!state.userId) { console.warn("quests fetch skipped: userId not set"); return; }
   try {
-    const res  = await fetch(`${API}/quests/${state.userId}`);
-    const data = await res.json();
-    renderQuests(data);
+    const [questsRes, dailyRes] = await Promise.all([
+      fetch(`${API}/quests/${state.userId}`),
+      fetch(`${API}/daily/${state.userId}`),
+    ]);
+    const questsData = await questsRes.json();
+    const dailyData  = await dailyRes.json().catch(() => null);
+    renderQuests(questsData);
+    if (dailyData?.ok) renderDailyQuests(dailyData);
   } catch (e) { console.error("loadQuests:", e); }
 }
+
+function renderDailyQuests(d) {
+  // Inject daily quests widget above regular quests
+  let wrap = document.getElementById("dailyQuestsWrap");
+  if (!wrap) {
+    wrap = document.createElement("div");
+    wrap.id = "dailyQuestsWrap";
+    const questsEl = document.getElementById("tab-quests");
+    if (questsEl) questsEl.prepend(wrap);
+  }
+
+  const allDone  = d.all_done;
+  const allBonus = d.all_bonus_claimed;
+  const bonus    = d.all_bonus || {};
+
+  const questsHtml = d.quests.map(q => {
+    const pct      = Math.min(100, Math.round((q.progress / q.goal) * 100));
+    const btnLabel = q.claimed ? "✓ Получено" : q.done ? "Забрать" : `${q.progress}/${q.goal}`;
+    const btnCls   = q.claimed ? "dq-btn dq-btn--done" : q.done ? "dq-btn dq-btn--ready" : "dq-btn dq-btn--locked";
+    const clickable = q.done && !q.claimed;
+    return `
+      <div class="dq-item${q.claimed ? ' dq-item--claimed' : q.done ? ' dq-item--done' : ''}">
+        <span class="dq-icon">${q.icon}</span>
+        <div class="dq-body">
+          <div class="dq-title">${q.title}</div>
+          <div class="dq-desc">${q.desc}</div>
+          <div class="dq-bar-wrap"><div class="dq-bar-fill" style="width:${pct}%"></div></div>
+        </div>
+        <div class="dq-right">
+          <div class="dq-reward">+${q.reward.chm} CHM</div>
+          <button class="${btnCls}" ${clickable ? `onclick="claimDailyReward('${q.id}')"` : 'disabled'}>${btnLabel}</button>
+        </div>
+      </div>`;
+  }).join("");
+
+  const bonusHtml = allDone ? `
+    <div class="dq-bonus${allBonus ? ' dq-bonus--claimed' : ''}">
+      <span>🏆 Все задания выполнены!</span>
+      <span class="dq-bonus-reward">+${bonus.chm || 50} CHM</span>
+      ${allBonus
+        ? `<button class="dq-btn dq-btn--done" disabled>✓ Получено</button>`
+        : `<button class="dq-btn dq-btn--ready" onclick="claimDailyReward('all_bonus')">Забрать бонус</button>`}
+    </div>` : "";
+
+  wrap.innerHTML = `
+    <div class="dq-section">
+      <div class="dq-header">
+        <span class="dq-header-title">📅 Ежедневные задания</span>
+        <span class="dq-header-date">${d.date || ""}</span>
+      </div>
+      ${questsHtml}
+      ${bonusHtml}
+    </div>`;
+}
+window.renderDailyQuests = renderDailyQuests;
+
+async function claimDailyReward(questId) {
+  try {
+    const d = await fetch(`${API}/daily/claim`, {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({user_id: state.userId, quest_id: questId}),
+    }).then(r => r.json());
+    if (d.ok) {
+      showToast(`+${d.chm} CHM получено!`, "success");
+      if (tg?.HapticFeedback) tg.HapticFeedback.notificationOccurred("success");
+      state.chm = (state.chm || 0) + d.chm;
+      renderHeader();
+      loadQuests();
+    } else {
+      showToast(d.error || "Ошибка", "error");
+    }
+  } catch(e) { showToast("Ошибка сети", "error"); }
+}
+window.claimDailyReward = claimDailyReward;
 
 async function loadLeaderboard() {
   try {
@@ -2072,13 +2251,10 @@ async function init() {
     }
 
     // Apply cached market pulse to heartbeat bar if already available
-    if (initData.market_pulse?.pet_mood) _applyMarketMood(initData.market_pulse);
+    if (initData.market_pulse?.market_mood) _applyMarketMood(initData.market_pulse);
 
     // Start live heartbeat canvas + polling
     startMarketPulse();
-
-    // Check for dream (after a short delay so UI is settled)
-    setTimeout(checkDream, 2000);
 
     // Phase 3: check daily challenge badge
     setTimeout(_checkDailyBadge, 1500);
@@ -2302,6 +2478,242 @@ async function onHomunculusTap(e) {
   _tapInProgress = false;
 }
 window.onHomunculusTap = onHomunculusTap;
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ── TAP CHART SYSTEM ──────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════
+
+let _tapChart = null;         // current chart data from server
+let _tapAnswerInProgress = false;
+let _tapSessionCHM = 0;
+
+async function loadTapChart() {
+  if (!state.userId) return;
+  try {
+    const res  = await fetch(`${API}/tap/chart/${state.userId}`);
+    const data = await res.json();
+    if (data.ok !== false) {
+      _tapChart = data;
+      _drawTapChart(data);
+      const q = document.getElementById("tapChartQuestion");
+      if (q) q.textContent = data.question || "Найди зону на графике";
+    }
+  } catch(e) { console.warn("loadTapChart:", e); }
+}
+
+function _drawTapChart(data) {
+  const canvas = document.getElementById("tapChartCanvas");
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+
+  const candles = data.candles || [];
+  if (!candles.length) return;
+
+  // Calculate price range
+  const allH = candles.map(c => c.h);
+  const allL = candles.map(c => c.l);
+  const priceMax = Math.max(...allH);
+  const priceMin = Math.min(...allL);
+  const priceRange = priceMax - priceMin || 1;
+
+  const PAD_L = 4, PAD_R = 4, PAD_T = 16, PAD_B = 16;
+  const chartW = W - PAD_L - PAD_R;
+  const chartH = H - PAD_T - PAD_B;
+  const candleW = Math.max(4, Math.floor(chartW / candles.length) - 1);
+
+  function toX(i) { return PAD_L + (i / candles.length) * chartW + candleW / 2; }
+  function toY(p) { return PAD_T + chartH - ((p - priceMin) / priceRange) * chartH; }
+
+  // Background
+  ctx.fillStyle = "rgba(6,8,16,0.8)";
+  ctx.roundRect(0, 0, W, H, 10);
+  ctx.fill();
+
+  // Grid lines (horizontal)
+  ctx.strokeStyle = "rgba(255,255,255,0.05)";
+  ctx.lineWidth = 0.5;
+  for (let i = 1; i <= 3; i++) {
+    const y = PAD_T + (i / 4) * chartH;
+    ctx.beginPath(); ctx.moveTo(PAD_L, y); ctx.lineTo(W - PAD_R, y); ctx.stroke();
+  }
+
+  // Draw candles
+  candles.forEach((c, i) => {
+    const x = toX(i);
+    const isBull = c.c >= c.o;
+    ctx.strokeStyle = isBull ? "#10b981" : "#ef4444";
+    ctx.fillStyle   = isBull ? "rgba(16,185,129,0.7)" : "rgba(239,68,68,0.7)";
+    ctx.lineWidth   = 1;
+
+    // Wick
+    ctx.beginPath();
+    ctx.moveTo(x, toY(c.h));
+    ctx.lineTo(x, toY(c.l));
+    ctx.stroke();
+
+    // Body
+    const bodyTop    = toY(Math.max(c.o, c.c));
+    const bodyBottom = toY(Math.min(c.o, c.c));
+    const bodyH      = Math.max(1, bodyBottom - bodyTop);
+    ctx.fillRect(x - candleW/2, bodyTop, candleW, bodyH);
+  });
+
+  // Draw zones (semi-transparent rectangles)
+  const zones = data.zones || [];
+  const zoneColors = {
+    order_block:     "rgba(255,165,0,0.18)",
+    fvg:             "rgba(168,85,247,0.18)",
+    liquidity_sweep: "rgba(0,212,255,0.18)",
+    bos:             "rgba(239,68,68,0.18)",
+  };
+  const zoneBorders = {
+    order_block:     "#f97316",
+    fvg:             "#a855f7",
+    liquidity_sweep: "#00d4ff",
+    bos:             "#ef4444",
+  };
+  const zoneLabels = {order_block:"OB", fvg:"FVG", liquidity_sweep:"LQ", bos:"BOS"};
+
+  zones.forEach(z => {
+    const x1 = toX(z.x1) - candleW;
+    const x2 = toX(z.x2) + candleW;
+    const y1 = toY(z.y2);  // y2 is higher price → lower y
+    const y2 = toY(z.y1);
+    const rectW = Math.max(x2 - x1, 20);
+    const rectH = Math.max(y2 - y1, 8);
+
+    ctx.fillStyle = zoneColors[z.type] || "rgba(255,255,255,0.1)";
+    ctx.strokeStyle = zoneBorders[z.type] || "#ffffff";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.roundRect(x1, y1, rectW, rectH, 3);
+    ctx.fill();
+    ctx.stroke();
+
+    // Label
+    ctx.fillStyle = zoneBorders[z.type] || "#fff";
+    ctx.font = "bold 9px monospace";
+    ctx.fillText(zoneLabels[z.type] || z.type, x1 + 3, y1 + 10);
+
+    // Store zone hit areas on canvas for click detection
+    z._hitX1 = x1; z._hitY1 = y1; z._hitX2 = x1 + rectW; z._hitY2 = y1 + rectH;
+  });
+}
+
+function _onTapChartClick(e) {
+  if (!_tapChart || _tapAnswerInProgress) return;
+
+  const canvas = document.getElementById("tapChartCanvas");
+  if (!canvas) return;
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+  const cx = (e.clientX - rect.left) * scaleX;
+  const cy = (e.clientY - rect.top)  * scaleY;
+
+  // Find which zone was tapped
+  const zones = _tapChart.zones || [];
+  const tapped = zones.find(z => z._hitX1 && cx >= z._hitX1 && cx <= z._hitX2 && cy >= z._hitY1 && cy <= z._hitY2);
+  if (!tapped) return;
+
+  _submitTapAnswer(tapped.id);
+}
+
+async function _submitTapAnswer(zoneId) {
+  if (!state.userId || _tapAnswerInProgress || !_tapChart) return;
+  _tapAnswerInProgress = true;
+
+  if (tg?.HapticFeedback) tg.HapticFeedback.impactOccurred("medium");
+
+  try {
+    const res = await fetch(`${API}/tap/answer`, {
+      method: "POST", headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({
+        user_id: state.userId,
+        zone_id: zoneId,
+        chart_id: _tapChart.chart_id,
+        session_token: state.sessionToken,
+      }),
+    });
+    const data = await res.json();
+
+    if (data.error === "no_actions") {
+      _showNoActions(data.message);
+      _tapAnswerInProgress = false;
+      return;
+    }
+
+    const fb = document.getElementById("tapChartFeedback");
+    const creature = document.getElementById("homCreature");
+    const aura = document.getElementById("homAura");
+
+    if (data.correct) {
+      if (fb) { fb.textContent = `✅ +${data.chm_earned} CHM`; fb.className = "tap-chart-feedback tap-fb--correct"; }
+      if (creature) { creature.classList.remove("hom-tap-wrong"); void creature.offsetWidth; creature.classList.add("hom-tap-correct"); setTimeout(() => creature.classList.remove("hom-tap-correct"), 600); }
+      if (aura) aura.style.background = `radial-gradient(circle, rgba(16,185,129,0.4) 0%, transparent 70%)`;
+      if (tg?.HapticFeedback) tg.HapticFeedback.notificationOccurred("success");
+      playSound("chmgain");
+    } else {
+      if (fb) { fb.textContent = `❌ Неверно. Правильный ответ: ${_zoneLabel(data.correct_type)}`; fb.className = "tap-chart-feedback tap-fb--wrong"; }
+      if (creature) { creature.classList.remove("hom-tap-correct"); void creature.offsetWidth; creature.classList.add("hom-tap-wrong"); setTimeout(() => creature.classList.remove("hom-tap-wrong"), 600); }
+      if (aura) aura.style.background = `radial-gradient(circle, rgba(239,68,68,0.4) 0%, transparent 70%)`;
+      if (tg?.HapticFeedback) tg.HapticFeedback.notificationOccurred("error");
+    }
+
+    // Update CHM
+    if (data.chm_earned) {
+      state.chm = (state.chm || 0) + data.chm_earned;
+      _updateCHMDisplay(state.chm);
+      _tapSessionCHM += data.chm_earned;
+      const sc = document.getElementById("homSessionCHM");
+      if (sc) sc.textContent = _tapSessionCHM;
+    }
+
+    // Update combo display
+    const streak = data.combo || 0;
+    const comboLabel = document.getElementById("homComboLabel");
+    const comboBar = document.getElementById("homComboBar");
+    const streakBadge = document.getElementById("tapStreakBadge");
+    if (comboLabel) comboLabel.textContent = `Комбо: ${streak}`;
+    if (comboBar) comboBar.style.width = Math.min(100, (streak / 20) * 100) + "%";
+    if (streakBadge) streakBadge.style.display = streak >= 3 ? "inline" : "none";
+
+    // Update actions
+    if (data.actions_left != null) {
+      if (!state.actionsPool) state.actionsPool = {};
+      state.actionsPool.left = data.actions_left;
+      renderActionsHUD(state.actionsPool);
+    }
+
+    // Loot drop animation
+    if (data.loot_drop) showLootDrop(data.loot_drop);
+
+    // Auto-load next chart after short delay
+    setTimeout(async () => {
+      _tapChart = null;
+      if (fb) { fb.textContent = ""; fb.className = "tap-chart-feedback"; }
+      if (aura) aura.style.background = "";
+      await loadTapChart();
+      _tapAnswerInProgress = false;
+    }, 1500);
+
+  } catch(err) {
+    console.error("tap answer:", err);
+    _tapAnswerInProgress = false;
+  }
+}
+
+function _zoneLabel(type) {
+  return {order_block:"Order Block", fvg:"FVG", liquidity_sweep:"Liquidity Sweep", bos:"BOS"}[type] || type;
+}
+
+// Initialize tap chart canvas click handler
+document.addEventListener("DOMContentLoaded", () => {
+  const canvas = document.getElementById("tapChartCanvas");
+  if (canvas) canvas.addEventListener("click", _onTapChartClick);
+});
 
 function _showNoActions(msg) {
   showToast(msg || "Действий не осталось. Сброс в 00:00 UTC.", "info");
@@ -2563,13 +2975,13 @@ async function _fetchMarketPulse() {
   try {
     const res  = await fetch(`${API}/market/pulse`);
     const data = await res.json();
-    if (!data.pet_mood) return;
+    if (!data.market_mood) return;
     _applyMarketMood(data);
   } catch (e) { console.warn("pulse fetch:", e); }
 }
 
 function _applyMarketMood(data) {
-  const mood = data.pet_mood || {};
+  const mood = data.market_mood || {};
   // Pulse speed (volatility → speed)
   _pulseSpeed = mood.pulse_speed || 1.0;
   // Update homunculus aura color based on market if tab active
@@ -2753,78 +3165,6 @@ async function _onOracleAnswer(idx, correct, btn, container) {
       showToast("❌ Неверно. Изучи материал и попробуй снова.", "error");
     }
   } catch (e) { console.error("oracle answer:", e); }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// ── DREAM SYSTEM ──────────────────────────────────────────────────────────
-// ═══════════════════════════════════════════════════════════════════════════
-
-async function checkDream() {
-  if (!state.userId) return;
-  try {
-    const res  = await fetch(`${API}/pet/dream/${state.userId}`);
-    const data = await res.json();
-    if (data.ok && data.has_dream) {
-      setTimeout(() => _showDreamModal(data), 1200);
-    }
-  } catch (e) { console.warn("dream check:", e); }
-}
-
-function _showDreamModal(data) {
-  const d = data.dream;
-  document.getElementById("dreamSetup").textContent = d.setup;
-  document.getElementById("dreamOfflineText").textContent =
-    `Cipher анализировал рынок ${data.offline_hours} ч. без тебя. Тема: ${data.concept_meta?.name || data.concept}`;
-  document.getElementById("dreamQuestion").textContent = d.question;
-
-  const choicesEl = document.getElementById("dreamChoices");
-  choicesEl.innerHTML = "";
-  d.choices.forEach((c, i) => {
-    const btn = document.createElement("button");
-    btn.className = "dream-choice";
-    btn.textContent = c;
-    btn.onclick = () => _onDreamAnswer(i, d.correct, btn, choicesEl, data);
-    choicesEl.appendChild(btn);
-  });
-
-  document.getElementById("dreamResult").classList.add("hidden");
-  document.getElementById("dreamResult").innerHTML = "";
-  openModal("dreamModal");
-  if (tg?.HapticFeedback) tg.HapticFeedback.impactOccurred("light");
-}
-
-async function _onDreamAnswer(idx, correct, btn, container, data) {
-  const btns = container.querySelectorAll(".dream-choice");
-  btns.forEach(b => b.disabled = true);
-  const isCorrect = idx === correct;
-  btn.classList.add(isCorrect ? "correct" : "wrong");
-  btns[correct].classList.add("correct");
-
-  if (tg?.HapticFeedback) {
-    tg.HapticFeedback.notificationOccurred(isCorrect ? "success" : "error");
-  }
-
-  const resEl = document.getElementById("dreamResult");
-  resEl.classList.remove("hidden");
-
-  try {
-    const res = await fetch(`${API}/pet/dream/answer`, {
-      method: "POST", headers: {"Content-Type":"application/json"},
-      body: JSON.stringify({user_id: state.userId, correct: isCorrect, concept: data.concept}),
-    });
-    const r = await res.json();
-    if (isCorrect) {
-      resEl.innerHTML = `✅ <strong>ГИПОТЕЗА ПОДТВЕРЖДЕНА!</strong> Гомункул пробуждается!`;
-      // Refresh homunculus stats
-      setTimeout(loadHomunculus, 800);
-    } else {
-      const meta = data.concept_meta || {};
-      resEl.innerHTML = `❌ <strong>АНОМАЛИЯ ОБНАРУЖЕНА.</strong> Изучи протокол "${meta.name || data.concept}" для рекалибровки.<br>
-        <button class="btn-primary" style="margin-top:10px;font-size:12px" onclick="closeModal('dreamModal');switchTab('lessons')">
-          Открыть уроки
-        </button>`;
-    }
-  } catch (e) { console.error("dream answer:", e); }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -5392,3 +5732,188 @@ async function adminExtendDeadline(userId) {
   } catch (e) { showToast("Ошибка сети", "error"); }
 }
 window.adminExtendDeadline = adminExtendDeadline;
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ── INVENTORY SYSTEM ──────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+
+const RARITY_COLORS = {
+  common:    "#94a3b8",
+  uncommon:  "#10b981",
+  rare:      "#3b82f6",
+  epic:      "#a855f7",
+  legendary: "#f59e0b",
+};
+
+const RARITY_LABELS = {
+  common:    "Обычный",
+  uncommon:  "Необычный",
+  rare:      "Редкий",
+  epic:      "Эпический",
+  legendary: "Легендарный",
+};
+
+async function loadInventory() {
+  const grid       = document.getElementById("invGrid");
+  const subtitle   = document.getElementById("invSubtitle");
+  const effectsSec = document.getElementById("invActiveEffects");
+  const effectsList= document.getElementById("invEffectsList");
+  if (!grid) return;
+
+  grid.innerHTML = '<div class="inv-empty">Загрузка…</div>';
+  try {
+    const d = await fetch(`${API}/inventory/${state.userId}`).then(r => r.json());
+    if (!d.ok) { grid.innerHTML = '<div class="inv-empty">Ошибка загрузки</div>'; return; }
+
+    // Active effects
+    const effects = (d.active_effects || []).filter(e => e.expires_at);
+    if (effects.length > 0 && effectsSec && effectsList) {
+      effectsSec.style.display = "block";
+      effectsList.innerHTML = effects.map(e => {
+        const exp = new Date(e.expires_at);
+        const now = new Date();
+        const diffMs = exp - now;
+        const diffH  = Math.max(0, Math.round(diffMs / 3600000 * 10) / 10);
+        return `<div class="inv-effect-chip">
+          <span class="inv-effect-type">${_effectLabel(e.type)}</span>
+          <span class="inv-effect-val">×${e.value}</span>
+          <span class="inv-effect-exp">${diffH}ч</span>
+        </div>`;
+      }).join("");
+    } else if (effectsSec) {
+      effectsSec.style.display = "none";
+    }
+
+    // Inventory items
+    const inv = d.inventory || [];
+    if (subtitle) subtitle.textContent = `${inv.length} предмет${inv.length === 1 ? "" : inv.length < 5 ? "а" : "ов"}`;
+
+    if (inv.length === 0) {
+      grid.innerHTML = '<div class="inv-empty">Инвентарь пуст. Победи боссов и выполняй квизы, чтобы получить предметы!</div>';
+      return;
+    }
+
+    grid.innerHTML = "";
+    inv.forEach(item => {
+      const col = RARITY_COLORS[item.rarity] || "#94a3b8";
+      const card = document.createElement("div");
+      card.className = "inv-item-card";
+      card.style.setProperty("--rarity-color", col);
+      card.innerHTML = `
+        <div class="inv-item-icon">${item.icon}</div>
+        <div class="inv-item-rarity" style="color:${col}">${RARITY_LABELS[item.rarity] || item.rarity}</div>
+        <div class="inv-item-name">${item.name}</div>
+        <div class="inv-item-desc">${item.desc}</div>
+        ${item.quantity > 1 ? `<div class="inv-item-qty">×${item.quantity}</div>` : ""}
+        ${item.usable ? `<button class="inv-use-btn" onclick="onUseItem('${item.item_id}')">Использовать</button>` : ""}
+      `;
+      grid.appendChild(card);
+    });
+  } catch(e) {
+    if (grid) grid.innerHTML = '<div class="inv-empty">Ошибка сети</div>';
+  }
+}
+window.loadInventory = loadInventory;
+
+function _effectLabel(type) {
+  const MAP = {
+    xp_boost:     "XP +%",
+    loot_boost:   "Лут ×",
+    combo_shield: "Щит комбо",
+    zone_hint:    "Подсказка зон",
+    class_boost:  "Класс +%",
+    quiz_hint:    "Подсказка квиза",
+  };
+  return MAP[type] || type;
+}
+
+async function onUseItem(itemId) {
+  try {
+    const d = await fetch(`${API}/inventory/use`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user_id: state.userId, item_id: itemId }),
+    }).then(r => r.json());
+    if (d.ok) {
+      showToast(`${d.icon || "✅"} ${d.name} использован!`, "success");
+      if (tg?.HapticFeedback) tg.HapticFeedback.impactOccurred("medium");
+      loadInventory();
+      // Refresh state
+      fetch(`${API}/user/${state.userId}`).then(r => r.json()).then(u => {
+        if (u.chm !== undefined) {
+          state.chm = u.chm;
+          renderHeader();
+        }
+      }).catch(() => {});
+    } else {
+      showToast(d.error || "Ошибка", "error");
+    }
+  } catch(e) { showToast("Ошибка сети", "error"); }
+}
+window.onUseItem = onUseItem;
+
+
+// ── LOOT DROP ANIMATION ───────────────────────────────────────────────────────
+
+let _lootDropTimer = null;
+
+function showLootDrop(loot) {
+  if (!loot) return;
+  const overlay  = document.getElementById("lootDropOverlay");
+  const bg       = document.getElementById("lootOverlayBg");
+  const card     = document.getElementById("lootDropCard");
+  const iconEl   = document.getElementById("lootDropIcon");
+  const rarityEl = document.getElementById("lootDropRarity");
+  const nameEl   = document.getElementById("lootDropName");
+  const descEl   = document.getElementById("lootDropDesc");
+  if (!overlay) return;
+
+  const rarity = loot.rarity || "common";
+  const col    = loot.color || RARITY_COLORS[rarity] || "#94a3b8";
+
+  // Duration by rarity
+  const DURATIONS = { common: 1400, uncommon: 1800, rare: 2200, epic: 2800, legendary: 3500 };
+  const dur = DURATIONS[rarity] || 1800;
+
+  // Set content
+  iconEl.textContent   = loot.icon || "📦";
+  rarityEl.textContent = RARITY_LABELS[rarity] || rarity;
+  rarityEl.style.color = col;
+  nameEl.textContent   = loot.name || "";
+  descEl.textContent   = loot.desc || "";
+
+  // Apply rarity-specific styles
+  overlay.className = `loot-overlay loot-overlay--${rarity}`;
+  card.style.setProperty("--loot-color", col);
+  card.style.borderColor = col;
+  bg.style.background = `radial-gradient(ellipse at center, ${col}22 0%, transparent 70%)`;
+
+  // Show
+  overlay.style.display = "flex";
+  requestAnimationFrame(() => {
+    overlay.classList.add("loot-overlay--visible");
+    card.classList.add("loot-card--pop");
+    if (tg?.HapticFeedback) {
+      if (rarity === "legendary") tg.HapticFeedback.notificationOccurred("success");
+      else if (rarity === "epic") tg.HapticFeedback.impactOccurred("heavy");
+      else if (rarity === "rare") tg.HapticFeedback.impactOccurred("medium");
+      else                        tg.HapticFeedback.impactOccurred("light");
+    }
+  });
+
+  // Auto-dismiss
+  if (_lootDropTimer) clearTimeout(_lootDropTimer);
+  _lootDropTimer = setTimeout(() => _hideLootDrop(), dur);
+
+  // Click to dismiss early
+  overlay.onclick = () => _hideLootDrop();
+}
+window.showLootDrop = showLootDrop;
+
+function _hideLootDrop() {
+  const overlay = document.getElementById("lootDropOverlay");
+  const card    = document.getElementById("lootDropCard");
+  if (!overlay) return;
+  overlay.classList.remove("loot-overlay--visible");
+  card && card.classList.remove("loot-card--pop");
+  setTimeout(() => { overlay.style.display = "none"; }, 400);
+}
